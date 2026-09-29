@@ -11,3 +11,7 @@ For code discovery, prefer:
 5. `get_architecture` for a high-level summary.
 
 Fall back to text/file search for string literals, error messages, config values, and non-code files, or when graph tools return insufficient results.
+
+Before implementing or changing the mod's GUI screens, read `UI_REDESIGN_RESEARCH.md`.
+It records the user's compact-settings/full-screen-inspector requirements,
+reference research, animation constraints, and cross-version verification gates.
