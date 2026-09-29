@@ -1,0 +1,34 @@
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+description='''
+Client-side WorldEdit selection overlay with in-world geometry, rulers, block inspection,
+custom overlay colors, isolated block viewing, and clipboard preview support.
+'''
+
+[[mixins]]
+config="${mod_id}.mixins.json"
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="[${neo_version},)"
+    ordering="NONE"
+    side="CLIENT"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="CLIENT"
+
+[[dependencies.${mod_id}]]
+    modId="worldedit"
+    type="optional"
+    versionRange="[7.4.3,)"
+    ordering="AFTER"
+    side="CLIENT"

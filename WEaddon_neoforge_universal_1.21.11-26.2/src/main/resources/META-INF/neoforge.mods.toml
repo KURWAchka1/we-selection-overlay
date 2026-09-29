@@ -1,0 +1,36 @@
+modLoader="javafml"
+loaderVersion="[2,)"
+license="GPL-3.0-or-later"
+
+[[mods]]
+modId="worldedit_selection_overlay"
+version="${version}"
+displayName="WorldEdit Selection Overlay"
+description='''
+Client-side WorldEdit selection overlay with in-world geometry, rulers, block inspection,
+custom overlay colors, isolated block viewing, and clipboard preview support.
+'''
+
+[[mixins]]
+config="worldedit_selection_overlay.universal.mixins.json"
+
+[[dependencies.worldedit_selection_overlay]]
+modId="neoforge"
+type="required"
+versionRange="[21.11.42,)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.worldedit_selection_overlay]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.11],[26.1,26.3)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.worldedit_selection_overlay]]
+modId="worldedit"
+type="optional"
+versionRange="[7.4.2,)"
+ordering="AFTER"
+side="CLIENT"

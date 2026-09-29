@@ -1,0 +1,185 @@
+plugins {
+    id 'java-library'
+    id 'com.gradleup.shadow' version '9.4.2'
+}
+
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
+group = 'org.marshal'
+version = mod_version
+
+base {
+    archivesName = archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven { name = 'Fabric'; url = 'https://maven.fabricmc.net/' }
+    maven { name = 'EngineHub'; url = 'https://maven.enginehub.org/repo/' }
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+def app1211 = file("../WEaddon_fabric_1.21.11/build/libs/worldedit_selection_overlay-${mod_version}.jar")
+def app261 = file("../WEaddon_lightposition/build/libs/worldedit_selection_overlay-${mod_version}.jar")
+def app262 = file("../WEaddon_fabric_26.2/build/libs/worldedit_selection_overlay-${mod_version}.jar")
+def originalPackage = 'org.marshal.weaddon_lightposition'
+
+configurations {
+    runtime1211
+    runtime261
+    runtime262
+    protocol1211
+    protocol261
+    protocol262
+}
+
+dependencies {
+    compileOnly 'net.fabricmc:fabric-loader:0.19.3'
+    compileOnly 'net.fabricmc:sponge-mixin:0.17.3+mixin.0.8.7'
+    compileOnly 'org.ow2.asm:asm-tree:9.10.1'
+    testImplementation 'net.fabricmc:fabric-loader:0.19.3'
+    testImplementation 'com.google.code.gson:gson:2.11.0'
+    testImplementation 'org.ow2.asm:asm:9.10.1'
+    testImplementation platform('org.junit:junit-bom:5.12.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    runtime1211 files(app1211)
+    runtime261 files(app261)
+    runtime262 files(app262)
+    protocol1211('org.enginehub.worldeditcui-protocol:worldeditcui-protocol-fabric-mc1.21.11:4.0.2@jar') { transitive = false }
+    protocol261('org.enginehub.worldeditcui-protocol:worldeditcui-protocol-fabric-mc26.1:4.0.3@jar') { transitive = false }
+    protocol262('org.enginehub.worldeditcui-protocol:worldeditcui-protocol-fabric-mc26.2:4.0.3@jar') { transitive = false }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+def registerRelocatedRuntime = { String taskName, String runtimeId, Configuration appConfiguration ->
+    tasks.register(taskName, ShadowJar) {
+        archiveFileName = "${runtimeId}.jar"
+        destinationDirectory = layout.buildDirectory.dir('relocated-runtimes')
+        configurations = [appConfiguration]
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+        relocate "${originalPackage}.mixin", "org.marshal.weaddon_universal_mixins.${runtimeId}"
+        relocate originalPackage, "${originalPackage}.runtime.${runtimeId}"
+        mergeServiceFiles()
+
+        exclude 'assets/**'
+        exclude 'fabric.mod.json'
+        exclude 'worldedit_selection_overlay.mixins.json'
+        exclude 'META-INF/jars/**'
+        exclude 'META-INF/MANIFEST.MF'
+        exclude 'META-INF/*.SF'
+        exclude 'META-INF/*.RSA'
+        exclude 'META-INF/*.DSA'
+        exclude 'LICENSE*'
+        exclude '**/WorldEditSelectionOverlayMixinPlugin.class'
+    }
+}
+
+def relocate1211 = registerRelocatedRuntime('relocateRuntime1211', 'mc1_21_11', configurations.runtime1211)
+def relocate261 = registerRelocatedRuntime('relocateRuntime261', 'mc26_1', configurations.runtime261)
+def relocate262 = registerRelocatedRuntime('relocateRuntime262', 'mc26_2', configurations.runtime262)
+
+// Keep the public EngineHub protocol shared with WorldEdit. Only narrow its
+// metadata so Fabric never selects a newer game's protocol on an older game.
+def protocols = [
+        [id: 'mc1_21_11', config: configurations.protocol1211, minecraft: '1.21.11', java: '>=21'],
+        [id: 'mc26_1', config: configurations.protocol261, minecraft: '~26.1', java: '>=25'],
+        [id: 'mc26_2', config: configurations.protocol262, minecraft: '~26.2', java: '>=25']
+].collect { target ->
+    def metadata = tasks.register("protocolMetadata_${target.id}") {
+        inputs.files(target.config)
+        inputs.properties(minecraft: target.minecraft, java: target.java)
+        def output = layout.buildDirectory.file("protocol-metadata/${target.id}/fabric.mod.json")
+        outputs.file(output)
+        doLast {
+            def source = zipTree(target.config.singleFile).matching { include 'fabric.mod.json' }.singleFile
+            def json = new JsonSlurper().parse(source)
+            json.depends.minecraft = target.minecraft
+            json.depends.java = target.java
+            output.get().asFile.parentFile.mkdirs()
+            output.get().asFile.setText(JsonOutput.prettyPrint(JsonOutput.toJson(json)), 'UTF-8')
+        }
+    }
+    tasks.register("bundleProtocol_${target.id}", Jar) {
+        dependsOn(metadata)
+        archiveFileName = "worldeditcui-protocol-${target.id}.jar"
+        destinationDirectory = layout.buildDirectory.dir('protocols')
+        from({ zipTree(target.config.singleFile) }) { exclude 'fabric.mod.json' }
+        from(metadata)
+    }
+}
+
+tasks.named('processResources') {
+    inputs.property('version', mod_version)
+    filteringCharset = 'UTF-8'
+    filesMatching('fabric.mod.json') {
+        expand(version: mod_version)
+    }
+}
+
+def universalJar = tasks.register('universalJar', Jar) {
+    dependsOn(tasks.named('classes'), relocate1211, relocate261, relocate262)
+    archiveFileName = "${archives_base_name}-${mod_version}-fabric-1.21.11-26.2.jar"
+    destinationDirectory = layout.buildDirectory.dir('libs')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(sourceSets.main.output)
+    from('LICENSE.txt') { into 'META-INF' }
+    from('THIRD_PARTY.md') { into 'META-INF' }
+    from('licenses') { into 'META-INF/licenses' }
+    from(protocols) { into 'META-INF/jars' }
+    from({ zipTree(app1211) }) {
+        include 'assets/**'
+    }
+    [relocate1211, relocate261, relocate262].each { runtimeTask ->
+        from(runtimeTask.flatMap { it.archiveFile }.map { zipTree(it) }) {
+            exclude 'META-INF/MANIFEST.MF'
+        }
+    }
+
+    manifest {
+        attributes(
+                'Implementation-Title': 'WorldEdit Selection Overlay',
+                'Implementation-Version': mod_version,
+                'Minecraft-Versions': '1.21.11, 26.1.x, 26.2',
+                'Mod-Loader': 'Fabric'
+        )
+    }
+}
+
+tasks.register('archiveVersionArtifact', Copy) {
+    dependsOn(universalJar)
+    from(universalJar.flatMap { it.archiveFile })
+    into(layout.projectDirectory.dir("libs/${mod_version}"))
+}
+
+tasks.named('jar') { enabled = false }
+tasks.named('shadowJar') { enabled = false }
+tasks.named('assemble') { dependsOn(universalJar) }
+tasks.named('build') { dependsOn(tasks.named('archiveVersionArtifact')) }
+
+tasks.named('test') {
+    useJUnitPlatform()
+    dependsOn(universalJar)
+    systemProperty 'universal.jar', universalJar.get().archiveFile.get().asFile.absolutePath
+    systemProperty 'release.version', mod_version
+    systemProperty 'runtime.inputs', [app1211, app261, app262].collect { it.absolutePath }.join(File.pathSeparator)
+}
+
+tasks.named('archiveVersionArtifact') { dependsOn(tasks.named('test')) }

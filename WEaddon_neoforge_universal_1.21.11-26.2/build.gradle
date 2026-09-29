@@ -1,0 +1,200 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.141'
+    id 'com.gradleup.shadow' version '9.4.2'
+}
+
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
+group = 'org.marshal'
+version = mod_version
+def buildJavaVersion = (findProperty('smoke_java_version') ?: '21').toString().toInteger()
+
+base {
+    archivesName = mod_id
+}
+
+repositories {
+    maven {
+        name = 'EngineHub'
+        url = 'https://maven.enginehub.org/repo/'
+    }
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(buildJavaVersion)
+}
+
+neoForge {
+    version = neo_version
+
+    runs {
+        smokeClient {
+            client()
+            gameDirectory = file("run-smoke-${neo_version}")
+        }
+    }
+}
+
+def app1211 = file("../WEaddon_neoforge_1.21.11/build/libs/worldedit_selection_overlay-${mod_version}.jar")
+def app261 = file("../WEaddon_neoforge_26.1/build/libs/worldedit_selection_overlay-${mod_version}.jar")
+def app262 = file("../WEaddon_neoforge_26.2/build/libs/worldedit_selection_overlay-${mod_version}.jar")
+def originalPackage = 'org.marshal.weaddon_lightposition'
+
+configurations {
+    runtime1211
+    runtime261
+    runtime262
+    protocol1211
+    localRuntime
+    runtimeClasspath.extendsFrom(localRuntime)
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.12.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'com.electronwill.night-config:toml:3.8.3'
+    testImplementation 'org.ow2.asm:asm:9.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    runtime1211 files(app1211)
+    runtime261 files(app261)
+    runtime262 files(app262)
+    protocol1211 'org.enginehub.worldeditcui-protocol:worldeditcui-protocol-neoforge-mc1.21.11:4.0.2'
+    compileOnly 'org.enginehub.worldeditcui-protocol:worldeditcui-protocol-neoforge-mc1.21.11:4.0.2'
+    localRuntime files(layout.buildDirectory.file("libs/${mod_id}-${mod_version}-neoforge-1.21.11-26.2.jar"))
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+// The smoke-test JVM can run Java 25 dependencies while the bootstrap bytecode
+// stays at Java 21. These are distinct requirements in Gradle's variant model.
+configurations.configureEach {
+    if (canBeResolved) {
+        attributes.attribute(org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, buildJavaVersion)
+    }
+}
+
+tasks.named('processResources') {
+    inputs.property('version', mod_version)
+    filesMatching('META-INF/neoforge.mods.toml') { expand(version: mod_version) }
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+def configureRuntimeRelocation = { ShadowJar task, String runtimeId, Configuration inputConfiguration ->
+    task.archiveFileName = "worldedit-selection-overlay-runtime-${runtimeId}-${mod_version}.jar"
+    task.destinationDirectory = layout.buildDirectory.dir('relocated-runtimes')
+    task.configurations = [inputConfiguration]
+    task.duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    task.relocate("${originalPackage}.mixin", "org.marshal.weaddon_universal_mixins.${runtimeId}")
+    task.relocate(originalPackage, "${originalPackage}.runtime.${runtimeId}")
+
+    task.exclude('META-INF/**')
+    task.exclude('assets/**')
+    task.exclude('fabric.mod.json')
+    task.exclude('worldedit_selection_overlay.mixins.json')
+    task.exclude('org/marshal/weaddon_lightposition/WorldEditSelectionOverlayMod.class')
+    task.exclude('org/marshal/weaddon_lightposition/mixin/WorldEditSelectionOverlayMixinPlugin.class')
+}
+
+def relocate1211 = tasks.register('relocateRuntime1211', ShadowJar) {
+    configureRuntimeRelocation(delegate, 'mc1_21_11', project.configurations.runtime1211)
+}
+
+def relocate261 = tasks.register('relocateRuntime261', ShadowJar) {
+    configureRuntimeRelocation(delegate, 'mc26_1', project.configurations.runtime261)
+}
+
+def relocate262 = tasks.register('relocateRuntime262', ShadowJar) {
+    configureRuntimeRelocation(delegate, 'mc26_2', project.configurations.runtime262)
+}
+
+tasks.register('universalJar', Jar) {
+    dependsOn(tasks.named('classes'), relocate1211, relocate261, relocate262)
+    archiveFileName = "${mod_id}-${mod_version}-neoforge-1.21.11-26.2.jar"
+    destinationDirectory = layout.buildDirectory.dir('libs')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(sourceSets.main.output)
+    from('LICENSE.txt') { into 'META-INF' }
+    from('THIRD_PARTY.md') { into 'META-INF' }
+    from('licenses') { into 'META-INF/licenses' }
+
+    from({ zipTree(app1211) }) {
+        include 'assets/**'
+    }
+
+    from({ zipTree(relocate1211.get().archiveFile.get().asFile) }) {
+        exclude 'META-INF/**'
+    }
+
+    from({ zipTree(configurations.protocol1211.singleFile) }) {
+        exclude 'META-INF/MANIFEST.MF'
+        exclude 'META-INF/neoforge.mods.toml'
+        exclude 'META-INF/*.SF'
+        exclude 'META-INF/*.RSA'
+        exclude 'META-INF/*.DSA'
+        exclude 'org/enginehub/worldeditcui/neoforge/protocol/NeoForgeProtocolMod.class'
+    }
+
+    from({ zipTree(relocate261.get().archiveFile.get().asFile) }) {
+        exclude 'META-INF/**'
+    }
+    from({ zipTree(relocate262.get().archiveFile.get().asFile) }) {
+        exclude 'META-INF/**'
+    }
+
+    manifest {
+        attributes(
+                'Manifest-Version': '1.0',
+                'FMLModType': 'MOD',
+                'Implementation-Title': 'WorldEdit Selection Overlay',
+                'Implementation-Version': mod_version,
+                'Minecraft-Versions': '1.21.11, 26.1.x, 26.2',
+                'Mod-Loader': 'NeoForge'
+        )
+    }
+}
+
+tasks.register('archiveVersionArtifact', Copy) {
+    dependsOn(tasks.named('universalJar'))
+    from(tasks.named('universalJar', Jar).flatMap { it.archiveFile })
+    into(layout.projectDirectory.dir("libs/${mod_version}"))
+}
+
+tasks.named('shadowJar') {
+    enabled = false
+}
+
+tasks.named('jar') {
+    enabled = false
+}
+
+tasks.named('assemble') {
+    dependsOn(tasks.named('universalJar'))
+}
+
+tasks.named('build') {
+    dependsOn(tasks.named('archiveVersionArtifact'))
+}
+
+tasks.named('runSmokeClient') {
+    dependsOn(tasks.named('universalJar'))
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    dependsOn(tasks.named('universalJar'))
+    systemProperty 'universal.jar', tasks.named('universalJar', Jar).get().archiveFile.get().asFile.absolutePath
+    systemProperty 'release.version', mod_version
+    systemProperty 'runtime.inputs', [app1211, app261, app262].collect { it.absolutePath }.join(File.pathSeparator)
+}
+
+tasks.named('archiveVersionArtifact') { dependsOn(tasks.named('test')) }

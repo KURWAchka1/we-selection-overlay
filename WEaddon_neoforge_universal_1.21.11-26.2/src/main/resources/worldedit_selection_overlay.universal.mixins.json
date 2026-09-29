@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.marshal.weaddon_universal_mixins",
+  "plugin": "org.marshal.weaddon_lightposition.bootstrap.UniversalMixinPlugin",
+  "mixins": [],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

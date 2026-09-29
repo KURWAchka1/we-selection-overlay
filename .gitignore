@@ -1,0 +1,24 @@
+# Gradle, IDE and local Minecraft state
+**/.gradle/
+**/build/
+**/out/
+**/.idea/
+**/run/
+**/run-*/
+**/logs/
+**/crash-reports/
+**/libs/
+**/.codebase-memory/
+*.iml
+*.log
+
+# Release artifacts belong in GitHub Releases, not source history.
+*.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+*.zip
+
+# Machine-specific files
+.env
+.env.*
+!*.example
+install.ps1

@@ -1,0 +1,37 @@
+// Run in a Fabric source project. The tested mod is the built universal JAR.
+allprojects {
+    afterEvaluate {
+        def testRoot = file('../WEaddon_fabric_universal_1.21.11-26.2/tools/isolation-test')
+        def testSources = sourceSets.create('isolationTest') {
+            java.srcDir(new File(testRoot, minecraft_version == '1.21.11' ? 'mc1_21_11' : (minecraft_version.startsWith('26.2') ? 'mc26_2' : 'mc26_1')))
+            resources.srcDir(new File(testRoot, 'resources'))
+            compileClasspath += sourceSets.main.compileClasspath
+        }
+        dependencies.add(minecraft_version == '1.21.11' ? 'modImplementation' : 'isolationTestImplementation',
+                fabricApi.module('fabric-client-gametest-api-v1', fabric_version))
+        def testJar = tasks.register('isolationTestJar', Jar) {
+            from(testSources.output)
+            archiveClassifier = 'isolation-test-only'
+        }
+        def runtimeTestJar = testJar
+        if (minecraft_version == '1.21.11') {
+            def remapType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.RemapJarTask')
+            runtimeTestJar = tasks.register('remapIsolationTestJar', remapType) {
+                inputFile = testJar.flatMap { it.archiveFile }
+                archiveClassifier = 'isolation-test-remapped'
+                addNestedDependencies = false
+            }
+        }
+        def modsConfig = configurations.create('isolationProductionMods')
+        dependencies.add(modsConfig.name, "net.fabricmc.fabric-api:fabric-api:${fabric_version}")
+        dependencies.add(modsConfig.name, fabricApi.module('fabric-client-gametest-api-v1', fabric_version))
+        def taskType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')
+        tasks.register('testUniversalIsolation', taskType) {
+            dependsOn(runtimeTestJar)
+            mods.setFrom(modsConfig, runtimeTestJar, file("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar"))
+            runDir = file('run-isolation-test')
+            jvmArgs.addAll('-Xmx2G', '-Dfabric.client.gametest', '-Dfabric.debug.disableModShuffle=true')
+            programArgs.addAll('--width', '1024', '--height', '640')
+        }
+    }
+}

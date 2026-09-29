@@ -1,0 +1,26 @@
+// Run from a version-specific Fabric project with -I <this file>.
+allprojects {
+    afterEvaluate { p ->
+        def productionMods = configurations.create('universalProductionMods')
+        dependencies.add(productionMods.name, "net.fabricmc.fabric-api:fabric-api:${fabric_version}")
+        if (providers.gradleProperty('smokeWorldEdit').map { it.toBoolean() }.getOrElse(false)) {
+            repositories.maven { url = 'https://api.modrinth.com/maven' }
+            dependencies.add(productionMods.name, minecraft_version == '1.21.11'
+                    ? 'maven.modrinth:worldedit:7.4.2'
+                    : "maven.modrinth:worldedit:${minecraft_version.startsWith('26.1') ? '7.4.3' : '7.4.5'}")
+        }
+        def taskType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')
+        tasks.register('universalProductionClient', taskType) {
+            mods.setFrom(productionMods, file("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar"))
+            if (providers.gradleProperty('smokeExtraMod').isPresent()) {
+                mods.from(file(providers.gradleProperty('smokeExtraMod').get()))
+            }
+            runDir = file('run-universal-production')
+            javaLauncher = javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(minecraft_version.startsWith('26.') ? 25 : 21)
+            }
+            jvmArgs.addAll('-Xmx1G', '-Dfabric.debug.disableModShuffle=true')
+            programArgs.addAll('--width', '854', '--height', '480')
+        }
+    }
+}

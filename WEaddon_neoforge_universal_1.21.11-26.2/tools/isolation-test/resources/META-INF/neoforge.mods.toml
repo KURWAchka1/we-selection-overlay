@@ -1,0 +1,7 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+[[mods]]
+modId="weso_isolation_test"
+version="1.0.0"
+displayName="WESO Isolation Regression Test (not for distribution)"

@@ -1,0 +1,32 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.marshal.weaddon_lightposition.mixin",
+  "plugin": "org.marshal.weaddon_lightposition.mixin.WorldEditSelectionOverlayMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+  ],
+  "client": [
+    "BlockEntityRenderManagerMixin",
+    "BlockModelRendererBrightnessCacheMixin",
+    "BlockModelRendererMixin",
+    "BlockModelRendererRenderStateMixin",
+    "BlockRenderManagerMixin",
+    "ChunkRendererRegionMixin",
+    "ClientWorldBrightnessMixin",
+    "FluidRendererRenderStateMixin",
+    "WorldRendererMixin",
+    "indigo.IndigoBlockLightingMixin",
+    "sodium.SodiumBlockRendererBrightnessMixin",
+    "sodium.SodiumBlockRenderContextMixin",
+    "sodium.SodiumBlockRendererMixin",
+    "sodium.SodiumFluidRendererMixin",
+    "sodium.SodiumMutableQuadViewImplMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

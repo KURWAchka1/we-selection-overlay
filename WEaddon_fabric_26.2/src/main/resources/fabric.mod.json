@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "worldedit_selection_overlay",
+  "version": "${version}",
+  "name": "WorldEdit Selection Overlay",
+  "description": "Shows WorldEdit selection points and shapes on the client.",
+  "authors": [],
+  "contact": {},
+  "license": "GPL-3.0-or-later",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "org.marshal.weaddon_lightposition.client.WorldEditSelectionOverlayClient"
+    ],
+    "main": [
+      "org.marshal.weaddon_lightposition.WorldEditSelectionOverlayMod"
+    ]
+  },
+  "mixins": [
+    "worldedit_selection_overlay.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "~${minecraft_version}"
+  },
+  "suggests": {
+    "worldedit": ">=7.4.3"
+  }
+}
