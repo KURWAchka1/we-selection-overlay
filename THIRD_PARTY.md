@@ -8,4 +8,9 @@
 
 The project-owned source files are offered under GPL-3.0-or-later. The license does not change the terms of third-party code.
 
+Fabric retains the official CUI package as version-scoped nested dependencies.
+The universal NeoForge artifact relocates the corresponding official codecs into
+private runtime packages for fallback networking; it uses an installed official
+shared handler instead when available. The upstream license/header remain bundled.
+
 The supplied Kawaii JAR was inspected as a rendering reference. No Kawaii code, shaders, fonts, textures, or other assets are redistributed.

@@ -7,3 +7,7 @@
 - **Lucide icons**: nine PNG icons rasterized from [Lucide](https://github.com/lucide-icons/lucide), with ISC/MIT notices packaged as `assets/worldedit_selection_overlay/textures/gui/ui/lucide-license.txt`.
 
 The project-owned source files are offered under GPL-3.0-or-later. The license does not change the terms of third-party code.
+
+The universal NeoForge artifact privately relocates the version-matched official
+CUI codec copies for fallback networking. When the shared official protocol is
+installed, its handler is used instead. The upstream license/header remain bundled.

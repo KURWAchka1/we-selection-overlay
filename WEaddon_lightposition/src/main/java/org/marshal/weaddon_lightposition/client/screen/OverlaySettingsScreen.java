@@ -17,6 +17,7 @@ public final class OverlaySettingsScreen extends UiScreen {
     private Button axisXButton, axisYButton, axisZButton;
     private Button renderModeButton, diagonalModeButton, trackingModeButton, doneButton;
     private Button colorEditorButton, themeButton;
+    private Button commandPreviewButton;
     private boolean menuOpen;
     private int scroll;
     private int contentHeight;
@@ -49,6 +50,9 @@ public final class OverlaySettingsScreen extends UiScreen {
                 overlayClient::selectionGridEnabled);
         clipboardPreviewButton = row("clipboard_preview", () ->
                 overlayClient.setClipboardPreviewEnabled(!overlayClient.clipboardPreviewEnabled()), overlayClient::clipboardPreviewEnabled);
+        commandPreviewButton = row("command_preview", () -> overlayClient.commandPreviewController()
+                .setEnabled(!overlayClient.commandPreviewController().options().enabled()),
+                () -> overlayClient.commandPreviewController().options().enabled());
         rulerButton = row("ruler", () -> {
             overlayClient.setRulerEnabled(!overlayClient.rulerEnabled());
             layoutControls();
@@ -117,6 +121,8 @@ public final class OverlaySettingsScreen extends UiScreen {
     private void syncLabels() {
         overlayButton.setMessage(Component.translatable("screen.worldedit_selection_overlay.settings.overlay", state(overlayClient.overlayEnabled())));
         gridButton.setMessage(Component.translatable("screen.worldedit_selection_overlay.settings.grid", state(overlayClient.selectionGridEnabled())));
+        commandPreviewButton.setMessage(Component.translatable("screen.worldedit_selection_overlay.settings.command_preview",
+                state(overlayClient.commandPreviewController().options().enabled())));
         rulerButton.setMessage(Component.translatable("screen.worldedit_selection_overlay.settings.ruler", state(overlayClient.rulerEnabled())));
         clipboardPreviewButton.setMessage(overlayClient.clipboardPreviewAvailable()
                 ? Component.translatable("screen.worldedit_selection_overlay.settings.clipboard_preview", state(overlayClient.clipboardPreviewEnabled()))
@@ -136,6 +142,7 @@ public final class OverlaySettingsScreen extends UiScreen {
         gridButton.visible = false;
         if (overlayClient.overlayEnabled()) { position(gridButton, x + 16, y, w - 16, 22); y += 25; }
         position(clipboardPreviewButton, x, y, w, 24); y += 27;
+        position(commandPreviewButton, x, y, w, 24); y += 27;
         position(rulerButton, x, y, w, 24); y += 27;
         axisXButton.visible = axisYButton.visible = axisZButton.visible = false;
         if (overlayClient.rulerEnabled()) {

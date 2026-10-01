@@ -42,6 +42,18 @@ public final class UiGameTest implements FabricClientGameTest {
                 call(overlay, "setIsolatedBlockIds", Set.of());
             });
             context.waitTicks(20);
+            Object commandPreview = context.computeOnClient(client -> call(overlay, "commandPreviewController"));
+            boolean commandEnabled = context.computeOnClient(client -> (boolean) call(call(commandPreview, "options"), "enabled"));
+            clickField(context, "commandPreviewButton");
+            context.runOnClient(client -> {
+                if ((boolean) call(call(commandPreview, "options"), "enabled") == commandEnabled)
+                    throw new AssertionError("Settings command-preview toggle did not change the controller");
+            });
+            clickField(context, "commandPreviewButton");
+            context.runOnClient(client -> {
+                if ((boolean) call(call(commandPreview, "options"), "enabled") != commandEnabled)
+                    throw new AssertionError("Settings command-preview toggle did not restore its state");
+            });
             clickField(context, "overlayButton");
             context.runOnClient(client -> { if (((AbstractWidget) field(client.gui.screen(), "gridButton")).visible) throw new AssertionError("Grid did not hide"); });
             clickField(context, "overlayButton");
@@ -272,6 +284,11 @@ public final class UiGameTest implements FabricClientGameTest {
     private static void bounds(ClientGameTestContext context) {
         context.runOnClient(client -> {
             var screen = client.gui.screen();
+            if (screen.getClass().getSimpleName().equals("OverlaySettingsScreen")) {
+                String key = "screen.worldedit_selection_overlay.settings.command_preview_label";
+                if (net.minecraft.network.chat.Component.translatable(key).getString().equals(key))
+                    throw new AssertionError("Missing styled command-preview label translation");
+            }
             for (var child : screen.children()) {
                 if (child instanceof AbstractWidget widget && widget.visible) {
                     if (widget.getX() < 0 || widget.getY() < 0 || widget.getX() + widget.getWidth() > screen.width

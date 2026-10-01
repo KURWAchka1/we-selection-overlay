@@ -77,6 +77,22 @@ Clipboard preview requires the WorldEdit mod on the client/integrated server. Se
 
 ***
 
+## Live Command Preview
+
+See a ghost of the result while typing `//set`, `//replace`, `//walls`,
+`//faces` / `//outline`, or `//overlay`, before pressing Enter.
+
+* Textured changed blocks, removal markers, and compact change counts
+* Block states and percentage mixtures, with a stable random sample
+* Quick toggle in settings or with configurable `F8`
+* Clipboard preview pauses temporarily, then returns when chat closes
+
+Requires integrated singleplayer WorldEdit. Random execution rolls again;
+the displayed sample is not a promise of exact placements. Preview does not
+edit the world; Enter runs your normal WorldEdit command.
+
+***
+
 ## Overlay Palette Editor
 
 Customize how the overlay looks directly in-game:
@@ -141,6 +157,7 @@ Everything is visual only. Hidden blocks still exist, still collide, and are nev
 * Two render styles: **Blocky / Smooth**
 * Optional internal selection grid toggle
 * Textured WorldEdit clipboard preview, off by default
+* Live command-result preview while typing in singleplayer
 * Full-screen palette editor with live preview
 * Custom colors, transparency, thickness, and presets
 * Adaptive performance for large selections
@@ -174,6 +191,7 @@ Works with everything WorldEdit sends via CUI.
 | `O` | Open overlay settings |
 | `B` | Open block inspection screen |
 | `N` | Run WorldEdit `//deselect` |
+| `F8` | Toggle command-result preview |
 
 All keybinds are configurable.
 

@@ -59,7 +59,7 @@ dependencies {
     modCompileOnly "com.sk89q.worldedit:worldedit-fabric-mc1.21.11:7.4.2"
     compileOnly "javax.annotation:javax.annotation-api:1.3.2"
 
-    universalSmokeRuntimeOnly files('../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-1.7.1-fabric-1.21.11-26.2.jar')
+    universalSmokeRuntimeOnly files("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar")
 }
 
 processResources {
@@ -140,3 +140,5 @@ publishing {
         // retrieving dependencies.
     }
 }
+
+sourceSets.main.java.srcDir('../shared/command-preview/src/main/java')

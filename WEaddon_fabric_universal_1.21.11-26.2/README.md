@@ -37,7 +37,7 @@ Build the version-specific projects first, then the two universal projects:
 .\tools\build-release.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25'
 ```
 
-`build` runs artifact tests before copying the release to `libs/1.7.1`.
+`build` runs artifact tests before copying the release to `libs/1.8.0`.
 They check runtime input versions, entrypoints, mixin files, Java bytecode versions,
 protocol selection, and absence of old runtime dependencies or bundled Fabric API.
 

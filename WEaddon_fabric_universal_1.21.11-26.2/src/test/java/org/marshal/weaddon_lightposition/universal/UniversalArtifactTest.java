@@ -19,6 +19,23 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class UniversalArtifactTest {
     @Test
+    void commandMixinIsRegisteredForEveryRuntime() throws Exception {
+        try (var jar = artifact()) {
+            var registered = new java.util.concurrent.atomic.AtomicInteger();
+            try (var input = jar.getInputStream(jar.getEntry("org/marshal/weaddon_lightposition/universal/mixin/UniversalMixinPlugin.class"))) {
+                new org.objectweb.asm.ClassReader(input).accept(new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                    @Override public org.objectweb.asm.MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                        return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                            @Override public void visitLdcInsn(Object value) { if ("ChatCommandPreviewMixin".equals(value)) registered.incrementAndGet(); }
+                        };
+                    }
+                }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+            }
+            assertEquals(3, registered.get(), "Packaging a mixin class is not enough: every runtime must register it");
+            for (var target : RuntimeTarget.values()) assertNotNull(jar.getEntry("org/marshal/weaddon_universal_mixins/" + target.id() + "/ChatCommandPreviewMixin.class"));
+        }
+    }
+    @Test
     void uiResourcesAndNoticesAreSharedOnce() throws Exception {
         try (var jar = artifact()) {
             String base = "assets/worldedit_selection_overlay/";

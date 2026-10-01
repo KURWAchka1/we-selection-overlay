@@ -11,6 +11,7 @@
 **/.codebase-memory/
 *.iml
 *.log
+tools/command-preview-test/generated/
 
 # Release artifacts belong in GitHub Releases, not source history.
 *.jar

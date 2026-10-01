@@ -15,6 +15,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class UniversalArtifactTest {
     @Test
+    void commandMixinIsRegisteredForEveryRuntime() throws Exception {
+        try (var jar = new JarFile(System.getProperty("universal.jar"))) {
+            var registered = new java.util.concurrent.atomic.AtomicInteger();
+            try (var input = jar.getInputStream(jar.getEntry("org/marshal/weaddon_lightposition/bootstrap/UniversalMixinPlugin.class"))) {
+                new org.objectweb.asm.ClassReader(input).accept(new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                    @Override public org.objectweb.asm.MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                        return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                            @Override public void visitLdcInsn(Object value) { if ("ChatCommandPreviewMixin".equals(value)) registered.incrementAndGet(); }
+                        };
+                    }
+                }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+            }
+            assertEquals(2, registered.get(), "Legacy and modern runtime lists must register chat preview");
+        }
+    }
+    @Test
     void uiResourcesAndNoticesAreSharedOnce() throws Exception {
         try (var jar = new JarFile(System.getProperty("universal.jar"))) {
             String base = "assets/worldedit_selection_overlay/";
@@ -60,7 +76,18 @@ class UniversalArtifactTest {
             assertNotNull(jar.getEntry("META-INF/licenses/WorldEditCUI-Protocol-HEADER.txt"));
             assertNull(jar.getEntry("fabric.mod.json"));
             assertNull(jar.getEntry("META-INF/jarjar/metadata.json"));
+            assertFalse(jar.stream().anyMatch(entry -> entry.getName().startsWith("net/fabricmc/")),
+                    "NeoForge must not bundle Fabric Loader through protocol transitive dependencies");
+            assertNull(jar.getEntry("fabric-installer.json"));
+            assertTrue(new File(System.getProperty("universal.jar")).length() < 2 * 1024 * 1024,
+                    "Unexpected release footprint; inspect bundled dependencies");
+            assertFalse(jar.stream().anyMatch(entry -> entry.getName().startsWith("org/enginehub/")),
+                    "Private fallbacks must not collide with WorldEdit's shared protocol module");
+            assertFalse(jar.stream().anyMatch(entry -> entry.getName().startsWith("architectury_inject_")),
+                    "Public protocol service injection is not part of a private packet codec");
             for (String id : List.of("mc1_21_11", "mc26_1", "mc26_2")) {
+                assertNotNull(jar.getEntry("org/marshal/weaddon_lightposition/runtime/" + id
+                        + "/internal/cui/protocol/CUIPacket.class"));
                 assertNotNull(jar.getEntry("org/marshal/weaddon_lightposition/runtime/" + id
                         + "/client/WorldEditSelectionOverlayClient.class"));
                 assertNull(jar.getEntry("org/marshal/weaddon_lightposition/runtime/" + id

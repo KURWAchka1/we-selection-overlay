@@ -26,6 +26,7 @@ import org.enginehub.worldeditcui.protocol.CUIPacket;
 import org.enginehub.worldeditcui.protocol.CUIPacketHandler;
 import org.lwjgl.glfw.GLFW;
 import org.marshal.weaddon_lightposition.client.clipboard.ClipboardPreviewController;
+import org.marshal.weaddon_lightposition.client.preview.CommandPreviewController;
 import org.marshal.weaddon_lightposition.client.overlay.DiagonalMode;
 import org.marshal.weaddon_lightposition.client.overlay.OverlayColorProfile;
 import org.marshal.weaddon_lightposition.client.overlay.OverlayColorSlot;
@@ -99,6 +100,7 @@ public final class WorldEditPointOverlayClient {
     private final SelectionManager selectionManager = new SelectionManager();
     private final SelectionBlockAnalyzer selectionBlockAnalyzer = new SelectionBlockAnalyzer();
     private final ClipboardPreviewController clipboardPreviewController = new ClipboardPreviewController();
+    private final CommandPreviewController commandPreviewController = CommandPreviewController.instance();
     private final HashSet<String> excludedBlockFilters = new HashSet<>();
     private final HashSet<String> isolatedBlockIds = new HashSet<>();
     private final OverlayColorProfile colorProfile = OverlayColorProfile.defaults();
@@ -106,6 +108,7 @@ public final class WorldEditPointOverlayClient {
     private KeyBinding openSettingsKey;
     private KeyBinding openBlockListKey;
     private KeyBinding deselectKey;
+    private KeyBinding commandPreviewKey;
     private Path settingsFile;
     private boolean overlayEnabled = true;
     private boolean selectionGridEnabled = true;
@@ -138,6 +141,7 @@ public final class WorldEditPointOverlayClient {
 
     public void initialize() {
         initSettings();
+        commandPreviewController.initialize(settingsFile.getParent());
         clipboardPreviewController.initialize();
         clipboardPreviewController.setEnabled(clipboardPreviewEnabled);
         BlockIsolationController.setSelectedBlockIds(isolatedBlockIds);
@@ -159,6 +163,13 @@ public final class WorldEditPointOverlayClient {
                 GLFW.GLFW_KEY_N,
                 KEY_CATEGORY
         ));
+        commandPreviewKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.worldedit_selection_overlay.command_preview",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_F8,
+                KEY_CATEGORY
+        ));
+        commandPreviewController.setToggleKey(commandPreviewKey);
 
         CUIPacketHandler.instance().registerClientboundHandler(this::onCuiPacket);
         ClientPlayConnectionEvents.JOIN.register(this::onJoin);
@@ -183,7 +194,8 @@ public final class WorldEditPointOverlayClient {
         handleOpenBlockListKey(client);
         handleDeselectKey(client);
         clipboardPreviewController.setEnabled(clipboardPreviewEnabled);
-        clipboardPreviewController.tick(client);
+        if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.tick(client);
+        commandPreviewController.tick(client);
 
         if (client.world != lastWorld) {
             lastWorld = client.world;
@@ -237,7 +249,8 @@ public final class WorldEditPointOverlayClient {
 
         if (clipboardPreviewActive) {
             try (GizmoDrawing.CollectorScope ignored = client.worldRenderer.startDrawingGizmos()) {
-                clipboardPreviewController.renderBounds();
+                if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBounds();
+            commandPreviewController.renderMarkers();
             }
         }
 
@@ -281,7 +294,8 @@ public final class WorldEditPointOverlayClient {
     }
 
     private void onRenderClipboardPreview(WorldRenderContext context) {
-        clipboardPreviewController.renderBlocks(context);
+        commandPreviewController.renderBlocks(context);
+        if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(context);
     }
 
     private void onCuiPacket(CUIPacket payload, CUIPacketHandler.PacketContext context) {
@@ -307,6 +321,7 @@ public final class WorldEditPointOverlayClient {
         List<String> args = payload.args();
         if (isSelectionPayload(eventType)) {
             receivedSelectionPackets++;
+            commandPreviewController.invalidate();
         }
 
         switch (eventType) {
@@ -600,6 +615,8 @@ public final class WorldEditPointOverlayClient {
     }
 
     private void resetState() {
+        commandPreviewController.clearDraft();
+        commandPreviewController.invalidate();
         delayedHeloTicks = 0;
         lastWorld = null;
         resetCuiHandshakeForWorld();
@@ -611,6 +628,8 @@ public final class WorldEditPointOverlayClient {
         isolatedBlocksRegion = null;
         isolatedBlocksRegionVersion = Long.MIN_VALUE;
     }
+
+    public CommandPreviewController commandPreviewController() { return commandPreviewController; }
 
     private void handleOpenSettingsKey(MinecraftClient client) {
         if (openSettingsKey == null) {

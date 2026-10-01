@@ -1,6 +1,6 @@
 ![weaddon](https://media.forgecdn.net/attachments/1592/332/worldedit_selection_overlay_300-png.png)
 
-# WorldEdit Selection Overlay (Fabric)
+# WorldEdit Selection Overlay
 
 Make your WorldEdit selections visible, readable, and predictable.
 
@@ -77,6 +77,22 @@ Clipboard preview requires the WorldEdit mod on the client/integrated server. Se
 
 ***
 
+## Live Command Preview
+
+See a ghost of the result while typing `//set`, `//replace`, `//walls`,
+`//faces` / `//outline`, or `//overlay`, before pressing Enter.
+
+* Textured changed blocks, removal markers, and compact change counts
+* Block states and percentage mixtures, with a stable random sample
+* Quick toggle in settings or with configurable `F8`
+* Clipboard preview pauses temporarily, then returns when chat closes
+
+Requires integrated singleplayer WorldEdit. Random execution rolls again;
+the displayed sample is not a promise of exact placements. Preview does not
+edit the world; Enter runs your normal WorldEdit command.
+
+***
+
 ## Overlay Palette Editor
 
 Customize how the overlay looks directly in-game:
@@ -141,6 +157,7 @@ Everything is visual only. Hidden blocks still exist, still collide, and are nev
 * Two render styles: **Blocky / Smooth**
 * Optional internal selection grid toggle
 * Textured WorldEdit clipboard preview, off by default
+* Live command-result preview while typing in singleplayer
 * Full-screen palette editor with live preview
 * Custom colors, transparency, thickness, and presets
 * Adaptive performance for large selections
@@ -151,7 +168,7 @@ Everything is visual only. Hidden blocks still exist, still collide, and are nev
 * Quick `//deselect` keybind
 * Fluid-aware rendering and bucket icons
 * Full-bright isolated blocks and fluids for readable textures
-* Fully configurable UI
+* Glass, Studio, and Classic interface styles, with short animations and optional blur
 
 ***
 
@@ -174,6 +191,7 @@ Works with everything WorldEdit sends via CUI.
 | `O` | Open overlay settings |
 | `B` | Open block inspection screen |
 | `N` | Run WorldEdit `//deselect` |
+| `F8` | Toggle command-result preview |
 
 All keybinds are configurable.
 
@@ -183,13 +201,14 @@ All keybinds are configurable.
 
 * Singleplayer
 * Fabric + WorldEdit
+* NeoForge + WorldEdit
 * LabyMod/LabyFabric when Fabric mods are enabled
 * Paper / Spigot / Purpur if WorldEdit CUI data is available
 * Sodium support for block and fluid isolation rendering
 * Better Block Entities compatibility hardening
 
 If the server does not send CUI data or supported WorldEdit selection updates, the overlay cannot know what to render.
-Clipboard preview is available when the local Fabric WorldEdit mod exposes its clipboard API.
+Clipboard preview is available when the local WorldEdit mod exposes its clipboard API.
 
 ***
 
@@ -206,18 +225,17 @@ Clipboard preview is available when the local Fabric WorldEdit mod exposes its c
 
 ## Requirements
 
-* Minecraft **26.1.x** (`26.1`, `26.1.1`, `26.1.2`)
-* Fabric Loader
-* Fabric API
+* Minecraft **1.21.11**, **26.1.x**, or **26.2**
+* Fabric Loader + Fabric API, or NeoForge
 * WorldEdit
 
 ***
 
 ## Installation
 
-1. Install Fabric Loader
-2. Install Fabric API
-3. Drop the mod into `/mods`
+1. Install Fabric Loader and Fabric API, or NeoForge
+2. Choose the matching Fabric or NeoForge mod JAR
+3. Drop that JAR into `/mods`
 4. Launch the game
 
 ***

@@ -4,7 +4,6 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLEnvironment;
-import org.enginehub.worldeditcui.neoforge.protocol.BundledProtocolBootstrap;
 
 import java.lang.reflect.InvocationTargetException;
 
@@ -18,7 +17,6 @@ public final class WorldEditSelectionOverlayBootstrap {
         }
 
         RuntimeSelector.Target target = RuntimeSelector.current();
-        BundledProtocolBootstrap.initialize(modEventBus);
         String initializerName = target.runtimePackage() + ".client.WorldEditSelectionOverlayClient";
         try {
             Class<?> initializer = Class.forName(initializerName, true, getClass().getClassLoader());

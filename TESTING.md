@@ -1,13 +1,74 @@
 # Verification
 
-Current source verification: 2026-10-01. The test worlds and logs are local generated data and are not committed.
+Current source verification: 1.8.0, 2026-10-02. The test worlds, generated
+fixtures, screenshots, and logs are local data and are not committed.
 
 ## Release build
 
-The root README build command completed for all six runtimes and both universal packagers. Packager tests checked metadata, version selection, Java bytecode boundaries, and bundled license notices. The resulting Fabric and NeoForge JARs were each under 1 MiB.
+The root README build command completed for all six runtimes and both universal
+packagers. Packager tests checked metadata, version selection, Java bytecode
+boundaries, bundled license notices, and registration of the chat-preview mixin
+for every runtime. Each universal JAR is approximately 1.1 MiB; neither bundles
+WorldEdit nor Fabric API.
+The archived release outputs are 1,144,536 bytes (Fabric) and 1,117,219 bytes
+(NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
 previous test results.
+NeoForge tests additionally reject exported EngineHub and Architectury injection
+packages, and check the private official CUI codecs. Actual WorldEdit launches
+exercise its installed protocol; no-WorldEdit launches exercise the optional
+private-codec fallback without duplicate channel registration or split packages.
+
+## Live command preview
+
+The actual packaged universal artifacts were loaded with these production
+WorldEdit distributions, not just compiled against development API JARs:
+
+| Loader | Minecraft | WorldEdit | Result |
+| --- | --- | --- | --- |
+| Fabric | 1.21.11 | 7.4.2 | Passed |
+| Fabric | 26.1 | 7.4.3 | Passed |
+| Fabric | 26.2 | 7.4.5 | Passed |
+| NeoForge | 1.21.11 | 7.4.2 | Passed |
+| NeoForge | 26.1.2 | 7.4.3 | Passed |
+| NeoForge | 26.2 | 7.4.5 | Passed |
+
+All six runs check live chat calculation, unchanged source blocks before Enter,
+stable weighted mixtures, textured ghost geometry, default-off clipboard preview,
+temporary command priority without changing its preference or cached snapshot,
+Escape restoration, and normal WorldEdit execution on Enter. The NeoForge runs
+also exercise the real WorldEdit CUI handshake and native clipboard adapters.
+
+The three Fabric runs additionally perform 40 deterministic comparisons per
+runtime against real WorldEdit EditSession results: eight drafts across cuboid,
+ellipsoid, cylinder, polygon, and convex regions. These include walls, faces,
+outline, overlay, replace with an omitted mask, and an explicit block state.
+WorldEdit history is checked before/after preview, and rapid native chat edits
+must immediately discard obsolete geometry.
+
+Their lifecycle tests cover global mask replacement, source block changes with
+an unchanged draft, selection changes without a CUI notification, F8 in chat,
+unloaded selections, scan/change limits, unsupported flags, invalid patterns,
+no-op changes, and removal markers. The shared simulation is the same domain
+implementation on NeoForge, but the full 40-case comparison/lifecycle matrix
+has only been executed on Fabric; it is not claimed as six equivalent suites.
+
+Screenshot review and a separate pixel check verify actual diamond textures,
+not only a nonempty geometry buffer. All six set-preview screenshots pass
+the cyan surface test (more than 36,000 matching pixels in the fixed crop).
+The check also caught incorrect packed UV decoding and Minecraft's hurt-overlay
+UV before release; production now uses the native UV helpers and NO_OVERLAY.
+
+```powershell
+.\tools\test-command-matrix.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25'
+.\tools\check-command-pixels.ps1
+```
+
+Optional `-Only fabric-26.2` selects a focused rerun. Logs are written to
+`build/command-validation/`. NeoForge command fixtures reuse a disposable copy
+of the corresponding isolation world; fixture settings are reset before each
+launch to verify defaults. No player save or normal Minecraft config is used.
 
 ## In-world isolation regression
 
@@ -77,4 +138,13 @@ reproduction command, actual screenshots, measured performance, and limits.
 
 ## Remaining coverage
 
-This suite does not yet exercise Sodium, Iris/shaders, LabyMod, a real local WorldEdit selection, remote CUI, or clipboard command behavior. These require separate compatibility runs before release claims. Automated bounds checks and screenshot review do not replace user visual acceptance or live narration/IME testing.
+Sodium, Iris/shaders, LabyMod, remote-server CUI, arbitrary resource-pack reloads,
+and narration/IME need separate compatibility review. Clipboard coexistence and
+normal command submission are covered, but this is not a comprehensive matrix
+of every clipboard transform or WorldEdit extension. Unknown patterns, flags,
+and extension masks are deliberately rejected, not approximated.
+
+The UI timing measurements in UI_VALIDATION.md belong to the earlier UI profile,
+not a 1.8.0 command-preview performance benchmark. Bounded work and render caps
+are safeguards, not proof of zero FPS loss in every modpack. Automated assertions
+and screenshot inspection do not replace user visual acceptance.

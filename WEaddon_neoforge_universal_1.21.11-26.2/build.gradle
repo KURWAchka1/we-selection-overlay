@@ -42,10 +42,10 @@ def app262 = file("../WEaddon_neoforge_26.2/build/libs/worldedit_selection_overl
 def originalPackage = 'org.marshal.weaddon_lightposition'
 
 configurations {
-    runtime1211
-    runtime261
-    runtime262
-    protocol1211
+    // Only the explicit native runtime and codec inputs belong in the release.
+    runtime1211 { transitive = false }
+    runtime261 { transitive = false }
+    runtime262 { transitive = false }
     localRuntime
     runtimeClasspath.extendsFrom(localRuntime)
 }
@@ -59,8 +59,11 @@ dependencies {
     runtime1211 files(app1211)
     runtime261 files(app261)
     runtime262 files(app262)
-    protocol1211 'org.enginehub.worldeditcui-protocol:worldeditcui-protocol-neoforge-mc1.21.11:4.0.2'
-    compileOnly 'org.enginehub.worldeditcui-protocol:worldeditcui-protocol-neoforge-mc1.21.11:4.0.2'
+    runtime1211 'org.enginehub.worldeditcui-protocol:worldeditcui-protocol-neoforge-mc1.21.11:4.0.2'
+    runtime261 'org.enginehub.worldeditcui-protocol:worldeditcui-protocol-neoforge-mc26.1:4.0.3:dev'
+    runtime262 'org.enginehub.worldeditcui-protocol:worldeditcui-protocol-neoforge-mc26.2:4.0.3:dev'
+    runtime261 'org.enginehub.worldeditcui-protocol:worldeditcui-protocol-common-mc26.1:4.0.3:dev'
+    runtime262 'org.enginehub.worldeditcui-protocol:worldeditcui-protocol-common-mc26.2:4.0.3:dev'
     localRuntime files(layout.buildDirectory.file("libs/${mod_id}-${mod_version}-neoforge-1.21.11-26.2.jar"))
 }
 
@@ -76,6 +79,8 @@ configurations.configureEach {
         attributes.attribute(org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, buildJavaVersion)
     }
 }
+configurations.runtime261.attributes.attribute(org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 25)
+configurations.runtime262.attributes.attribute(org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 25)
 
 tasks.named('processResources') {
     inputs.property('version', mod_version)
@@ -95,6 +100,7 @@ def configureRuntimeRelocation = { ShadowJar task, String runtimeId, Configurati
 
     task.relocate("${originalPackage}.mixin", "org.marshal.weaddon_universal_mixins.${runtimeId}")
     task.relocate(originalPackage, "${originalPackage}.runtime.${runtimeId}")
+    task.relocate('org.enginehub.worldeditcui', "${originalPackage}.runtime.${runtimeId}.internal.cui")
 
     task.exclude('META-INF/**')
     task.exclude('assets/**')
@@ -102,6 +108,11 @@ def configureRuntimeRelocation = { ShadowJar task, String runtimeId, Configurati
     task.exclude('worldedit_selection_overlay.mixins.json')
     task.exclude('org/marshal/weaddon_lightposition/WorldEditSelectionOverlayMod.class')
     task.exclude('org/marshal/weaddon_lightposition/mixin/WorldEditSelectionOverlayMixinPlugin.class')
+    // The private fallback uses only CUIPacket's official wire codec. Its shared
+    // service/provider and Architectury injection classes belong to the public mod.
+    task.exclude('org/enginehub/worldeditcui/neoforge/**')
+    task.exclude('org/enginehub/worldeditcui/protocol/CUIPacketHandler*.class')
+    task.exclude('architectury_inject_*/**')
 }
 
 def relocate1211 = tasks.register('relocateRuntime1211', ShadowJar) {
@@ -133,15 +144,6 @@ tasks.register('universalJar', Jar) {
 
     from({ zipTree(relocate1211.get().archiveFile.get().asFile) }) {
         exclude 'META-INF/**'
-    }
-
-    from({ zipTree(configurations.protocol1211.singleFile) }) {
-        exclude 'META-INF/MANIFEST.MF'
-        exclude 'META-INF/neoforge.mods.toml'
-        exclude 'META-INF/*.SF'
-        exclude 'META-INF/*.RSA'
-        exclude 'META-INF/*.DSA'
-        exclude 'org/enginehub/worldeditcui/neoforge/protocol/NeoForgeProtocolMod.class'
     }
 
     from({ zipTree(relocate261.get().archiveFile.get().asFile) }) {

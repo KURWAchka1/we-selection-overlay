@@ -1,0 +1,28 @@
+allprojects {
+    afterEvaluate {
+        repositories { maven { name = 'Modrinth'; url = 'https://api.modrinth.com/maven' } }
+        def legacy = neo_version.startsWith('21.')
+        def family = legacy ? '1.21.11' : (neo_version.startsWith('26.2') ? '26.2' : '26.1')
+        def worldedit = legacy ? 'com.sk89q.worldedit:worldedit-neoforge-mc1.21.11:7.4.2' : "maven.modrinth:worldedit:${family == '26.2' ? '7.4.5' : '7.4.3'}"
+        def tests = sourceSets.create('commandTest') {
+            java.srcDir(file("../tools/command-preview-test/generated/neo-${family}"))
+            resources.srcDir(file('../tools/command-preview-test/neo-resources'))
+            compileClasspath += sourceSets.main.compileClasspath + files("build/libs/worldedit_selection_overlay-${mod_version}-neoforge-1.21.11-26.2.jar")
+        }
+        neoForge.addModdingDependenciesTo(tests)
+        dependencies.add('commandTestCompileOnly', worldedit)
+        dependencies.add('localRuntime', legacy ? 'maven.modrinth:worldedit:7.4.2' : worldedit)
+        tasks.named('compileCommandTestJava') { options.release = legacy ? 21 : 25 }
+        def testJar = tasks.register('commandTestJar', Jar) {
+            from(tests.output)
+            archiveClassifier = 'command-test-only'
+        }
+        neoForge.runs.create('commandClient') {
+            client()
+            gameDirectory = file("run-command-test-${family}")
+            programArguments.addAll('--quickPlaySingleplayer', 'weso-fixture', '--width', '1280', '--height', '720')
+            jvmArguments.add('-Xmx2G')
+        }
+        dependencies.add('localRuntime', files(testJar))
+    }
+}

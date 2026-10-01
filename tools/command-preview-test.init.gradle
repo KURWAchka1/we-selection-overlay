@@ -1,0 +1,38 @@
+// Runs the actual universal Fabric JAR with WorldEdit in a disposable Minecraft world.
+allprojects {
+    afterEvaluate {
+        repositories.maven { url = 'https://api.modrinth.com/maven' }
+        def root = file('../tools/command-preview-test')
+        def tests = sourceSets.create('commandTest') {
+            java.srcDir(new File(root, "generated/fabric-${minecraft_version}"))
+            resources.srcDir(new File(root, 'resources'))
+            compileClasspath += sourceSets.main.compileClasspath + files("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar")
+        }
+        dependencies.add(minecraft_version == '1.21.11' ? 'modImplementation' : 'commandTestImplementation', fabricApi.module('fabric-client-gametest-api-v1', fabric_version))
+        def testJar = tasks.register('commandTestJar', Jar) {
+            from(tests.output)
+            archiveClassifier = 'command-test-only'
+        }
+        def runtimeTestJar = testJar
+        if (minecraft_version == '1.21.11') {
+            def remapType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.RemapJarTask')
+            runtimeTestJar = tasks.register('remapCommandTestJar', remapType) {
+                inputFile = testJar.flatMap { it.archiveFile }
+                archiveClassifier = 'command-test-remapped'
+                addNestedDependencies = false
+            }
+        }
+        def modsConfig = configurations.create('commandProductionMods')
+        dependencies.add(modsConfig.name, "net.fabricmc.fabric-api:fabric-api:${fabric_version}")
+        dependencies.add(modsConfig.name, fabricApi.module('fabric-client-gametest-api-v1', fabric_version))
+        dependencies.add(modsConfig.name, "maven.modrinth:worldedit:${minecraft_version == '1.21.11' ? '7.4.2' : (minecraft_version == '26.2' ? '7.4.5' : '7.4.3')}")
+        def taskType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')
+        tasks.register('testUniversalCommands', taskType) {
+            dependsOn(runtimeTestJar)
+            mods.setFrom(modsConfig, runtimeTestJar, file("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar"))
+            runDir = file('run-command-test')
+            jvmArgs.addAll('-Xmx2G', '-Dfabric.client.gametest', '-Dfabric.debug.disableModShuffle=true')
+            programArgs.addAll('--width', '1280', '--height', '720')
+        }
+    }
+}

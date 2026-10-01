@@ -13,6 +13,7 @@ import java.util.Set;
 
 public final class UniversalMixinPlugin implements IMixinConfigPlugin {
     private static final List<String> MC_1_21_11_MIXINS = List.of(
+            "ChatCommandPreviewMixin",
             "BlockEntityRenderManagerMixin",
             "BlockModelRendererBrightnessCacheMixin",
             "BlockModelRendererMixin",
@@ -25,6 +26,7 @@ public final class UniversalMixinPlugin implements IMixinConfigPlugin {
     );
 
     private static final List<String> MC_26_MIXINS = List.of(
+            "ChatCommandPreviewMixin",
             "BlockEntityRenderManagerMixin",
             "BlockModelRendererBrightnessCacheMixin",
             "BlockModelRendererMixin",

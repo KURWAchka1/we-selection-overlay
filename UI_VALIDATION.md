@@ -1,6 +1,6 @@
 # UI validation
 
-Date: 2026-10-01. Status: automated UI and six-runtime verification passed;
+Date: 2026-10-02. Status: automated UI and six-runtime verification passed;
 user visual acceptance is pending.
 
 ## Scope
@@ -47,6 +47,12 @@ The NeoForge fixtures need their generated `weso-fixture` quick-play worlds,
 as documented in `TESTING.md`. Logs are written to `build/ui-validation/`.
 
 ## Verification Results
+
+The 1.8.0 layout-only rerun includes the new Command Preview settings row,
+actual on/off clicks, styled label translations, and the existing 42-screenshot
+EN/RU and 2x/3x/4x matrix. Screenshot inspection caught a missing styled-label
+translation that widget bounds alone could not detect; it is now an explicit
+regression assertion. This rerun is not a new timing benchmark.
 
 The full Fabric 26.2 profile and the final layout-only rerun passed. Forty-two
 real game screenshots cover the three styles, menus, confirmation dialog,
@@ -105,8 +111,10 @@ are not a clean basis for claiming an FPS gain from opening menus.
 ## Remaining Coverage
 
 No Sodium/Iris/LabyMod compatibility pack was loaded for this UI pass.
-WorldEdit commands, remote CUI, clipboard operations, arbitrary resource packs,
-and narration/IME usability still need separate live compatibility review.
+Remote CUI, arbitrary resource packs, and narration/IME usability still need
+separate live compatibility review. The 1.8.0 local WorldEdit command and
+clipboard-coexistence runs are recorded separately in TESTING.md; this UI
+fixture intentionally runs without WorldEdit.
 The isolation fixtures cover eight material toggles, surrounding chunk meshes,
 exposed selected faces, and fullbright vertices; they do not replace that review.
 

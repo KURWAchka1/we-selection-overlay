@@ -13,6 +13,7 @@ base {
 }
 
 sourceSets {
+    main.java.srcDir('../shared/command-preview/src/main/java')
     universalSmoke {
         java.setSrcDirs([])
         resources.setSrcDirs([])
@@ -84,7 +85,7 @@ dependencies {
     implementation "org.enginehub.worldeditcui-protocol:worldeditcui-protocol-common-mc26.2:4.0.3:dev"
     compileOnly "maven.modrinth:worldedit:7.4.5"
 
-    universalSmokeRuntimeOnly files('../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-1.7.1-fabric-1.21.11-26.2.jar')
+    universalSmokeRuntimeOnly files("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar")
 }
 
 processResources {

@@ -10,6 +10,7 @@ public final class WorldEditSelectionOverlayClient {
     }
 
     public static void initialize(IEventBus modEventBus) {
+        RuntimeCuiBridge.initialize(modEventBus);
         OVERLAY_CLIENT.initialize();
         modEventBus.addListener(OVERLAY_CLIENT::onRegisterKeyMappings);
         NeoForge.EVENT_BUS.addListener(OVERLAY_CLIENT::onClientTick);

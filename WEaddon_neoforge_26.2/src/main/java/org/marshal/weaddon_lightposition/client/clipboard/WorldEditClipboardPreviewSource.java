@@ -7,7 +7,7 @@ import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.entity.Player;
 import com.sk89q.worldedit.extent.clipboard.Clipboard;
 import com.sk89q.worldedit.extent.transform.BlockTransformExtent;
-import com.sk89q.worldedit.fabric.FabricAdapter;
+import com.sk89q.worldedit.neoforge.NeoForgeAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.math.Vector3;
 import com.sk89q.worldedit.math.transform.Transform;
@@ -109,7 +109,7 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
             return;
         }
 
-        Player actor = FabricAdapter.get().fromNativePlayer(nativePlayer);
+        Player actor = NeoForgeAdapter.get().fromNativePlayer(nativePlayer);
         LocalSession session = WorldEdit.getInstance().getSessionManager().get(actor);
         ClipboardHolder holder;
         try {
@@ -238,7 +238,7 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
             int z = transformed.z();
             com.sk89q.worldedit.world.block.BlockState transformedState =
                     BlockTransformExtent.transform(sourceBlock.state(), transform).toImmutableState();
-            BlockState nativeState = FabricAdapter.get().toNativeBlockState(transformedState);
+            BlockState nativeState = NeoForgeAdapter.get().toNativeBlockState(transformedState);
             if (nativeState == null || nativeState.isAir()) {
                 continue;
             }

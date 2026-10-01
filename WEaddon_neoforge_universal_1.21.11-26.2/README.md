@@ -13,7 +13,13 @@ Build inputs come from current `build/libs` outputs, not archived releases.
 
 Run the sibling Fabric universal project's `tools/build-release.ps1` to build all
 six source projects and both universal artifacts in dependency order.
-`build` checks metadata and bytecode before archiving to `libs/1.7.1`.
+`build` checks metadata and bytecode before archiving to `libs/1.8.0`.
+
+The main mod exports no EngineHub packages. CUI uses the installed official
+protocol handler when available, or a privately relocated version-matched
+codec otherwise. This keeps WorldEdit's nested CUI module from colliding with
+the universal mod under JPMS. The fallback is optional client networking, not
+a replacement server protocol. Artifact tests enforce the package boundary.
 
 Smoke test the packaged JAR with Java 21:
 

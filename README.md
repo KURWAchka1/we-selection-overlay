@@ -1,6 +1,6 @@
 # WorldEdit Selection Overlay
 
-Client-side selection visualization and inspection for WorldEdit. The current release line is **1.7.1**. Development is ongoing; use the release artifacts only after their supported game and loader combinations have been validated.
+Client-side selection visualization and inspection for WorldEdit. The current release line is **1.8.0**, adding live command-result preview in integrated singleplayer WorldEdit sessions.
 
 ## Supported release targets
 
@@ -12,7 +12,7 @@ Client-side selection visualization and inspection for WorldEdit. The current re
 
 There is **one universal JAR per loader**, not one JAR that loads on both Fabric and NeoForge. Each loader's JAR contains the three supported Minecraft runtimes and selects the matching runtime at launch. This does **not** imply support for every 1.21.x or 26.x version.
 
-The mod can launch without WorldEdit; WorldEdit-dependent features need a compatible WorldEdit installation or CUI data from a server. Clipboard preview requires a local WorldEdit session. The mod never modifies world blocks for block isolation or clipboard preview.
+The mod can launch without WorldEdit; WorldEdit-dependent features need a compatible WorldEdit installation or CUI data from a server. Clipboard and command-result previews require an integrated/local WorldEdit session. Previews and isolation never modify world blocks or undo history. Typing a supported command temporarily takes priority over clipboard rendering without changing its preference or cache.
 
 ## Source layout
 
@@ -26,8 +26,10 @@ The mod can launch without WorldEdit; WorldEdit-dependent features need a compat
 | `WEaddon_neoforge_26.2` | NeoForge runtime for Minecraft 26.2 |
 | `WEaddon_fabric_universal_1.21.11-26.2` | Fabric bootstrap, version selection, packaging, tests |
 | `WEaddon_neoforge_universal_1.21.11-26.2` | NeoForge bootstrap, version selection, packaging, tests |
+| `shared/command-preview` | Memory-only command engine shared by all six runtimes |
+| `shared/neoforge-cui` | Shared-protocol bridge and private fallback registration |
 
-The packagers keep incompatible Minecraft classes in separate relocated runtime packages. Runtime detection loads only the matching package. The Fabric packager also bundles version-scoped CUI protocol metadata. See the packager READMEs and `TESTING.md` for details and test coverage.
+The packagers keep incompatible Minecraft classes in separate relocated runtime packages. Runtime detection loads only the matching package. Fabric bundles version-scoped CUI protocol metadata. NeoForge uses the installed shared protocol or a privately relocated, version-matched fallback to avoid split-package conflicts. See the packager READMEs and `TESTING.md` for details and test coverage.
 
 ## Build on Windows
 
@@ -37,12 +39,15 @@ Install JDK 21 and JDK 25. Then run from this repository root:
 .\WEaddon_fabric_universal_1.21.11-26.2\tools\build-release.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25'
 ```
 
-The script builds all six runtimes and both universal packagers, including their unit tests. Release artifacts are written under each packager's `libs/1.7.1/` and are intentionally ignored by Git. Run the in-game test harnesses described in the packager `TESTING.md` before publishing a release.
+The script builds all six runtimes and both universal packagers, including their unit tests. Release artifacts are written under each packager's `libs/1.8.0/` and are intentionally ignored by Git. Run the in-game test harnesses described in `TESTING.md` before publishing a release.
 
 ## Documentation
 
 - [User-facing description](WEaddon_lightposition/MOD_DESCRIPTION.md)
 - [Changelog](WEaddon_lightposition/CHANGELOG.md)
+- [1.8.0 release notes](changelog-1.8.0.md)
+- [Command preview behavior and limits](COMMAND_PREVIEW.md)
+- [Feature roadmap](FEATURE_ROADMAP.md)
 - [UI redesign research and implementation contract](UI_REDESIGN_RESEARCH.md)
 - [UI screenshots, tests, and performance measurements](UI_VALIDATION.md)
 - [Fabric packaging and tests](WEaddon_fabric_universal_1.21.11-26.2/README.md)

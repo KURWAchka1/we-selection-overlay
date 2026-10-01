@@ -139,3 +139,5 @@ publishing {
         // retrieving dependencies.
     }
 }
+
+sourceSets.main.java.srcDir('../shared/command-preview/src/main/java')
