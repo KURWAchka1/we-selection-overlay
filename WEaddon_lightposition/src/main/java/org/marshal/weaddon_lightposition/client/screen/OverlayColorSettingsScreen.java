@@ -15,7 +15,7 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
-public final class OverlayColorSettingsScreen extends Screen {
+public final class OverlayColorSettingsScreen extends UiScreen {
     private static final int LEFT_WIDTH = 184;
     private static final int RIGHT_WIDTH = 304;
     private static final int COMPACT_LEFT_WIDTH = 184;
@@ -23,17 +23,22 @@ public final class OverlayColorSettingsScreen extends Screen {
     private static final int TOP_BAR_HEIGHT = 36;
     private static final int MARGIN = 12;
     private static final int BUTTON_HEIGHT = 20;
-    private static final int SPECTRUM_WIDTH = 184;
     private static final int SPECTRUM_HEIGHT = 136;
     private static final int SPECTRUM_MIN_HEIGHT = 80;
     private static final int HUE_WIDTH = 16;
     private static final int ALPHA_HEIGHT = 14;
     private static final int COLOR_GRADIENT_STEP = 4;
+    private static final int LINE_WIDTH_GROUP_GAP = 10;
     private static final int SLOT_ROW_HEIGHT = 34;
 
     private final WorldEditPointOverlayClient overlayClient;
     private final Screen parent;
     private final ArrayList<Button> groupButtons = new ArrayList<>();
+    private final UiMotion.Hover[] slotHovers = UiMotion.Hover.states(OverlayColorSlot.values().length);
+    private final UiMotion.Hover[] slotResetHovers = UiMotion.Hover.states(OverlayColorSlot.values().length);
+    private final UiMotion.Hover[] presetHovers = UiMotion.Hover.states(OverlayPreset.values().length);
+    private final UiMotion.Hover[] resetHovers = UiMotion.Hover.states(ResetAction.values().length);
+    private final UiMotion.Hover[] dialogHovers = UiMotion.Hover.states(2);
 
     private ColorGroup selectedGroup = ColorGroup.CUBOID;
     private OverlayColorSlot selectedSlot = OverlayColorSlot.POS1;
@@ -78,17 +83,19 @@ public final class OverlayColorSettingsScreen extends Screen {
     @Override
     protected void init() {
         groupButtons.clear();
-        int groupX = MARGIN;
+        int groupX = stackedLayout() ? MARGIN : slotRowX();
         int groupY = topBarHeight() + MARGIN;
         for (ColorGroup group : ColorGroup.values()) {
             Button button = addRenderableWidget(
-                    Button.builder(groupButtonText(group), ignored -> {
+                    UiButton.styled(groupButtonText(group), ignored -> {
                         selectedGroup = group;
                         selectedSlot = group.slots()[0];
                         syncHsvFromSelectedColor();
                         syncFields();
                         syncGroupButtons();
-                    }).bounds(groupX, groupY, leftWidth() - MARGIN, BUTTON_HEIGHT).build()
+                        clampScroll();
+                        layoutWidgets();
+                    }).quiet().selected(() -> selectedGroup == group).bounds(groupX, groupY, leftWidth() - MARGIN, BUTTON_HEIGHT).build()
             );
             groupButtons.add(button);
             groupY += BUTTON_HEIGHT + 6;
@@ -96,7 +103,7 @@ public final class OverlayColorSettingsScreen extends Screen {
 
         int fieldX = controlsX();
         int fieldY = fieldsY();
-        hexField = new EditBox(
+        hexField = new UiEditBox(
                 font,
                 fieldX + 34,
                 fieldY,
@@ -118,21 +125,23 @@ public final class OverlayColorSettingsScreen extends Screen {
         addRenderableWidget(alphaField);
 
         templateMenuButton = addRenderableWidget(
-                Button.builder(Component.translatable("screen.worldedit_selection_overlay.colors.templates_menu"), button -> {
+                UiButton.styled(Component.translatable("screen.worldedit_selection_overlay.colors.templates_menu"), button -> {
                     templateMenuOpen = !templateMenuOpen;
                     resetMenuOpen = false;
+                    setFocused(null);
                 }).bounds(templateMenuButtonX(), 8, templateMenuButtonWidth(), BUTTON_HEIGHT).build()
         );
         resetMenuButton = addRenderableWidget(
-                Button.builder(Component.translatable("screen.worldedit_selection_overlay.colors.reset_menu"), button -> {
+                UiButton.styled(Component.translatable("screen.worldedit_selection_overlay.colors.reset_menu"), button -> {
                     resetMenuOpen = !resetMenuOpen;
                     templateMenuOpen = false;
+                    setFocused(null);
                 })
                         .bounds(resetMenuButtonX(), 8, resetMenuButtonWidth(), BUTTON_HEIGHT)
                         .build()
         );
         doneButton = addRenderableWidget(
-                Button.builder(Component.translatable("screen.worldedit_selection_overlay.colors.done"), button -> onClose())
+                UiButton.styled(Component.translatable("screen.worldedit_selection_overlay.colors.done"), button -> onClose())
                         .bounds(width - 96, 8, 84, BUTTON_HEIGHT)
                         .build()
         );
@@ -144,39 +153,39 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     @Override
-    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
-        clampScroll();
-        layoutWidgets();
+    protected void drawScreen(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        int bodyMouseX = popupBlocksWidgetHover() ? Integer.MIN_VALUE : mouseX;
+        int bodyMouseY = popupBlocksWidgetHover() ? Integer.MIN_VALUE : mouseY;
         drawBackdrop(context);
         drawPanel(context);
         if (stackedLayout()) {
             context.enableScissor(0, topBarHeight(), width, height);
             try {
-                drawSlotList(context, mouseX, mouseY);
+                drawSlotList(context, bodyMouseX, bodyMouseY);
                 drawSpectrum(context);
                 drawHueSlider(context);
                 drawAlphaSlider(context);
-                drawChannelSliders(context, mouseX, mouseY);
-                drawLineWidthSlider(context, mouseX, mouseY);
+                drawChannelSliders(context, bodyMouseX, bodyMouseY);
+                drawLineWidthSlider(context, bodyMouseX, bodyMouseY);
                 drawPreview(context);
                 drawFieldLabels(context);
             } finally {
                 context.disableScissor();
             }
         } else {
-            drawSlotList(context, mouseX, mouseY);
+            drawSlotList(context, bodyMouseX, bodyMouseY);
             drawSpectrum(context);
             drawHueSlider(context);
             drawAlphaSlider(context);
-            drawChannelSliders(context, mouseX, mouseY);
-            drawLineWidthSlider(context, mouseX, mouseY);
+            drawChannelSliders(context, bodyMouseX, bodyMouseY);
+            drawLineWidthSlider(context, bodyMouseX, bodyMouseY);
             drawPreview(context);
             drawFieldLabels(context);
         }
-        drawGlobalLineWidthSlider(context, mouseX, mouseY);
+        drawGlobalLineWidthSlider(context, bodyMouseX, bodyMouseY);
         int widgetMouseX = popupBlocksWidgetHover() ? Integer.MIN_VALUE : mouseX;
         int widgetMouseY = popupBlocksWidgetHover() ? Integer.MIN_VALUE : mouseY;
-        super.extractRenderState(context, widgetMouseX, widgetMouseY, delta);
+        renderWidgets(context, widgetMouseX, widgetMouseY, delta);
         drawTemplateMenu(context, mouseX, mouseY);
         drawResetMenu(context, mouseX, mouseY);
         drawPresetConfirmation(context, mouseX, mouseY);
@@ -184,6 +193,7 @@ public final class OverlayColorSettingsScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean doubleClick) {
+        if (isClosing()) return true;
         if (click.button() == 0) {
             if (pendingPreset != null) {
                 return clickPresetConfirmation(click.x(), click.y());
@@ -194,6 +204,7 @@ public final class OverlayColorSettingsScreen extends Screen {
             if (isInsideTemplateMenuButton(click.x(), click.y())) {
                 templateMenuOpen = !templateMenuOpen;
                 resetMenuOpen = false;
+                setFocused(null);
                 return true;
             }
             if (templateMenuOpen) {
@@ -206,6 +217,7 @@ public final class OverlayColorSettingsScreen extends Screen {
             if (isInsideResetMenuButton(click.x(), click.y())) {
                 resetMenuOpen = !resetMenuOpen;
                 templateMenuOpen = false;
+                setFocused(null);
                 return true;
             }
             if (resetMenuOpen) {
@@ -275,6 +287,7 @@ public final class OverlayColorSettingsScreen extends Screen {
 
     @Override
     public boolean keyPressed(KeyEvent input) {
+        if (isClosing()) return true;
         if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
             if (pendingPreset != null) {
                 pendingPreset = null;
@@ -289,7 +302,7 @@ public final class OverlayColorSettingsScreen extends Screen {
                 return true;
             }
         }
-        return super.keyPressed(input);
+        return popupBlocksWidgetHover() || super.keyPressed(input);
     }
 
     @Override
@@ -381,6 +394,8 @@ public final class OverlayColorSettingsScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (isClosing()) return true;
+        if (popupBlocksWidgetHover()) return true;
         if (stackedLayout() && maxScrollOffset() > 0.0 && pendingPreset == null && !templateMenuOpen && !resetMenuOpen) {
             scrollOffset = Math.max(0.0, Math.min(maxScrollOffset(), scrollOffset - verticalAmount * 28.0));
             layoutWidgets();
@@ -401,13 +416,11 @@ public final class OverlayColorSettingsScreen extends Screen {
 
     @Override
     public void onClose() {
-        if (minecraft != null) {
-            minecraft.setScreen(parent);
-        }
+        closeAnimated(() -> { if (minecraft != null) minecraft.setScreen(parent); });
     }
 
     private EditBox channelField(int x, int y, java.util.function.Consumer<String> listener) {
-        EditBox field = new EditBox(font, x, y, channelFieldWidth(), 18, Component.empty());
+        EditBox field = new UiEditBox(font, x, y, channelFieldWidth(), 18, Component.empty());
         field.setMaxLength(3);
         field.setResponder(listener);
         return field;
@@ -424,7 +437,7 @@ public final class OverlayColorSettingsScreen extends Screen {
                 x = MARGIN + (i % columns) * (groupButtonWidth + 6);
                 y = stackedGroupY() + (i / columns) * (BUTTON_HEIGHT + 6);
             } else {
-                x = MARGIN;
+                x = slotRowX();
                 y = topBarHeight() + MARGIN + i * (BUTTON_HEIGHT + 6);
             }
             button.setRectangle(groupButtonWidth, BUTTON_HEIGHT, x, y);
@@ -432,17 +445,17 @@ public final class OverlayColorSettingsScreen extends Screen {
         }
 
         int fieldY = fieldsY();
-        hexField.setRectangle(Math.min(96, Math.max(70, controlsWidth() - 40)), 18, controlsX() + 34, fieldY);
+        hexField.setRectangle(Math.max(70, controlsWidth() - 34), 18, controlsX() + 34, fieldY);
         redField.setRectangle(channelFieldWidth(), 18, channelFieldX(0), fieldY + 28);
         greenField.setRectangle(channelFieldWidth(), 18, channelFieldX(1), fieldY + 28);
         blueField.setRectangle(channelFieldWidth(), 18, channelFieldX(2), fieldY + 28);
         alphaField.setRectangle(channelFieldWidth(), 18, channelFieldX(3), fieldY + 28);
-        boolean fieldsVisible = !stackedLayout() || isWidgetVisibleInContent(fieldY, 48);
-        hexField.visible = fieldsVisible;
-        redField.visible = fieldsVisible;
-        greenField.visible = fieldsVisible;
-        blueField.visible = fieldsVisible;
-        alphaField.visible = fieldsVisible;
+        hexField.visible = !stackedLayout() || isWidgetVisibleInContent(fieldY, 18);
+        boolean channelsVisible = !stackedLayout() || isWidgetVisibleInContent(fieldY + 28, 18);
+        redField.visible = channelsVisible;
+        greenField.visible = channelsVisible;
+        blueField.visible = channelsVisible;
+        alphaField.visible = channelsVisible;
 
         templateMenuButton.setRectangle(templateMenuButtonWidth(), BUTTON_HEIGHT, templateMenuButtonX(), topButtonY());
         resetMenuButton.setRectangle(resetMenuButtonWidth(), BUTTON_HEIGHT, resetMenuButtonX(), topButtonY());
@@ -457,38 +470,27 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     private void drawBackdrop(GuiGraphicsExtractor context) {
-        context.fill(0, 0, width, height, 0x78000000);
+        UiChrome.fill(context, 0, 0, width, height, 0x78000000);
     }
 
     private void drawPanel(GuiGraphicsExtractor context) {
+        UiStyle style = UiStyle.current();
         int leftWidth = leftWidth();
         int rightWidth = rightWidth();
-        context.fill(0, 0, width, height, 0xF0080C12);
+        UiChrome.fill(context, 0, 0, width, height, style.surface);
         if (stackedLayout()) {
-            context.enableScissor(0, topBarHeight(), width, height);
-            try {
-                drawSection(context, previewX(), previewY(), previewWidth(), previewHeight(), 0x5510151D, 0xFF2B3443);
-                drawSection(context, MARGIN, stackedGroupY() - 6, width - MARGIN * 2, stackedGroupHeight() + 12, 0x5510151D, 0xFF2B3443);
-                drawSection(context, slotListContainerX(), slotListY() - 8, slotListContainerWidth(), selectedGroup.slots().length * SLOT_ROW_HEIGHT + 26, 0x5510151D, 0xFF2B3443);
-                drawSection(context, spectrumX() - 8, selectedInfoY() - 8, controlsWidth(), alphaY() + ALPHA_HEIGHT - selectedInfoY() + 16, 0x5510151D, 0xFF2B3443);
-                drawSection(context, redSliderX() - 8, fieldsY() - 10, controlsWidth(), lineWidthSliderY() + 24 - fieldsY() + 18, 0x5510151D, 0xFF2B3443);
-            } finally {
-                context.disableScissor();
-            }
-            context.fill(0, 0, width, topBarHeight(), 0xF0121721);
-            drawOutline(context, 0, 0, width, topBarHeight(), 0xFF2E3B4D);
-            context.text(font, title, MARGIN, 11, 0xFFEAF0FA, false);
+            UiChrome.fill(context, 0, 0, width, topBarHeight(), style.raised);
+            if (style == UiStyle.LEGACY) drawOutline(context, 0, 0, width, topBarHeight(), style.border);
+            UiChrome.text(context, font, title, MARGIN, 11, style.text, false);
             drawScrollHint(context);
             return;
         }
 
-        context.fill(0, 0, width, topBarHeight(), 0xF0121721);
-        drawOutline(context, 0, 0, width, topBarHeight(), 0xFF2E3B4D);
-        context.fill(0, topBarHeight(), leftWidth, height, 0xDE10151D);
-        context.fill(width - rightWidth, topBarHeight(), width, height, 0xDE10151D);
-        drawOutline(context, 0, topBarHeight(), leftWidth, height - topBarHeight(), 0xFF2B3443);
-        drawOutline(context, width - rightWidth, topBarHeight(), rightWidth, height - topBarHeight(), 0xFF2B3443);
-        context.text(font, title, MARGIN, 11, 0xFFEAF0FA, false);
+        UiChrome.fill(context, 0, 0, width, topBarHeight(), style.raised);
+        if (style == UiStyle.LEGACY) drawOutline(context, 0, 0, width, topBarHeight(), style.border);
+        UiChrome.fill(context, 0, topBarHeight(), leftWidth, height, style.surface);
+        UiChrome.fill(context, width - rightWidth, topBarHeight(), width, height, style.surface);
+        UiChrome.text(context, font, title, MARGIN, 11, style.text, false);
         int subtitleX = Math.max(leftWidth + MARGIN, templateMenuButtonX() + templateMenuButtonWidth() + 10);
         int subtitleMaxWidth = resetMenuButtonX() - subtitleX - 10;
         if (subtitleMaxWidth >= 88) {
@@ -498,12 +500,9 @@ public final class OverlayColorSettingsScreen extends Screen {
                     subtitleX,
                     13,
                     subtitleMaxWidth,
-                    0xFFB4C0D3
+                    style.secondaryText
             );
         }
-        drawSection(context, slotListContainerX(), slotListY() - 8, slotListContainerWidth(), selectedGroup.slots().length * SLOT_ROW_HEIGHT + 26, 0x5510151D, 0xFF2B3443);
-        drawSection(context, spectrumX() - 8, selectedInfoY() - 8, controlsWidth(), alphaY() + ALPHA_HEIGHT - selectedInfoY() + 16, 0x5510151D, 0xFF2B3443);
-        drawSection(context, redSliderX() - 8, fieldsY() - 10, controlsWidth(), lineWidthSliderY() + 24 - fieldsY() + 18, 0x5510151D, 0xFF2B3443);
     }
 
     private void drawSlotList(GuiGraphicsExtractor context, int mouseX, int mouseY) {
@@ -513,7 +512,7 @@ public final class OverlayColorSettingsScreen extends Screen {
         int rowWidth = slotRowWidth();
         int x = containerX + 8;
         int y = slotListY();
-        context.text(
+        UiChrome.text(context,
                 font,
                 Component.translatable("screen.worldedit_selection_overlay.colors.elements"),
                 containerX + 6,
@@ -525,19 +524,19 @@ public final class OverlayColorSettingsScreen extends Screen {
             boolean selected = slot == selectedSlot;
             boolean hovered = isInside(rowX, y - 3, rowWidth, SLOT_ROW_HEIGHT, mouseX, mouseY);
             boolean resetHovered = isInsideSlotResetButton(y, mouseX, mouseY);
-            int rowColor = selected ? 0xFF22324A : hovered ? 0xAA1B2636 : 0x001B2636;
-            context.fill(rowX, y - 3, rowX + rowWidth, y + SLOT_ROW_HEIGHT - 3, rowColor);
+            float rowHover = slotHovers[slot.ordinal()].value(hovered);
+            int rowColor = selected ? UiStyle.current().raised : UiChrome.blend(0x0035403F, 0xAA35403F, rowHover);
+            UiChrome.fillRounded(context, rowX, y - 3, rowWidth, SLOT_ROW_HEIGHT, rowColor);
             if (selected) {
-                context.fill(rowX, y - 3, rowX + 3, y + SLOT_ROW_HEIGHT - 3, 0xFF8AB4FF);
+                UiChrome.fill(context, rowX, y - 3, rowX + 3, y + SLOT_ROW_HEIGHT - 3, UiStyle.current().accent);
             }
             drawSwatch(context, x + 2, y + 7, 12, 12, overlayClient.overlayColor(slot));
             int resetX = slotResetButtonX();
             int resetWidth = slotResetButtonWidth();
             drawWrappedSlotText(context, Component.translatable(slot.translationKey()), x + 20, y, resetX - x - 26, 0xFFE4EAF5);
-            int resetFill = resetHovered ? 0xFF27364C : 0xFF172130;
+            int resetFill = UiChrome.blend(UiStyle.current().raised, UiStyle.current().accent, slotResetHovers[slot.ordinal()].value(resetHovered) * 0.22f);
             int resetY = y + 6;
-            context.fill(resetX, resetY, resetX + resetWidth, resetY + 18, resetFill);
-            drawOutline(context, resetX, resetY, resetWidth, 18, resetHovered ? 0xFF8AB4FF : 0xFF2B3443);
+            UiChrome.fillRounded(context, resetX, resetY, resetWidth, 18, resetFill);
             drawCenteredTrimmedText(context, Component.translatable("screen.worldedit_selection_overlay.colors.reset_element"), resetX, resetY + 5, resetWidth, 0xFFE4EAF5);
             y += SLOT_ROW_HEIGHT;
         }
@@ -549,12 +548,7 @@ public final class OverlayColorSettingsScreen extends Screen {
         int spectrumWidth = spectrumWidth();
         int spectrumHeight = spectrumHeight();
         int alpha = alpha(selectedColor());
-        for (int px = 0; px < spectrumWidth; px += COLOR_GRADIENT_STEP) {
-            float s = (float) px / (float) (spectrumWidth - 1);
-            int topColor = hsvToArgb(hue, s, 1.0f, 255);
-            context.fillGradient(x + px, y, x + Math.min(spectrumWidth, px + COLOR_GRADIENT_STEP), y + spectrumHeight, topColor, 0xFF000000);
-        }
-        drawOutline(context, x, y, spectrumWidth, spectrumHeight, 0xFF0B0E14);
+        UiChrome.spectrum(context, x, y, spectrumWidth, spectrumHeight, hsvToArgb(hue, 1, 1, 255));
         int thumbX = x + Math.round(saturation * (spectrumWidth - 1));
         int thumbY = y + Math.round((1.0f - value) * (spectrumHeight - 1));
         drawCrosshair(context, thumbX, thumbY, alpha < 120 ? 0xFFFFFFFF : 0xFF0B0E14);
@@ -567,12 +561,11 @@ public final class OverlayColorSettingsScreen extends Screen {
         int hueWidth = hueWidth();
         for (int py = 0; py < spectrumHeight; py += COLOR_GRADIENT_STEP) {
             float localHue = (float) py / (float) (spectrumHeight - 1);
-            context.fill(x, y + py, x + hueWidth, y + Math.min(spectrumHeight, py + COLOR_GRADIENT_STEP), hsvToArgb(localHue, 1.0f, 1.0f, 255));
+            UiChrome.fill(context, x, y + py, x + hueWidth, y + Math.min(spectrumHeight, py + COLOR_GRADIENT_STEP), hsvToArgb(localHue, 1.0f, 1.0f, 255));
         }
-        drawOutline(context, x, y, hueWidth, spectrumHeight, 0xFF0B0E14);
-        int markerY = y + Math.round(hue * (spectrumHeight - 1));
-        context.fill(x - 3, markerY - 1, x + hueWidth + 3, markerY + 2, 0xFFFFFFFF);
-        context.fill(x - 2, markerY, x + hueWidth + 2, markerY + 1, 0xFF0B0E14);
+        int markerY = y + 1 + Math.round(hue * (spectrumHeight - 3));
+        UiChrome.fill(context, x, markerY - 1, x + hueWidth, markerY + 2, 0xFFFFFFFF);
+        UiChrome.fill(context, x + 1, markerY, x + hueWidth - 1, markerY + 1, 0xFF0B0E14);
     }
 
     private void drawAlphaSlider(GuiGraphicsExtractor context) {
@@ -584,12 +577,11 @@ public final class OverlayColorSettingsScreen extends Screen {
         int rgb = color & 0x00FFFFFF;
         for (int px = 0; px < sliderWidth; px += COLOR_GRADIENT_STEP) {
             int a = Math.round((float) px / (float) (sliderWidth - 1) * 255.0f);
-            context.fill(x + px, y, x + Math.min(sliderWidth, px + COLOR_GRADIENT_STEP), y + ALPHA_HEIGHT, (a << 24) | rgb);
+            UiChrome.fill(context, x + px, y, x + Math.min(sliderWidth, px + COLOR_GRADIENT_STEP), y + ALPHA_HEIGHT, (a << 24) | rgb);
         }
-        drawOutline(context, x, y, sliderWidth, ALPHA_HEIGHT, 0xFF0B0E14);
-        int markerX = x + Math.round((float) alpha(color) / 255.0f * (sliderWidth - 1));
-        context.fill(markerX - 1, y - 3, markerX + 2, y + ALPHA_HEIGHT + 3, 0xFFFFFFFF);
-        context.fill(markerX, y - 2, markerX + 1, y + ALPHA_HEIGHT + 2, 0xFF0B0E14);
+        int markerX = x + 1 + Math.round((float) alpha(color) / 255.0f * (sliderWidth - 3));
+        UiChrome.fill(context, markerX - 1, y, markerX + 2, y + ALPHA_HEIGHT, 0xFFFFFFFF);
+        UiChrome.fill(context, markerX, y + 1, markerX + 1, y + ALPHA_HEIGHT - 1, 0xFF0B0E14);
     }
 
     private void drawChannelSliders(GuiGraphicsExtractor context, int mouseX, int mouseY) {
@@ -631,25 +623,21 @@ public final class OverlayColorSettingsScreen extends Screen {
 
     private void drawFieldLabels(GuiGraphicsExtractor context) {
         int x = controlsX();
-        int y = fieldsY() - 6;
-        context.text(font, Component.translatable("screen.worldedit_selection_overlay.colors.hex"), x, y + 5, 0xFFB4C0D3, false);
-        context.text(font, "R", channelLabelX(0), y + 33, 0xFFFFA3AD, false);
-        context.text(font, "G", channelLabelX(1), y + 33, 0xFF9BEFBC, false);
-        context.text(font, "B", channelLabelX(2), y + 33, 0xFFA6C8FF, false);
-        context.text(font, "A", channelLabelX(3), y + 33, 0xFFE7EDF8, false);
+        int y = fieldsY();
+        if (hexField.visible) UiChrome.text(context, font, Component.translatable("screen.worldedit_selection_overlay.colors.hex"), x, y + 5, 0xFFB4C0D3, false);
+        if (!redField.visible) return;
+        UiChrome.text(context, font, "R", channelLabelX(0), y + 33, 0xFFFFA3AD, false);
+        UiChrome.text(context, font, "G", channelLabelX(1), y + 33, 0xFF9BEFBC, false);
+        UiChrome.text(context, font, "B", channelLabelX(2), y + 33, 0xFFA6C8FF, false);
+        UiChrome.text(context, font, "A", channelLabelX(3), y + 33, 0xFFE7EDF8, false);
     }
 
     private void drawChannelSlider(GuiGraphicsExtractor context, String label, int x, int y, int value, int accent, int mouseX, int mouseY) {
         int labelColor = isInsideChannelSlider(x, y, mouseX, mouseY) ? 0xFFFFFFFF : 0xFFB4C0D3;
-        context.text(font, label, x, y + 2, labelColor, false);
+        UiChrome.text(context, font, label, x, y + 2, labelColor, false);
         int trackX = x + 18;
-        int trackWidth = Math.max(80, controlsWidth() - 34);
-        context.fill(trackX, y + 4, trackX + trackWidth, y + 10, 0xFF222B39);
-        context.fill(trackX, y + 4, trackX + Math.round(trackWidth * value / 255.0f), y + 10, accent);
-        drawOutline(context, trackX, y + 4, trackWidth, 6, 0xFF0B0E14);
-        int thumbX = trackX + Math.round(trackWidth * value / 255.0f);
-        context.fill(thumbX - 2, y + 1, thumbX + 3, y + 13, 0xFFEAF0FA);
-        context.fill(thumbX - 1, y + 2, thumbX + 2, y + 12, 0xFF0B0E14);
+        int trackWidth = Math.max(80, controlsWidth() - 18);
+        UiChrome.slider(context, trackX, y, trackWidth, value / 255.0f, accent, true);
     }
 
     private void drawLineWidthSlider(GuiGraphicsExtractor context, int mouseX, int mouseY) {
@@ -659,11 +647,11 @@ public final class OverlayColorSettingsScreen extends Screen {
         int x = redSliderX();
         int y = lineWidthSliderY();
         int trackX = x + 18;
-        int trackWidth = Math.max(80, controlsWidth() - 34);
+        int trackWidth = Math.max(80, controlsWidth() - 18);
         float scale = overlayClient.overlayLineWidthScale(selectedSlot);
         int fillWidth = Math.round(trackWidth * ((scale - 0.5f) / 1.5f));
         int labelColor = isInsideLineWidthSlider(mouseX, mouseY) ? 0xFFFFFFFF : 0xFFB4C0D3;
-        context.text(
+        UiChrome.text(context,
                 font,
                 Component.translatable("screen.worldedit_selection_overlay.colors.line_width", Math.round(scale * 100.0f)),
                 x,
@@ -671,12 +659,7 @@ public final class OverlayColorSettingsScreen extends Screen {
                 labelColor,
                 false
         );
-        context.fill(trackX, y + 4, trackX + trackWidth, y + 10, 0xFF222B39);
-        context.fill(trackX, y + 4, trackX + fillWidth, y + 10, 0xFF8AB4FF);
-        drawOutline(context, trackX, y + 4, trackWidth, 6, 0xFF0B0E14);
-        int thumbX = trackX + fillWidth;
-        context.fill(thumbX - 2, y + 1, thumbX + 3, y + 13, 0xFFEAF0FA);
-        context.fill(thumbX - 1, y + 2, thumbX + 2, y + 12, 0xFF0B0E14);
+        UiChrome.slider(context, trackX, y, trackWidth, (scale - 0.5f) / 1.5f, UiStyle.current().accent, true);
     }
 
     private void drawGlobalLineWidthSlider(GuiGraphicsExtractor context, int mouseX, int mouseY) {
@@ -702,22 +685,17 @@ public final class OverlayColorSettingsScreen extends Screen {
                 trackWidth,
                 textColor
         );
-        context.fill(x, y + 13, x + trackWidth, y + 19, trackColor);
-        context.fill(x, y + 13, x + fillWidth, y + 19, fillColor);
-        drawOutline(context, x, y + 13, trackWidth, 6, enabled ? 0xFF0B0E14 : 0xFF263040);
-        int thumbX = x + fillWidth;
-        context.fill(thumbX - 2, y + 10, thumbX + 3, y + 22, thumbOuter);
-        context.fill(thumbX - 1, y + 11, thumbX + 2, y + 21, thumbInner);
+        UiChrome.slider(context, x, y + 8, trackWidth, (scale - 0.5f) / 1.5f, UiStyle.current().accent, enabled);
     }
 
     private void drawResetMenu(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         if (resetMenuOpen) {
-            drawOutline(context, resetMenuButtonX(), topButtonY(), resetMenuButtonWidth(), BUTTON_HEIGHT, 0xFF8AB4FF);
+            drawOutline(context, resetMenuButtonX(), topButtonY(), resetMenuButtonWidth(), BUTTON_HEIGHT, UiStyle.current().accent);
             int x = resetMenuX();
             int y = resetMenuY();
             int width = resetMenuWidth();
-            context.fill(x, y, x + width, y + resetMenuHeight(), 0xF0141B25);
-            drawOutline(context, x, y, width, resetMenuHeight(), 0xFF8AB4FF);
+            UiChrome.popup(context, x, y, width, resetMenuHeight(), UiStyle.current());
+            drawOutline(context, x, y, width, resetMenuHeight(), UiStyle.current().accent);
             drawResetMenuItem(context, ResetAction.COLORS, mouseX, mouseY);
             drawResetMenuItem(context, ResetAction.WIDTHS, mouseX, mouseY);
             drawResetMenuItem(context, ResetAction.ALL, mouseX, mouseY);
@@ -729,18 +707,18 @@ public final class OverlayColorSettingsScreen extends Screen {
         int y = resetMenuItemY(action);
         int width = resetMenuWidth();
         boolean hovered = isInside(x, y, width, resetMenuItemHeight(), mouseX, mouseY);
-        context.fill(x + 1, y, x + width - 1, y + resetMenuItemHeight(), hovered ? 0xFF22324A : 0x00141B25);
+        UiChrome.fillRounded(context, x + 4, y + 1, width - 8, resetMenuItemHeight() - 2, UiChrome.blend(0x0035403F, 0xAA35403F, resetHovers[action.ordinal()].value(hovered)));
         drawTrimmedText(context, Component.translatable(action.translationKey()), x + 8, y + 6, width - 16, 0xFFE4EAF5);
     }
 
     private void drawTemplateMenu(GuiGraphicsExtractor context, int mouseX, int mouseY) {
         if (templateMenuOpen) {
-            drawOutline(context, templateMenuButtonX(), topButtonY(), templateMenuButtonWidth(), BUTTON_HEIGHT, 0xFF8AB4FF);
+            drawOutline(context, templateMenuButtonX(), topButtonY(), templateMenuButtonWidth(), BUTTON_HEIGHT, UiStyle.current().accent);
             int x = templateMenuX();
             int y = templateMenuY();
             int width = templateMenuWidth();
-            context.fill(x, y, x + width, y + templateMenuHeight(), 0xF0141B25);
-            drawOutline(context, x, y, width, templateMenuHeight(), 0xFF8AB4FF);
+            UiChrome.popup(context, x, y, width, templateMenuHeight(), UiStyle.current());
+            drawOutline(context, x, y, width, templateMenuHeight(), UiStyle.current().accent);
             for (OverlayPreset preset : OverlayPreset.values()) {
                 drawTemplateMenuItem(context, preset, mouseX, mouseY);
             }
@@ -752,7 +730,7 @@ public final class OverlayColorSettingsScreen extends Screen {
         int y = templateMenuItemY(preset);
         int width = templateMenuWidth();
         boolean hovered = isInside(x, y, width, templateMenuItemHeight(), mouseX, mouseY);
-        context.fill(x + 1, y, x + width - 1, y + templateMenuItemHeight(), hovered ? 0xFF22324A : 0x00141B25);
+        UiChrome.fillRounded(context, x + 4, y + 1, width - 8, templateMenuItemHeight() - 2, UiChrome.blend(0x0035403F, 0xAA35403F, presetHovers[preset.ordinal()].value(hovered)));
         drawPresetSwatches(context, preset, x + 8, y + 8);
         drawTrimmedText(context, preset.nameText(), x + 48, y + 5, width - 56, 0xFFE4EAF5);
         drawTrimmedText(context, preset.descriptionText(), x + 48, y + 17, width - 56, 0xFF8E9AAF);
@@ -769,8 +747,7 @@ public final class OverlayColorSettingsScreen extends Screen {
         };
         for (int i = 0; i < slots.length; i++) {
             int swatchX = x + i * 7;
-            context.fill(swatchX, y, swatchX + 6, y + 16, profile.color(slots[i]));
-            drawOutline(context, swatchX, y, 6, 16, 0xFF0B0E14);
+            UiChrome.fillRounded(context, swatchX, y, 6, 16, profile.color(slots[i]));
         }
     }
 
@@ -778,13 +755,13 @@ public final class OverlayColorSettingsScreen extends Screen {
         if (pendingPreset == null) {
             return;
         }
-        context.fill(0, 0, width, height, 0x99000000);
+        UiChrome.fill(context, 0, 0, width, height, 0x99000000);
         int x = confirmDialogX();
         int y = confirmDialogY();
         int dialogWidth = confirmDialogWidth();
         int dialogHeight = confirmDialogHeight();
-        context.fill(x, y, x + dialogWidth, y + dialogHeight, 0xF0141B25);
-        drawOutline(context, x, y, dialogWidth, dialogHeight, 0xFF8AB4FF);
+        UiChrome.popup(context, x, y, dialogWidth, dialogHeight, UiStyle.current());
+        drawOutline(context, x, y, dialogWidth, dialogHeight, UiStyle.current().accent);
         drawTrimmedText(
                 context,
                 Component.translatable("screen.worldedit_selection_overlay.colors.template_confirm_title"),
@@ -806,8 +783,8 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     private void drawDialogButton(GuiGraphicsExtractor context, int x, int y, int width, int height, Component text, int fill, boolean hovered) {
-        context.fill(x, y, x + width, y + height, hovered ? 0xFF27364C : fill);
-        drawOutline(context, x, y, width, height, hovered ? 0xFF8AB4FF : 0xFF2B3443);
+        float progress = dialogHovers[x == confirmApplyX() ? 0 : 1].value(hovered);
+        UiChrome.fillRounded(context, x, y, width, height, UiChrome.blend(fill, UiStyle.current().accent, progress * 0.22f));
         drawCenteredTrimmedText(context, text, x, y + 7, width, 0xFFE4EAF5);
     }
 
@@ -821,8 +798,8 @@ public final class OverlayColorSettingsScreen extends Screen {
         int trackHeight = Math.max(24, height - topBarHeight() - 8);
         int thumbHeight = Math.max(18, (int) Math.round(trackHeight * Math.min(1.0, (height - topBarHeight()) / (double) (stackedContentBottom() - topBarHeight()))));
         int thumbY = trackY + (int) Math.round((trackHeight - thumbHeight) * (scrollOffset / maxScroll));
-        context.fill(trackX, trackY, trackX + 2, trackY + trackHeight, 0x55384555);
-        context.fill(trackX - 1, thumbY, trackX + 3, thumbY + thumbHeight, 0xFF8AB4FF);
+        UiChrome.fill(context, trackX, trackY, trackX + 2, trackY + trackHeight, 0x55384555);
+        UiChrome.fill(context, trackX - 1, thumbY, trackX + 3, thumbY + thumbHeight, UiStyle.current().accent);
     }
 
     private boolean trySelectSlot(double mouseX, double mouseY) {
@@ -924,7 +901,7 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     private void updateChannel(int sliderX, double mouseX, Channel channel, boolean save) {
-        int sliderWidth = Math.max(80, controlsWidth() - 34);
+        int sliderWidth = Math.max(80, controlsWidth() - 18);
         int value = Math.round(clamp01((float) ((mouseX - (sliderX + 18)) / (double) sliderWidth)) * 255.0f);
         int color = selectedColor();
         int next = switch (channel) {
@@ -937,7 +914,7 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     private void updateLineWidthScale(double mouseX, boolean save) {
-        int sliderWidth = Math.max(80, controlsWidth() - 34);
+        int sliderWidth = Math.max(80, controlsWidth() - 18);
         float value = clamp01((float) ((mouseX - (redSliderX() + 18)) / (double) sliderWidth));
         float scale = 0.5f + value * 1.5f;
         if (save) {
@@ -1011,13 +988,13 @@ public final class OverlayColorSettingsScreen extends Screen {
             ColorGroup group = ColorGroup.values()[i];
             Button button = groupButtons.get(i);
             button.setMessage(groupButtonText(group));
-            button.active = group != selectedGroup;
+            button.active = UiStyle.current() != UiStyle.LEGACY || group != selectedGroup;
         }
     }
 
     private Component groupButtonText(ColorGroup group) {
         Component label = Component.translatable(group.translationKey());
-        return group == selectedGroup ? Component.literal("> ").append(label) : label;
+        return UiStyle.current() == UiStyle.LEGACY && group == selectedGroup ? Component.literal("> ").append(label) : label;
     }
 
     private void syncHsvFromSelectedColor() {
@@ -1058,7 +1035,7 @@ public final class OverlayColorSettingsScreen extends Screen {
         int controlsY = stackedControlsVirtualY();
         int spectrumBottom = controlsY + 66 + spectrumHeight() + 10 + ALPHA_HEIGHT;
         int fieldsBottom = spectrumBottom + 22 + 28 + 18;
-        int slidersBottom = spectrumBottom + 22 + 58 + 96 + 42;
+        int slidersBottom = spectrumBottom + 22 + 58 + 96 + LINE_WIDTH_GROUP_GAP + 42;
         return Math.max(fieldsBottom, slidersBottom);
     }
 
@@ -1068,7 +1045,7 @@ public final class OverlayColorSettingsScreen extends Screen {
 
     private int groupButtonWidth() {
         if (!stackedLayout()) {
-            return leftWidth() - MARGIN;
+            return slotRowWidth();
         }
         int columns = stackedGroupColumns();
         return Math.max(92, (width - MARGIN * 2 - (columns - 1) * 6) / columns);
@@ -1182,7 +1159,7 @@ public final class OverlayColorSettingsScreen extends Screen {
         if (stackedLayout()) {
             return MARGIN;
         }
-        return MARGIN + font.width(title) + 14;
+        return MARGIN + UiChrome.width(font, title) + 14;
     }
 
     private int templateMenuButtonWidth() {
@@ -1360,7 +1337,7 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     private int lineWidthSliderY() {
-        return redSliderY() + 96;
+        return redSliderY() + 96 + LINE_WIDTH_GROUP_GAP;
     }
 
     private int selectedInfoY() {
@@ -1401,7 +1378,7 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     private int spectrumWidth() {
-        return Math.max(130, Math.min(SPECTRUM_WIDTH, controlsWidth() - hueWidth() - 10));
+        return Math.max(80, controlsWidth() - hueWidth() - 10);
     }
 
     private int spectrumHeight() {
@@ -1420,11 +1397,11 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     private int channelFieldWidth() {
-        return Math.max(32, Math.min(42, channelStep() - 22));
+        return Math.max(24, channelStep() - 22);
     }
 
     private int channelStep() {
-        return Math.max(52, controlsWidth() / 4);
+        return Math.max(42, (controlsWidth() + 8) / 4);
     }
 
     private int channelLabelX(int index) {
@@ -1479,11 +1456,11 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     private boolean isInsideChannelSlider(int x, int y, double mouseX, double mouseY) {
-        return isInside(x + 18, y, Math.max(80, controlsWidth() - 34), 16, mouseX, mouseY);
+        return isInside(x + 18, y, Math.max(80, controlsWidth() - 18), 16, mouseX, mouseY);
     }
 
     private boolean isInsideLineWidthSlider(double mouseX, double mouseY) {
-        return isInside(redSliderX() + 18, lineWidthSliderY(), Math.max(80, controlsWidth() - 34), 16, mouseX, mouseY);
+        return isInside(redSliderX() + 18, lineWidthSliderY(), Math.max(80, controlsWidth() - 18), 16, mouseX, mouseY);
     }
 
     private boolean isInsidePreview(double x, double y) {
@@ -1495,21 +1472,17 @@ public final class OverlayColorSettingsScreen extends Screen {
     }
 
     private static void drawSection(GuiGraphicsExtractor context, int x, int y, int width, int height, int fill, int outline) {
-        context.fill(x, y, x + width, y + height, fill);
+        UiChrome.fill(context, x, y, x + width, y + height, fill);
         drawOutline(context, x, y, width, height, outline);
     }
 
     private static void drawOutline(GuiGraphicsExtractor context, int x, int y, int width, int height, int color) {
-        context.fill(x, y, x + width, y + 1, color);
-        context.fill(x, y + height - 1, x + width, y + height, color);
-        context.fill(x, y, x + 1, y + height, color);
-        context.fill(x + width - 1, y, x + width, y + height, color);
+        UiChrome.outline(context, x, y, width, height, color);
     }
 
     private static void drawSwatch(GuiGraphicsExtractor context, int x, int y, int width, int height, int color) {
         drawCheckerboard(context, x, y, width, height, 4);
-        context.fill(x, y, x + width, y + height, color);
-        drawOutline(context, x, y, width, height, 0xFF0B0E14);
+        UiChrome.fill(context, x, y, x + width, y + height, color);
     }
 
     private void drawTrimmedText(GuiGraphicsExtractor context, Component text, int x, int y, int maxWidth, int color) {
@@ -1518,12 +1491,12 @@ public final class OverlayColorSettingsScreen extends Screen {
         }
         String raw = text.getString();
         String value = raw;
-        if (font.width(raw) > maxWidth) {
+        if (UiChrome.width(font, raw) > maxWidth) {
             String suffix = "...";
-            int suffixWidth = font.width(suffix);
-            value = font.plainSubstrByWidth(raw, Math.max(1, maxWidth - suffixWidth)) + suffix;
+            int suffixWidth = UiChrome.width(font, suffix);
+            value = UiChrome.trim(font, raw, Math.max(1, maxWidth - suffixWidth)) + suffix;
         }
-        context.text(font, value, x, y, color, false);
+        UiChrome.text(context, font, value, x, y, color, false);
     }
 
     private void drawWrappedDialogText(GuiGraphicsExtractor context, Component text, int x, int y, int maxWidth, int color) {
@@ -1531,8 +1504,8 @@ public final class OverlayColorSettingsScreen extends Screen {
             return;
         }
         String raw = text.getString();
-        if (font.width(raw) <= maxWidth) {
-            context.text(font, raw, x, y, color, false);
+        if (UiChrome.width(font, raw) <= maxWidth) {
+            UiChrome.text(context, font, raw, x, y, color, false);
             return;
         }
         List<String> lines = splitIntoTwoLines(raw, maxWidth);
@@ -1548,15 +1521,15 @@ public final class OverlayColorSettingsScreen extends Screen {
             return;
         }
         String raw = text.getString();
-        if (font.width(raw) <= maxWidth) {
-            context.text(font, raw, x, rowY + 10, color, false);
+        if (UiChrome.width(font, raw) <= maxWidth) {
+            UiChrome.text(context, font, raw, x, rowY + 10, color, false);
             return;
         }
 
         List<String> lines = splitIntoTwoLines(raw, maxWidth);
         int widest = 0;
         for (String line : lines) {
-            widest = Math.max(widest, font.width(line));
+            widest = Math.max(widest, UiChrome.width(font, line));
         }
         float scale = widest <= 0 ? 1.0f : Math.min(1.0f, maxWidth / (float) widest);
         float totalHeight = lines.size() == 1 ? 9.0f * scale : 20.0f * scale;
@@ -1579,7 +1552,7 @@ public final class OverlayColorSettingsScreen extends Screen {
         for (int split = 1; split < words.length; split++) {
             String first = joinWords(words, 0, split);
             String second = joinWords(words, split, words.length);
-            int width = Math.max(font.width(first), font.width(second));
+            int width = Math.max(UiChrome.width(font, first), UiChrome.width(font, second));
             if (width < bestWidth) {
                 bestWidth = width;
                 bestFirst = first;
@@ -1609,7 +1582,7 @@ public final class OverlayColorSettingsScreen extends Screen {
         try {
             matrices.translate(x, y);
             matrices.scale(scale, scale);
-            context.text(font, text, 0, 0, color, false);
+            UiChrome.text(context, font, text, 0, 0, color, false);
         } finally {
             matrices.popMatrix();
         }
@@ -1621,30 +1594,30 @@ public final class OverlayColorSettingsScreen extends Screen {
         }
         String raw = text.getString();
         String value = raw;
-        if (font.width(raw) > maxWidth) {
+        if (UiChrome.width(font, raw) > maxWidth) {
             String suffix = "...";
-            int suffixWidth = font.width(suffix);
-            value = font.plainSubstrByWidth(raw, Math.max(1, maxWidth - suffixWidth)) + suffix;
+            int suffixWidth = UiChrome.width(font, suffix);
+            value = UiChrome.trim(font, raw, Math.max(1, maxWidth - suffixWidth)) + suffix;
         }
-        int textX = x + Math.max(0, (maxWidth - font.width(value)) / 2);
-        context.text(font, value, textX, y, color, false);
+        int textX = x + Math.max(0, (maxWidth - UiChrome.width(font, value)) / 2);
+        UiChrome.text(context, font, value, textX, y, color, false);
     }
 
     private static void drawCheckerboard(GuiGraphicsExtractor context, int x, int y, int width, int height, int cell) {
         for (int py = 0; py < height; py += cell) {
             for (int px = 0; px < width; px += cell) {
                 boolean light = ((px / cell) + (py / cell)) % 2 == 0;
-                context.fill(x + px, y + py, x + Math.min(width, px + cell), y + Math.min(height, py + cell), light ? 0xFFCED6E2 : 0xFF7D8795);
+                UiChrome.fill(context, x + px, y + py, x + Math.min(width, px + cell), y + Math.min(height, py + cell), light ? 0xFFCED6E2 : 0xFF7D8795);
             }
         }
     }
 
     private static void drawCrosshair(GuiGraphicsExtractor context, int x, int y, int color) {
-        context.fill(x - 5, y, x - 1, y + 1, color);
-        context.fill(x + 2, y, x + 6, y + 1, color);
-        context.fill(x, y - 5, x + 1, y - 1, color);
-        context.fill(x, y + 2, x + 1, y + 6, color);
-        context.fill(x - 1, y - 1, x + 2, y + 2, color ^ 0x00FFFFFF);
+        UiChrome.fill(context, x - 5, y, x - 1, y + 1, color);
+        UiChrome.fill(context, x + 2, y, x + 6, y + 1, color);
+        UiChrome.fill(context, x, y - 5, x + 1, y - 1, color);
+        UiChrome.fill(context, x, y + 2, x + 1, y + 6, color);
+        UiChrome.fill(context, x - 1, y - 1, x + 2, y + 2, color ^ 0x00FFFFFF);
     }
 
     private static Integer parseChannel(String value) {

@@ -33,6 +33,7 @@ public final class NeoIsolationTest {
     private int step;
     private int wait;
     private int baselineWait;
+    private boolean uiCaptured;
     private Object overlay;
     private Object area;
     private Object oldMesh;
@@ -83,6 +84,8 @@ public final class NeoIsolationTest {
             stage = 2;
         } else if (stage == 2) {
             if (client.screen == null || !client.screen.getClass().getSimpleName().equals("OverlaySettingsScreen")) return;
+            if (!uiCaptured) { uiCaptured = true; wait = 12; return; }
+            Screenshot.grab(client.gameDirectory, "ui-settings.png", client.getMainRenderTarget(), 1, message -> {});
             overlay = field(client.screen, "overlayClient");
             Object manager = field(overlay, "selectionManager");
             call(manager, "setFallbackCuboidPoint", 0, new BlockPos(14, 65, 14));

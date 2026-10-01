@@ -44,6 +44,7 @@ The script builds all six runtimes and both universal packagers, including their
 - [User-facing description](WEaddon_lightposition/MOD_DESCRIPTION.md)
 - [Changelog](WEaddon_lightposition/CHANGELOG.md)
 - [UI redesign research and implementation contract](UI_REDESIGN_RESEARCH.md)
+- [UI screenshots, tests, and performance measurements](UI_VALIDATION.md)
 - [Fabric packaging and tests](WEaddon_fabric_universal_1.21.11-26.2/README.md)
 - [NeoForge packaging and tests](WEaddon_neoforge_universal_1.21.11-26.2/README.md)
 - [Current verification](TESTING.md)

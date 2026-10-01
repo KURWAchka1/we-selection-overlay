@@ -4,13 +4,16 @@
 
 ### Added
 
-* Added an in-game interface design preview with Classic, Workbench, and Focus layouts.
+* Added Glass and Studio interface styles alongside Classic, selectable in settings.
+* Added short open/close and hover animations, Reduced Motion, and optional blur (off by default).
 
 ### Changed
 
 * Air block ids are ignored by isolation while the air-visualization design is being reworked.
 * Reduced allocations in hot isolation render-state tracking.
-* Release version is **1.7.1** for Minecraft **26.1.x**.
+* Full-screen inspector and palette now use aligned controls and unframed sections; settings stay compact.
+* Palette preview projection is cached between geometry, camera, and viewport changes.
+* Release version is **1.7.1** for Minecraft **1.21.11**, **26.1.x**, and **26.2**, with one universal JAR per loader.
 
 ## 1.7.0
 

@@ -36,6 +36,7 @@ import org.marshal.weaddon_lightposition.client.overlay.SelectionManager;
 import org.marshal.weaddon_lightposition.client.overlay.SelectionRegion;
 import org.marshal.weaddon_lightposition.client.screen.OverlaySettingsScreen;
 import org.marshal.weaddon_lightposition.client.screen.SelectionBlocksScreen;
+import org.marshal.weaddon_lightposition.client.screen.UiStyle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -86,6 +87,9 @@ public final class WorldEditPointOverlayClient {
     private static final String BLOCK_FILTER_EXCLUDED_KEY = "excludedBlockFilters";
     private static final String ISOLATED_BLOCKS_KEY = "isolatedBlockIds";
     private static final String LINE_WIDTH_SCALE_KEY = "lineWidthScale";
+    private static final String UI_STYLE_KEY = "uiStyle";
+    private static final String REDUCED_MOTION_KEY = "reducedMotion";
+    private static final String UI_BLUR_KEY = "uiBlur";
     private static final String COLOR_KEY_PREFIX = "color.";
     private static final String LINE_WIDTH_KEY_PREFIX = "lineWidth.";
     private static final Identifier KEY_CATEGORY_ID = Identifier.fromNamespaceAndPath("worldedit_selection_overlay", "controls");
@@ -113,6 +117,9 @@ public final class WorldEditPointOverlayClient {
     private DiagonalMode diagonalMode = DiagonalMode.NONE;
     private RulerTrackingMode rulerTrackingMode = RulerTrackingMode.FOLLOW_CAMERA;
     private float lineWidthScale = 1.0f;
+    private UiStyle uiStyle = UiStyle.GLASS;
+    private boolean reducedMotion;
+    private boolean uiBlur;
     private ClientLevel lastWorld;
     private int delayedHeloTicks;
     private int heloRetryAttempts;
@@ -750,6 +757,34 @@ public final class WorldEditPointOverlayClient {
         return overlayEnabled;
     }
 
+    public UiStyle uiStyle() {
+        return uiStyle;
+    }
+
+    public void setUiStyle(UiStyle style) {
+        uiStyle = style;
+        UiStyle.setCurrent(style);
+        saveSettings();
+    }
+
+    public boolean uiBlur() { return uiBlur; }
+
+    public void setUiBlur(boolean value) {
+        uiBlur = value;
+        UiStyle.setBlur(value);
+        saveSettings();
+    }
+
+    public boolean reducedMotion() {
+        return reducedMotion;
+    }
+
+    public void setReducedMotion(boolean reducedMotion) {
+        this.reducedMotion = reducedMotion;
+        UiStyle.setReducedMotion(reducedMotion);
+        saveSettings();
+    }
+
     public boolean selectionGridEnabled() {
         return selectionGridEnabled;
     }
@@ -1046,6 +1081,12 @@ public final class WorldEditPointOverlayClient {
         diagonalMode = DiagonalMode.NONE;
         rulerTrackingMode = RulerTrackingMode.FOLLOW_CAMERA;
         lineWidthScale = 1.0f;
+        uiStyle = UiStyle.GLASS;
+        reducedMotion = false;
+        uiBlur = false;
+        UiStyle.setBlur(false);
+        UiStyle.setCurrent(uiStyle);
+        UiStyle.setReducedMotion(reducedMotion);
         colorProfile.resetAll();
         OverlayRenderStyle.setColors(colorProfile);
         OverlayRenderStyle.setLineWidthScale(lineWidthScale);
@@ -1069,6 +1110,9 @@ public final class WorldEditPointOverlayClient {
             String excludedFiltersValue = null;
             String isolatedBlocksValue = null;
             String lineWidthScaleValue = null;
+            String uiStyleValue = null;
+            String reducedMotionValue = null;
+            String uiBlurValue = null;
             boolean lineWidthSlotValuesFound = false;
             for (String line : Files.readAllLines(settingsFile, StandardCharsets.UTF_8)) {
                 String trimmed = line.trim();
@@ -1109,6 +1153,12 @@ public final class WorldEditPointOverlayClient {
                     isolatedBlocksValue = rawValue;
                 } else if (LINE_WIDTH_SCALE_KEY.equals(key)) {
                     lineWidthScaleValue = rawValue;
+                } else if (UI_STYLE_KEY.equals(key)) {
+                    uiStyleValue = rawValue;
+                } else if (REDUCED_MOTION_KEY.equals(key)) {
+                    reducedMotionValue = rawValue;
+                } else if (UI_BLUR_KEY.equals(key)) {
+                    uiBlurValue = rawValue;
                 } else if (key.startsWith(COLOR_KEY_PREFIX)) {
                     colorProfile.applyConfigValue(key.substring(COLOR_KEY_PREFIX.length()), rawValue);
                 } else if (key.startsWith(LINE_WIDTH_KEY_PREFIX)) {
@@ -1149,6 +1199,12 @@ public final class WorldEditPointOverlayClient {
                 }
             }
             lineWidthScale = 1.0f;
+            uiStyle = UiStyle.fromConfigValue(uiStyleValue);
+            reducedMotion = Boolean.parseBoolean(reducedMotionValue);
+            uiBlur = Boolean.parseBoolean(uiBlurValue);
+            UiStyle.setBlur(uiBlur);
+            UiStyle.setCurrent(uiStyle);
+            UiStyle.setReducedMotion(reducedMotion);
             decodeBlockIdSet(excludedFiltersValue, excludedBlockFilters);
             decodeBlockIdSet(isolatedBlocksValue, isolatedBlockIds);
             OverlayRenderStyle.setColors(colorProfile);
@@ -1168,6 +1224,12 @@ public final class WorldEditPointOverlayClient {
             diagonalMode = DiagonalMode.NONE;
             rulerTrackingMode = RulerTrackingMode.FOLLOW_CAMERA;
             lineWidthScale = 1.0f;
+            uiStyle = UiStyle.GLASS;
+            reducedMotion = false;
+            uiBlur = false;
+            UiStyle.setBlur(false);
+            UiStyle.setCurrent(uiStyle);
+            UiStyle.setReducedMotion(reducedMotion);
             colorProfile.resetAll();
             OverlayRenderStyle.setColors(colorProfile);
             OverlayRenderStyle.setLineWidthScale(lineWidthScale);
@@ -1196,6 +1258,9 @@ public final class WorldEditPointOverlayClient {
                     + DIAGONAL_MODE_KEY + "=" + diagonalMode.name() + System.lineSeparator()
                     + RULER_TRACKING_MODE_KEY + "=" + rulerTrackingMode.name() + System.lineSeparator()
                     + LINE_WIDTH_SCALE_KEY + "=" + lineWidthScale + System.lineSeparator()
+                    + UI_STYLE_KEY + "=" + uiStyle.name() + System.lineSeparator()
+                    + REDUCED_MOTION_KEY + "=" + reducedMotion + System.lineSeparator()
+                    + UI_BLUR_KEY + "=" + uiBlur + System.lineSeparator()
                     + BLOCK_FILTER_EXCLUDED_KEY + "=" + encodeBlockIdSet(excludedBlockFilters) + System.lineSeparator()
                     + ISOLATED_BLOCKS_KEY + "=" + encodeBlockIdSet(isolatedBlockIds) + System.lineSeparator()
                     + String.join(System.lineSeparator(), colorProfile.toConfigLines(COLOR_KEY_PREFIX))
@@ -1359,4 +1424,3 @@ public final class WorldEditPointOverlayClient {
         return Math.max(0.5f, Math.min(2.0f, scale));
     }
 }
-

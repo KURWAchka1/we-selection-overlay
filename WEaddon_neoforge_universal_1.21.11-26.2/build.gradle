@@ -192,6 +192,8 @@ tasks.named('runSmokeClient') {
 tasks.named('test') {
     useJUnitPlatform()
     dependsOn(tasks.named('universalJar'))
+    inputs.file(tasks.named('universalJar', Jar).flatMap { it.archiveFile })
+    inputs.files(app1211, app261, app262)
     systemProperty 'universal.jar', tasks.named('universalJar', Jar).get().archiveFile.get().asFile.absolutePath
     systemProperty 'release.version', mod_version
     systemProperty 'runtime.inputs', [app1211, app261, app262].collect { it.absolutePath }.join(File.pathSeparator)

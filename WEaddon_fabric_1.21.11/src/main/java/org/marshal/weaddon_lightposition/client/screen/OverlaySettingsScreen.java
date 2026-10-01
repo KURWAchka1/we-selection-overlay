@@ -1,41 +1,25 @@
 package org.marshal.weaddon_lightposition.client.screen;
 
-import net.minecraft.client.gui.Click;
+import java.util.ArrayList;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.Click;
 import net.minecraft.text.Text;
 import org.marshal.weaddon_lightposition.client.WorldEditPointOverlayClient;
-import org.marshal.weaddon_lightposition.client.overlay.DiagonalMode;
-import org.marshal.weaddon_lightposition.client.overlay.RenderMode;
-import org.marshal.weaddon_lightposition.client.overlay.RulerTrackingMode;
 
-public final class OverlaySettingsScreen extends Screen {
-    private static final int PANEL_WIDTH = 286;
-    private static final int PANEL_HEIGHT = 304;
-    private static final int BUTTON_HEIGHT = 20;
-    private static final int BUTTON_SPACING = 6;
-    private static final int GRID_SUBFUNCTION_INDENT = 18;
-    private static final int AXIS_BUTTON_SIZE = 22;
-    private static final int AXIS_BUTTON_GAP = 8;
-
+public final class OverlaySettingsScreen extends UiScreen {
     private final WorldEditPointOverlayClient overlayClient;
     private final Screen parent;
-
-    private ButtonWidget overlayButton;
-    private ButtonWidget gridButton;
-    private ButtonWidget clipboardPreviewButton;
-    private ButtonWidget rulerButton;
-    private ButtonWidget axisXButton;
-    private ButtonWidget axisYButton;
-    private ButtonWidget axisZButton;
-    private ButtonWidget renderModeButton;
-    private ButtonWidget diagonalModeButton;
-    private ButtonWidget trackingModeButton;
-    private ButtonWidget uiPreviewButton;
-    private ButtonWidget colorEditorButton;
-    private ButtonWidget doneButton;
-    private int rulerAxesLabelY;
+    private final ArrayList<ButtonWidget> content = new ArrayList<>();
+    private final ArrayList<ButtonWidget> menuControls = new ArrayList<>();
+    private ButtonWidget overlayButton, gridButton, clipboardPreviewButton, rulerButton;
+    private ButtonWidget axisXButton, axisYButton, axisZButton;
+    private ButtonWidget renderModeButton, diagonalModeButton, trackingModeButton, doneButton;
+    private ButtonWidget colorEditorButton, themeButton;
+    private boolean menuOpen;
+    private int scroll;
+    private int contentHeight;
 
     public OverlaySettingsScreen(WorldEditPointOverlayClient overlayClient, Screen parent) {
         super(Text.translatable("screen.worldedit_selection_overlay.settings.title"));
@@ -43,393 +27,215 @@ public final class OverlaySettingsScreen extends Screen {
         this.parent = parent;
     }
 
+    private static Text key(String suffix) {
+        return Text.translatable("screen.worldedit_selection_overlay.settings." + suffix);
+    }
+
     @Override
     protected void init() {
-        int x = panelX();
-        int y = panelY();
-        int buttonWidth = PANEL_WIDTH - 24;
+        content.clear();
+        menuControls.clear();
+        colorEditorButton = addDrawableChild(UiButton.styled(key("colors_short"), button -> {
+            if (client != null) client.setScreen(new OverlayColorSettingsScreen(overlayClient, this));
+        }).icon("pencil").tooltip(key("colors_short")).dimensions(panelX() + panelWidth() - 68, panelY() + 9, 24, 24).build());
+        themeButton = addDrawableChild(UiButton.styled(key("ui_options"), button -> setMenuOpen(!menuOpen))
+                .icon("sliders-horizontal").selected(() -> menuOpen).tooltip(key("ui_options"))
+                .dimensions(panelX() + panelWidth() - 38, panelY() + 9, 24, 24).build());
+        overlayButton = row("overlay", () -> {
+            overlayClient.setOverlayEnabled(!overlayClient.overlayEnabled());
+            layoutControls();
+        }, overlayClient::overlayEnabled);
+        gridButton = row("grid", () -> overlayClient.setSelectionGridEnabled(!overlayClient.selectionGridEnabled()),
+                overlayClient::selectionGridEnabled);
+        clipboardPreviewButton = row("clipboard_preview", () ->
+                overlayClient.setClipboardPreviewEnabled(!overlayClient.clipboardPreviewEnabled()), overlayClient::clipboardPreviewEnabled);
+        rulerButton = row("ruler", () -> {
+            overlayClient.setRulerEnabled(!overlayClient.rulerEnabled());
+            layoutControls();
+        }, overlayClient::rulerEnabled);
+        axisXButton = axis('X', overlayClient::rulerAxisXEnabled, () -> overlayClient.setRulerAxisXEnabled(!overlayClient.rulerAxisXEnabled()));
+        axisYButton = axis('Y', overlayClient::rulerAxisYEnabled, () -> overlayClient.setRulerAxisYEnabled(!overlayClient.rulerAxisYEnabled()));
+        axisZButton = axis('Z', overlayClient::rulerAxisZEnabled, () -> overlayClient.setRulerAxisZEnabled(!overlayClient.rulerAxisZEnabled()));
+        renderModeButton = command(() -> Text.translatable("screen.worldedit_selection_overlay.settings.render_mode",
+                Text.translatable("message.worldedit_selection_overlay.render_mode." + overlayClient.renderMode().translationSuffix())),
+                () -> overlayClient.setRenderMode(overlayClient.renderMode().next()));
+        diagonalModeButton = command(() -> Text.translatable("screen.worldedit_selection_overlay.settings.diagonal",
+                key("diagonal." + overlayClient.diagonalMode().translationSuffix())),
+                () -> overlayClient.setDiagonalMode(overlayClient.diagonalMode().next()));
+        trackingModeButton = command(() -> Text.translatable("screen.worldedit_selection_overlay.settings.ruler_tracking",
+                key("ruler_tracking." + overlayClient.rulerTrackingMode().translationSuffix())),
+                () -> overlayClient.setRulerTrackingMode(overlayClient.rulerTrackingMode().next()));
+        doneButton = addDrawableChild(UiButton.styled(key("done"), button -> close())
+                .dimensions(panelX() + 12, panelY() + panelHeight() - 32, panelWidth() - 24, 22).build());
 
-        colorEditorButton = addDrawableChild(
-                ButtonWidget.builder(
-                        Text.translatable("screen.worldedit_selection_overlay.settings.colors_short"),
-                        button -> {
-                            if (client != null) {
-                                client.setScreen(new OverlayColorSettingsScreen(overlayClient, this));
-                            }
-                        }
-                ).dimensions(x + PANEL_WIDTH - 36, y + 6, 24, BUTTON_HEIGHT).build()
-        );
-
-        uiPreviewButton = addDrawableChild(
-                ButtonWidget.builder(Text.literal("UI"), button -> {
-                    if (client != null) {
-                        client.setScreen(new OverlayUiDesignPreviewScreen(this));
-                    }
-                }).dimensions(x + PANEL_WIDTH - 66, y + 6, 24, BUTTON_HEIGHT).build()
-        );
-
-        overlayButton = addDrawableChild(
-                ButtonWidget.builder(overlayButtonText(), button -> {
-                    overlayClient.setOverlayEnabled(!overlayClient.overlayEnabled());
-                    refreshControlsAfterVisibilityChange();
-                }).dimensions(x + 12, y + 32, buttonWidth, BUTTON_HEIGHT).build()
-        );
-
-        gridButton = addDrawableChild(
-                ButtonWidget.builder(gridButtonText(), button -> {
-                    overlayClient.setSelectionGridEnabled(!overlayClient.selectionGridEnabled());
-                    button.setMessage(gridButtonText());
-                }).dimensions(x + 12 + GRID_SUBFUNCTION_INDENT, y + 58, buttonWidth - GRID_SUBFUNCTION_INDENT, BUTTON_HEIGHT).build()
-        );
-
-        clipboardPreviewButton = addDrawableChild(
-                ButtonWidget.builder(clipboardPreviewButtonText(), button -> {
-                    overlayClient.setClipboardPreviewEnabled(!overlayClient.clipboardPreviewEnabled());
-                    button.setMessage(clipboardPreviewButtonText());
-                }).dimensions(x + 12, y + 84, buttonWidth, BUTTON_HEIGHT).build()
-        );
-
-        rulerButton = addDrawableChild(
-                ButtonWidget.builder(rulerButtonText(), button -> {
-                    overlayClient.setRulerEnabled(!overlayClient.rulerEnabled());
-                    refreshControlsAfterVisibilityChange();
-                }).dimensions(x + 12, y + 110, buttonWidth, BUTTON_HEIGHT).build()
-        );
-
-        int axisButtonsWidth = AXIS_BUTTON_SIZE * 3 + AXIS_BUTTON_GAP * 2;
-        int axisButtonsX = x + 12 + (buttonWidth - axisButtonsWidth) / 2;
-        int axisButtonsY = y + 122;
-        axisXButton = addDrawableChild(
-                ButtonWidget.builder(axisButtonText('X', overlayClient.rulerAxisXEnabled()), button -> {
-                    overlayClient.setRulerAxisXEnabled(!overlayClient.rulerAxisXEnabled());
-                    updateRulerAxisButtons();
-                }).dimensions(axisButtonsX, axisButtonsY, AXIS_BUTTON_SIZE, AXIS_BUTTON_SIZE).build()
-        );
-        axisYButton = addDrawableChild(
-                ButtonWidget.builder(axisButtonText('Y', overlayClient.rulerAxisYEnabled()), button -> {
-                    overlayClient.setRulerAxisYEnabled(!overlayClient.rulerAxisYEnabled());
-                    updateRulerAxisButtons();
-                }).dimensions(axisButtonsX + AXIS_BUTTON_SIZE + AXIS_BUTTON_GAP, axisButtonsY, AXIS_BUTTON_SIZE, AXIS_BUTTON_SIZE).build()
-        );
-        axisZButton = addDrawableChild(
-                ButtonWidget.builder(axisButtonText('Z', overlayClient.rulerAxisZEnabled()), button -> {
-                    overlayClient.setRulerAxisZEnabled(!overlayClient.rulerAxisZEnabled());
-                    updateRulerAxisButtons();
-                }).dimensions(axisButtonsX + (AXIS_BUTTON_SIZE + AXIS_BUTTON_GAP) * 2, axisButtonsY, AXIS_BUTTON_SIZE, AXIS_BUTTON_SIZE).build()
-        );
-
-        renderModeButton = addDrawableChild(
-                ButtonWidget.builder(renderModeButtonText(), button -> {
-                    overlayClient.setRenderMode(overlayClient.renderMode().next());
-                    button.setMessage(renderModeButtonText());
-                }).dimensions(x + 12, y + 150, buttonWidth, BUTTON_HEIGHT).build()
-        );
-
-        diagonalModeButton = addDrawableChild(
-                ButtonWidget.builder(diagonalModeButtonText(), button -> {
-                    overlayClient.setDiagonalMode(overlayClient.diagonalMode().next());
-                    button.setMessage(diagonalModeButtonText());
-                }).dimensions(x + 12, y + 176, buttonWidth, BUTTON_HEIGHT).build()
-        );
-
-        trackingModeButton = addDrawableChild(
-                ButtonWidget.builder(trackingModeButtonText(), button -> {
-                    overlayClient.setRulerTrackingMode(overlayClient.rulerTrackingMode().next());
-                    button.setMessage(trackingModeButtonText());
-                }).dimensions(x + 12, y + 202, buttonWidth, BUTTON_HEIGHT).build()
-        );
-
-        doneButton = addDrawableChild(
-                ButtonWidget.builder(Text.translatable("screen.worldedit_selection_overlay.settings.done"), button -> close())
-                        .dimensions(x + 12, y + PANEL_HEIGHT - 32, buttonWidth, BUTTON_HEIGHT)
-                        .build()
-        );
-
-        layoutControls();
-        updateRulerAxisButtons();
-    }
-
-    @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        syncControls();
-        context.fill(0, 0, width, height, 0x68000000);
-
-        int x = panelX();
-        int y = panelY();
-        context.fill(x, y, x + PANEL_WIDTH, y + PANEL_HEIGHT, 0xD0121721);
-        drawOutline(context, x, y, PANEL_WIDTH, PANEL_HEIGHT, 0xFF3A465A);
-        context.drawText(textRenderer, title, x + 12, y + 10, 0xFFEAF0FA, false);
-        if (overlayClient.rulerEnabled()) {
-            context.drawText(
-                    textRenderer,
-                    Text.translatable("screen.worldedit_selection_overlay.settings.ruler_axes"),
-                    x + 12,
-                    rulerAxesLabelY,
-                    0xFFB4C0D3,
-                    false
-            );
+        int mx = menuX() + 8, my = menuY() + 25;
+        for (UiStyle style : UiStyle.values()) {
+            ButtonWidget choice = addDrawableChild(UiButton.styled(key("style." + style.name().toLowerCase(java.util.Locale.ROOT)), button -> {
+                overlayClient.setUiStyle(style);
+                if (client != null) client.setScreen(new OverlaySettingsScreen(overlayClient, parent));
+            }).selected(() -> UiStyle.current() == style).dimensions(mx, my, menuWidth() - 16, 20).build());
+            menuControls.add(choice);
+            my += 23;
         }
-        context.drawText(
-                textRenderer,
-                Text.translatable("screen.worldedit_selection_overlay.settings.hint"),
-                x + 12,
-                y + PANEL_HEIGHT - 44,
-                0xFFB4C0D3,
-                false
-        );
+        menuControls.add(addDrawableChild(UiButton.styled(key("reduced_motion"), button ->
+                overlayClient.setReducedMotion(!overlayClient.reducedMotion()))
+                .toggle(overlayClient::reducedMotion, key("reduced_motion")).dimensions(mx, my + 3, menuWidth() - 16, 22).build()));
+        menuControls.add(addDrawableChild(UiButton.styled(key("blur"), button ->
+                overlayClient.setUiBlur(!overlayClient.uiBlur()))
+                .toggle(overlayClient::uiBlur, key("blur")).dimensions(mx, my + 27, menuWidth() - 16, 22).build()));
+        layoutControls();
+        setMenuOpen(false);
+    }
 
-        super.render(context, mouseX, mouseY, delta);
+    private ButtonWidget row(String name, Runnable action, java.util.function.BooleanSupplier value) {
+        ButtonWidget button = addDrawableChild(UiButton.styled(
+                Text.translatable("screen.worldedit_selection_overlay.settings." + name, state(value.getAsBoolean())),
+                ignored -> { action.run(); layoutControls(); })
+                .toggle(value, key(name + "_label")).quiet().dimensions(0, 0, 100, 24).build());
+        content.add(button);
+        return button;
+    }
+
+    private ButtonWidget command(java.util.function.Supplier<Text> title, Runnable action) {
+        ButtonWidget button = addDrawableChild(UiButton.styled(title.get(), ignored -> {
+            action.run();
+            syncLabels();
+        }).quiet().trailingIcon("chevron-down").dimensions(0, 0, 100, 22).build());
+        content.add(button);
+        return button;
+    }
+
+    private ButtonWidget axis(char name, java.util.function.BooleanSupplier value, Runnable action) {
+        ButtonWidget button = addDrawableChild(UiButton.styled(Text.literal(Character.toString(name)), ignored -> action.run())
+                .selected(value).dimensions(0, 0, 22, 20).build());
+        content.add(button);
+        return button;
+    }
+
+    private static Text state(boolean value) { return key("value." + (value ? "on" : "off")); }
+
+    private void syncLabels() {
+        overlayButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.overlay", state(overlayClient.overlayEnabled())));
+        gridButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.grid", state(overlayClient.selectionGridEnabled())));
+        rulerButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.ruler", state(overlayClient.rulerEnabled())));
+        clipboardPreviewButton.setMessage(overlayClient.clipboardPreviewAvailable()
+                ? Text.translatable("screen.worldedit_selection_overlay.settings.clipboard_preview", state(overlayClient.clipboardPreviewEnabled()))
+                : key("clipboard_preview_unavailable"));
+        renderModeButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.render_mode",
+                Text.translatable("message.worldedit_selection_overlay.render_mode." + overlayClient.renderMode().translationSuffix())));
+        diagonalModeButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.diagonal",
+                key("diagonal." + overlayClient.diagonalMode().translationSuffix())));
+        trackingModeButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.ruler_tracking",
+                key("ruler_tracking." + overlayClient.rulerTrackingMode().translationSuffix())));
+    }
+
+    private void layoutControls() {
+        if (overlayButton == null) return;
+        int y = panelY() + 43 - scroll, x = panelX() + 12, w = panelWidth() - 24;
+        position(overlayButton, x, y, w, 24); y += 27;
+        gridButton.visible = false;
+        if (overlayClient.overlayEnabled()) { position(gridButton, x + 16, y, w - 16, 22); y += 25; }
+        position(clipboardPreviewButton, x, y, w, 24); y += 27;
+        position(rulerButton, x, y, w, 24); y += 27;
+        axisXButton.visible = axisYButton.visible = axisZButton.visible = false;
+        if (overlayClient.rulerEnabled()) {
+            int ax = x + w - 80;
+            position(axisXButton, ax, y, 22, 20);
+            position(axisYButton, ax + 28, y, 22, 20);
+            position(axisZButton, ax + 56, y, 22, 20);
+            y += 24;
+        }
+        position(renderModeButton, x, y, w, 22); y += 25;
+        position(diagonalModeButton, x, y, w, 22); y += 25;
+        position(trackingModeButton, x, y, w, 22); y += 25;
+        contentHeight = y + scroll - (panelY() + 43);
+        int maxScroll = Math.max(0, contentHeight - (panelHeight() - 83));
+        if (scroll > maxScroll) { scroll = maxScroll; layoutControls(); return; }
+        for (ButtonWidget button : content) button.active = !menuOpen;
+        clipboardPreviewButton.active = !menuOpen && overlayClient.clipboardPreviewAvailable();
+        syncLabels();
+    }
+
+    private void position(ButtonWidget button, int x, int y, int width, int height) {
+        button.setX(x); button.setY(y); button.setWidth(width); button.setDimensionsAndPosition(width, height, x, y);
+        button.visible = y >= panelY() + 41 && y + height <= panelY() + panelHeight() - 39;
+    }
+
+    private void setMenuOpen(boolean value) {
+        menuOpen = value;
+        for (ButtonWidget button : menuControls) { button.visible = value; button.active = value; }
+        colorEditorButton.active = doneButton.active = !value;
+        layoutControls();
     }
 
     @Override
-    public boolean shouldPause() {
-        return false;
+    public void tick() {
+        super.tick();
+        if (clipboardPreviewButton != null) clipboardPreviewButton.active = !menuOpen && overlayClient.clipboardPreviewAvailable();
+    }
+
+    @Override
+    protected void drawScreen(DrawContext graphics, int mouseX, int mouseY, float delta) {
+        UiStyle style = UiStyle.current();
+        UiChrome.fill(graphics, 0, 0, width, height, 0x38000000);
+        UiChrome.panel(graphics, panelX(), panelY(), panelWidth(), panelHeight(), style);
+        UiChrome.text(graphics, font, key("compact_title"), panelX() + 20, panelY() + 16, style.text, false);
+        if (overlayClient.rulerEnabled() && axisXButton.visible) {
+            UiChrome.text(graphics, font, key("ruler_axes"), panelX() + 20, axisXButton.getY() + 5, style.secondaryText, false);
+        }
+        for (ButtonWidget button : menuControls) button.visible = false;
+        renderWidgets(graphics, menuOpen ? Integer.MIN_VALUE : mouseX, menuOpen ? Integer.MIN_VALUE : mouseY, delta);
+        for (ButtonWidget button : menuControls) button.visible = menuOpen;
+        if (menuOpen) {
+            UiChrome.popup(graphics, menuX(), menuY(), menuWidth(), 155, style);
+            UiChrome.text(graphics, font, key("ui_options"), menuX() + 10, menuY() + 10, style.text, false);
+            for (ButtonWidget button : menuControls) button.render(graphics, mouseX, mouseY, delta);
+        }
+        int availableHeight = panelHeight() - 83;
+        if (contentHeight > availableHeight) {
+            int thumb = Math.max(12, availableHeight * availableHeight / contentHeight);
+            int thumbY = panelY() + 42 + scroll * (availableHeight - thumb) / (contentHeight - availableHeight);
+            UiChrome.fillRounded(graphics, panelX() + panelWidth() - 5, thumbY, 3, thumb, style.border);
+        }
     }
 
     @Override
     public boolean mouseClicked(Click click, boolean doubleClick) {
-        if (click.button() == 0 && overlayClient.rulerEnabled()) {
-            // Allow re-enabling axis buttons even when they are visually disabled.
-            if (tryEnableDisabledAxis(axisXButton, click.x(), click.y(), () -> overlayClient.setRulerAxisXEnabled(true))) {
-                return true;
-            }
-            if (tryEnableDisabledAxis(axisYButton, click.x(), click.y(), () -> overlayClient.setRulerAxisYEnabled(true))) {
-                return true;
-            }
-            if (tryEnableDisabledAxis(axisZButton, click.x(), click.y(), () -> overlayClient.setRulerAxisZEnabled(true))) {
-                return true;
-            }
+        if (isClosing()) return true;
+        if (menuOpen) {
+            for (ButtonWidget button : menuControls) if (button.mouseClicked(click, doubleClick)) return true;
+            if (themeButton.mouseClicked(click, doubleClick)) return true;
+            if (click.x() < menuX() || click.x() >= menuX() + menuWidth() || click.y() < menuY() || click.y() >= menuY() + 155) setMenuOpen(false);
+            return true;
         }
         return super.mouseClicked(click, doubleClick);
     }
 
     @Override
+    public boolean mouseScrolled(double x, double y, double horizontal, double vertical) {
+        if (isClosing() || menuOpen) return true;
+        if (x >= panelX() && x < panelX() + panelWidth()) {
+            scroll = Math.max(0, Math.min(Math.max(0, contentHeight - (panelHeight() - 83)), scroll - (int) (vertical * 24)));
+            layoutControls();
+            return true;
+        }
+        return super.mouseScrolled(x, y, horizontal, vertical);
+    }
+
+    @Override
     public void close() {
-        if (client != null) {
-            client.setScreen(parent);
-        }
+        if (menuOpen) { setMenuOpen(false); return; }
+        closeAnimated(() -> { if (client != null) client.setScreen(parent); });
     }
 
-    private Text overlayButtonText() {
-        return Text.translatable(
-                "screen.worldedit_selection_overlay.settings.overlay",
-                toggleStateText(overlayClient.overlayEnabled())
-        );
-    }
+    @Override
+    public boolean shouldPause() { return false; }
 
-    private Text gridButtonText() {
-        return Text.translatable(
-                "screen.worldedit_selection_overlay.settings.grid",
-                toggleStateText(overlayClient.selectionGridEnabled())
-        );
-    }
-
-    private Text rulerButtonText() {
-        return Text.translatable(
-                "screen.worldedit_selection_overlay.settings.ruler",
-                toggleStateText(overlayClient.rulerEnabled())
-        );
-    }
-
-    private Text clipboardPreviewButtonText() {
-        if (!overlayClient.clipboardPreviewAvailable()) {
-            return Text.translatable("screen.worldedit_selection_overlay.settings.clipboard_preview_unavailable");
-        }
-        return Text.translatable(
-                "screen.worldedit_selection_overlay.settings.clipboard_preview",
-                toggleStateText(overlayClient.clipboardPreviewEnabled())
-        );
-    }
-
-    private Text renderModeButtonText() {
-        RenderMode mode = overlayClient.renderMode();
-        return Text.translatable(
-                "screen.worldedit_selection_overlay.settings.render_mode",
-                Text.translatable("message.worldedit_selection_overlay.render_mode." + mode.translationSuffix())
-        );
-    }
-
-    private Text diagonalModeButtonText() {
-        DiagonalMode mode = overlayClient.diagonalMode();
-        return Text.translatable(
-                "screen.worldedit_selection_overlay.settings.diagonal",
-                Text.translatable("screen.worldedit_selection_overlay.settings.diagonal." + mode.translationSuffix())
-        );
-    }
-
-    private Text trackingModeButtonText() {
-        RulerTrackingMode mode = overlayClient.rulerTrackingMode();
-        return Text.translatable(
-                "screen.worldedit_selection_overlay.settings.ruler_tracking",
-                Text.translatable("screen.worldedit_selection_overlay.settings.ruler_tracking." + mode.translationSuffix())
-        );
-    }
-
-    private Text toggleStateText(boolean enabled) {
-        return Text.translatable(
-                enabled
-                        ? "screen.worldedit_selection_overlay.settings.value.on"
-                        : "screen.worldedit_selection_overlay.settings.value.off"
-        );
-    }
-
-    private Text axisButtonText(char axis, boolean enabled) {
-        return Text.literal(Character.toString(axis));
-    }
-
-    private int panelX() {
-        return (width - PANEL_WIDTH) / 2;
-    }
-
-    private int panelY() {
-        return (height - PANEL_HEIGHT) / 2;
-    }
-
-    private static void drawOutline(DrawContext context, int x, int y, int width, int height, int color) {
-        context.fill(x, y, x + width, y + 1, color);
-        context.fill(x, y + height - 1, x + width, y + height, color);
-        context.fill(x, y, x + 1, y + height, color);
-        context.fill(x + width - 1, y, x + width, y + height, color);
-    }
-
-    private void refreshControlsAfterVisibilityChange() {
-        syncControls();
-    }
-
-    private void syncControls() {
-        if (overlayButton != null) {
-            overlayButton.setMessage(overlayButtonText());
-        }
-        if (gridButton != null) {
-            gridButton.setMessage(gridButtonText());
-        }
-        if (rulerButton != null) {
-            rulerButton.setMessage(rulerButtonText());
-        }
-        if (clipboardPreviewButton != null) {
-            clipboardPreviewButton.setMessage(clipboardPreviewButtonText());
-            clipboardPreviewButton.active = overlayClient.clipboardPreviewAvailable();
-        }
-        if (renderModeButton != null) {
-            renderModeButton.setMessage(renderModeButtonText());
-        }
-        if (diagonalModeButton != null) {
-            diagonalModeButton.setMessage(diagonalModeButtonText());
-        }
-        if (trackingModeButton != null) {
-            trackingModeButton.setMessage(trackingModeButtonText());
-        }
-
-        layoutControls();
-        updateRulerAxisButtons();
-    }
-
-    private void layoutControls() {
-        if (overlayButton == null || gridButton == null || clipboardPreviewButton == null || rulerButton == null || renderModeButton == null
-                || diagonalModeButton == null || trackingModeButton == null || doneButton == null) {
-            return;
-        }
-
-        int x = panelX();
-        int y = panelY();
-        int buttonWidth = PANEL_WIDTH - 24;
-        int rowY = y + 32;
-
-        if (colorEditorButton != null) {
-            position(colorEditorButton, x + PANEL_WIDTH - 36, y + 6, 24, BUTTON_HEIGHT);
-        }
-        if (uiPreviewButton != null) {
-            position(uiPreviewButton, x + PANEL_WIDTH - 66, y + 6, 24, BUTTON_HEIGHT);
-        }
-
-        position(overlayButton, x + 12, rowY, buttonWidth, BUTTON_HEIGHT);
-        rowY += BUTTON_HEIGHT + BUTTON_SPACING;
-
-        boolean overlayVisible = overlayClient.overlayEnabled();
-        gridButton.visible = overlayVisible;
-        gridButton.active = overlayVisible;
-        if (overlayVisible) {
-            position(
-                    gridButton,
-                    x + 12 + GRID_SUBFUNCTION_INDENT,
-                    rowY,
-                    buttonWidth - GRID_SUBFUNCTION_INDENT,
-                    BUTTON_HEIGHT
-            );
-            rowY += BUTTON_HEIGHT + BUTTON_SPACING;
-        }
-
-        position(clipboardPreviewButton, x + 12, rowY, buttonWidth, BUTTON_HEIGHT);
-        clipboardPreviewButton.active = overlayClient.clipboardPreviewAvailable();
-        rowY += BUTTON_HEIGHT + BUTTON_SPACING;
-
-        position(rulerButton, x + 12, rowY, buttonWidth, BUTTON_HEIGHT);
-        rowY += BUTTON_HEIGHT + BUTTON_SPACING;
-
-        if (overlayClient.rulerEnabled()) {
-            rulerAxesLabelY = rowY + 2;
-            int axisButtonsWidth = AXIS_BUTTON_SIZE * 3 + AXIS_BUTTON_GAP * 2;
-            int axisButtonsX = x + 12 + (buttonWidth - axisButtonsWidth) / 2;
-            int axisButtonsY = rowY + 12;
-            position(axisXButton, axisButtonsX, axisButtonsY, AXIS_BUTTON_SIZE, AXIS_BUTTON_SIZE);
-            position(axisYButton, axisButtonsX + AXIS_BUTTON_SIZE + AXIS_BUTTON_GAP, axisButtonsY, AXIS_BUTTON_SIZE, AXIS_BUTTON_SIZE);
-            position(axisZButton, axisButtonsX + (AXIS_BUTTON_SIZE + AXIS_BUTTON_GAP) * 2, axisButtonsY, AXIS_BUTTON_SIZE, AXIS_BUTTON_SIZE);
-            rowY += 40;
-        }
-
-        position(renderModeButton, x + 12, rowY, buttonWidth, BUTTON_HEIGHT);
-        rowY += BUTTON_HEIGHT + BUTTON_SPACING;
-        position(diagonalModeButton, x + 12, rowY, buttonWidth, BUTTON_HEIGHT);
-        rowY += BUTTON_HEIGHT + BUTTON_SPACING;
-        position(trackingModeButton, x + 12, rowY, buttonWidth, BUTTON_HEIGHT);
-        position(doneButton, x + 12, y + PANEL_HEIGHT - 32, buttonWidth, BUTTON_HEIGHT);
-    }
-
-    private static void position(ButtonWidget button, int x, int y, int width, int height) {
-        if (button == null) {
-            return;
-        }
-        button.setX(x);
-        button.setY(y);
-        button.setWidth(width);
-        button.setHeight(height);
-    }
-
-    private void updateRulerAxisButtons() {
-        if (axisXButton == null || axisYButton == null || axisZButton == null) {
-            return;
-        }
-        boolean visible = overlayClient.rulerEnabled();
-        axisXButton.visible = visible;
-        axisYButton.visible = visible;
-        axisZButton.visible = visible;
-        axisXButton.active = visible && overlayClient.rulerAxisXEnabled();
-        axisYButton.active = visible && overlayClient.rulerAxisYEnabled();
-        axisZButton.active = visible && overlayClient.rulerAxisZEnabled();
-        axisXButton.setMessage(axisButtonText('X', overlayClient.rulerAxisXEnabled()));
-        axisYButton.setMessage(axisButtonText('Y', overlayClient.rulerAxisYEnabled()));
-        axisZButton.setMessage(axisButtonText('Z', overlayClient.rulerAxisZEnabled()));
-    }
-
-    private boolean tryEnableDisabledAxis(ButtonWidget axisButton, double mouseX, double mouseY, Runnable action) {
-        if (axisButton == null || !axisButton.visible || axisButton.active) {
-            return false;
-        }
-        if (!isInside(axisButton, mouseX, mouseY)) {
-            return false;
-        }
-        action.run();
-        updateRulerAxisButtons();
-        if (client != null) {
-            axisButton.playDownSound(client.getSoundManager());
-        }
-        return true;
-    }
-
-    private static boolean isInside(ButtonWidget button, double mouseX, double mouseY) {
-        return mouseX >= button.getX()
-                && mouseX < button.getX() + button.getWidth()
-                && mouseY >= button.getY()
-                && mouseY < button.getY() + button.getHeight();
-    }
+    private int panelWidth() { return Math.min(286, Math.max(160, width - 16)); }
+    private int panelHeight() { return Math.min(304, Math.max(120, height - 16)); }
+    private int panelX() { return (width - panelWidth()) / 2; }
+    private int panelY() { return (height - panelHeight()) / 2; }
+    private int menuWidth() { return Math.min(182, panelWidth() - 16); }
+    private int menuX() { return panelX() + panelWidth() - menuWidth() - 8; }
+    private int menuY() { return Math.max(4, Math.min(panelY() + 39, height - 159)); }
 }

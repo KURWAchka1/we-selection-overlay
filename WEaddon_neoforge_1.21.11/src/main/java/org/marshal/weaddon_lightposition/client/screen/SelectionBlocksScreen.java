@@ -30,11 +30,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 
-public final class SelectionBlocksScreen extends Screen {
+public final class SelectionBlocksScreen extends UiScreen {
     private static final int PANEL_MARGIN = 16;
-    private static final int PANEL_MAX_WIDTH = 980;
-    private static final int PANEL_MIN_WIDTH = 760;
-    private static final int HEADER_HEIGHT = 112;
+    private static final int RAIL_WIDTH = 188;
+    private static final int RAIL_INSET = 24;
     private static final int FOOTER_HEIGHT = 26;
     private static final int ROW_HEIGHT = 26;
     private static final int FILTER_PANEL_WIDTH = 460;
@@ -104,28 +103,31 @@ public final class SelectionBlocksScreen extends Screen {
         int panelY = panelY();
         int panelWidth = panelWidth();
         int gap = 6;
-        int refreshWidth = 86;
-        int sortWidth = 154;
-        int filterWidth = 84;
-        int refreshX = panelX + panelWidth - 10 - refreshWidth;
-        int sortX = refreshX - gap - sortWidth;
-        int filterX = sortX - gap - filterWidth;
-        int searchX = panelX + 10;
-        int searchWidth = Math.max(120, filterX - gap - searchX);
-        int resetWidth = 128;
+        boolean rail = hasRail();
+        boolean compact = compactToolbar();
+        int refreshWidth = rail ? 140 : compact ? (panelWidth - 32) / 3 : 86;
+        int sortWidth = rail ? 140 : compact ? (panelWidth - 32) / 3 : 154;
+        int filterWidth = rail ? 140 : compact ? panelWidth - 20 - refreshWidth - sortWidth - gap * 2 : 84;
+        int refreshX = rail ? RAIL_INSET : panelX + panelWidth - 10 - refreshWidth;
+        int sortX = rail ? RAIL_INSET : refreshX - gap - sortWidth;
+        int filterX = rail ? RAIL_INSET : sortX - gap - filterWidth;
+        int searchX = rail ? RAIL_INSET : panelX + 10;
+        int searchWidth = rail ? 140 : compact ? panelWidth - 20 : Math.max(120, filterX - gap - searchX);
+        int toolbarY = panelY + (rail ? 68 : compact ? 50 : 26);
+        int resetWidth = Math.min(128, listWidth() - 4);
         int resetX = listX() + 2;
         int resetY = listY() - 24;
 
         filterButton = addRenderableWidget(
-                Button.builder(filterButtonText(), button -> {
+                UiButton.styled(filterButtonText(), button -> {
                     setFiltersMenuOpen(!filtersMenuOpen);
-                }).bounds(filterX, panelY + 26, filterWidth, 20).build()
+                }).bounds(filterX, rail ? toolbarY + 26 : toolbarY, filterWidth, 20).build()
         );
 
-        searchField = new EditBox(
+        searchField = new UiEditBox(
                 font,
                 searchX,
-                panelY + 26,
+                panelY + (rail ? 42 : 26),
                 searchWidth,
                 20,
                 Component.translatable("screen.worldedit_selection_overlay.blocks.search")
@@ -136,32 +138,32 @@ public final class SelectionBlocksScreen extends Screen {
         addRenderableWidget(searchField);
 
         sortButton = addRenderableWidget(
-                Button.builder(sortButtonText(), button -> {
+                UiButton.styled(sortButtonText(), button -> {
                     sortMode = sortMode.next();
                     button.setMessage(sortButtonText());
                     rebuildVisibleEntries();
-                }).bounds(sortX, panelY + 26, sortWidth, 20).build()
+                }).bounds(sortX, toolbarY, sortWidth, 20).build()
         );
 
         resetIsolationButton = addRenderableWidget(
-                Button.builder(
+                UiButton.styled(
                         Component.translatable("screen.worldedit_selection_overlay.blocks.isolation.reset"),
                         button -> clearIsolatedBlocks()
                 ).bounds(resetX, resetY, resetWidth, 20).build()
         );
 
         refreshButton = addRenderableWidget(
-                Button.builder(
+                UiButton.styled(
                         Component.translatable("screen.worldedit_selection_overlay.blocks.refresh"),
                         button -> requestRefresh()
-                ).bounds(refreshX, panelY + 26, refreshWidth, 20).build()
+                ).bounds(refreshX, rail ? toolbarY + 52 : toolbarY, refreshWidth, 20).build()
         );
 
-        filterSearchField = new EditBox(
+        filterSearchField = new UiEditBox(
                 font,
                 filterPanelX() + 10,
                 filterPanelY() + 26,
-                FILTER_PANEL_WIDTH - 20,
+                filterPanelWidth() - 20,
                 18,
                 Component.translatable("screen.worldedit_selection_overlay.blocks.filters.search")
         );
@@ -171,14 +173,14 @@ public final class SelectionBlocksScreen extends Screen {
         addRenderableWidget(filterSearchField);
 
         clearFiltersButton = addRenderableWidget(
-                Button.builder(
+                UiButton.styled(
                         Component.translatable("screen.worldedit_selection_overlay.blocks.filters.clear"),
                         button -> {
                             excludedBlockIds.clear();
                             persistExcludedFilters();
                             rebuildVisibleEntries();
                         }
-                ).bounds(filterPanelX() + FILTER_PANEL_WIDTH - 72, filterPanelY() + FILTER_PANEL_MAX_HEIGHT - 24, 62, 16).build()
+                ).bounds(filterPanelX() + filterPanelWidth() - 72, filterPanelY() + filterPanelHeight() - 24, 62, 16).build()
         );
 
         setInitialFocus(searchField);
@@ -207,7 +209,7 @@ public final class SelectionBlocksScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+    protected void drawScreen(GuiGraphics context, int mouseX, int mouseY, float delta) {
         positionFilterMenuWidgets();
 
         drawScreenBackdrop(context);
@@ -217,24 +219,37 @@ public final class SelectionBlocksScreen extends Screen {
         int panelWidth = panelWidth();
         int panelHeight = panelHeight();
 
-        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xCC101318);
-        drawOutline(context, panelX, panelY, panelWidth, panelHeight, 0xFF3A465A);
-
-        context.drawString(font, title, panelX + 10, panelY + 8, 0xFFEAEFF8, false);
-        drawStatus(context, panelX + 10, panelY + 52);
-
-        drawList(context);
-        drawFooter(context, panelX + 10, panelY + panelHeight - FOOTER_HEIGHT + 6, panelWidth - 20);
-
-        if (filtersMenuOpen) {
-            drawFilterMenu(context, mouseX, mouseY);
+        UiStyle style = UiStyle.current();
+        UiChrome.fill(context, 0, 0, width, height, style.surface);
+        if (hasRail()) {
+            UiChrome.fill(context, RAIL_WIDTH, panelY + 12, RAIL_WIDTH + 1, panelY + panelHeight - 12, style.border);
+        } else {
+            UiChrome.fill(context, panelX + 10, panelY + 49, panelX + panelWidth - 10, panelY + 50, style.border);
         }
 
-        super.render(context, mouseX, mouseY, delta);
+        UiChrome.text(context, font, title, hasRail() ? RAIL_INSET : panelX + 10, panelY + 8, style.text, false);
+        drawStatus(context, hasRail() ? listX() + 2 : panelX + 10, panelY + (hasRail() ? 32 : compactToolbar() ? 74 : 52));
+
+        drawList(context);
+        if (style == UiStyle.LEGACY) drawFooter(context, panelX + 10, panelY + panelHeight - FOOTER_HEIGHT + 6, panelWidth - 20);
+        else drawSelectionSummary(context);
+
+        filterSearchField.visible = clearFiltersButton.visible = false;
+        renderWidgets(context, filtersMenuOpen ? Integer.MIN_VALUE : mouseX, filtersMenuOpen ? Integer.MIN_VALUE : mouseY, delta);
+        filterSearchField.visible = clearFiltersButton.visible = filtersMenuOpen;
+        if (filtersMenuOpen) {
+            drawFilterMenu(context, mouseX, mouseY);
+            filterSearchField.render(context, mouseX, mouseY, delta);
+            clearFiltersButton.render(context, mouseX, mouseY, delta);
+        }
     }
 
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean doubleClick) {
+        if (isClosing()) return true;
+        if (filtersMenuOpen && click.button() != 0) {
+            return true;
+        }
         if (click.button() == 0 && filtersMenuOpen) {
             if (isInsideFilterPanel(click.x(), click.y())) {
                 if (isInsideAvailableFilterList(click.x(), click.y()) && tryMoveFilterEntryToHidden(click.x(), click.y())) {
@@ -243,8 +258,11 @@ public final class SelectionBlocksScreen extends Screen {
                 if (isInsideHiddenFilterList(click.x(), click.y()) && tryMoveFilterEntryToVisible(click.x(), click.y())) {
                     return true;
                 }
-                // Let filter widgets handle the click, but block the underlying list.
-                if (super.mouseClicked(click, doubleClick)) {
+                if (filterSearchField != null && filterSearchField.mouseClicked(click, doubleClick)) {
+                    setFocused(filterSearchField);
+                    return true;
+                }
+                if (clearFiltersButton != null && clearFiltersButton.mouseClicked(click, doubleClick)) {
                     return true;
                 }
                 return true;
@@ -284,6 +302,7 @@ public final class SelectionBlocksScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (isClosing()) return true;
         if (filtersMenuOpen && isInsideAvailableFilterList(mouseX, mouseY) && !availableFilterEntries.isEmpty()) {
             int delta = verticalAmount > 0.0 ? -3 : 3;
             setAvailableFilterScrollRows(filterAvailableScrollRows + delta);
@@ -294,7 +313,7 @@ public final class SelectionBlocksScreen extends Screen {
             setHiddenFilterScrollRows(filterHiddenScrollRows + delta);
             return true;
         }
-        if (filtersMenuOpen && isInsideFilterPanel(mouseX, mouseY)) {
+        if (filtersMenuOpen) {
             return true;
         }
 
@@ -322,7 +341,7 @@ public final class SelectionBlocksScreen extends Screen {
     private void drawStatus(GuiGraphics context, int x, int y) {
         SelectionBlockSnapshot snapshot = analyzer.snapshot();
         switch (snapshot.state()) {
-            case NO_SELECTION -> context.drawString(
+            case NO_SELECTION -> UiChrome.text(context,
                     font,
                     Component.translatable("screen.worldedit_selection_overlay.blocks.state.no_selection"),
                     x,
@@ -330,7 +349,7 @@ public final class SelectionBlocksScreen extends Screen {
                     0xFFFFB366,
                     false
             );
-            case INCOMPLETE_SELECTION -> context.drawString(
+            case INCOMPLETE_SELECTION -> UiChrome.text(context,
                     font,
                     Component.translatable("screen.worldedit_selection_overlay.blocks.state.incomplete"),
                     x,
@@ -338,7 +357,7 @@ public final class SelectionBlocksScreen extends Screen {
                     0xFFFFCC66,
                     false
             );
-            case SCANNING -> context.drawString(
+            case SCANNING -> UiChrome.text(context,
                     font,
                     Component.translatable(
                             "screen.worldedit_selection_overlay.blocks.state.scanning",
@@ -351,7 +370,7 @@ public final class SelectionBlocksScreen extends Screen {
                     0xFF88D0FF,
                     false
             );
-            case COMPLETE -> context.drawString(
+            case COMPLETE -> UiChrome.text(context,
                     font,
                     Component.translatable(
                             "screen.worldedit_selection_overlay.blocks.state.complete",
@@ -364,9 +383,13 @@ public final class SelectionBlocksScreen extends Screen {
             );
         }
 
+        if (compactToolbar()) {
+            return;
+        }
+
         int detailY = y + 12;
         if (!isolatedBlockIds.isEmpty()) {
-            context.drawString(
+            UiChrome.text(context,
                     font,
                     Component.translatable(
                             "screen.worldedit_selection_overlay.blocks.isolation.active",
@@ -381,7 +404,7 @@ public final class SelectionBlocksScreen extends Screen {
         }
 
         if (filteredOutSelectedCells > 0L) {
-            context.drawString(
+            UiChrome.text(context,
                     font,
                     Component.translatable(
                             "screen.worldedit_selection_overlay.blocks.filters.warning",
@@ -402,11 +425,11 @@ public final class SelectionBlocksScreen extends Screen {
         int listWidth = listWidth();
         int listHeight = listHeight();
 
-        context.fill(listX, listY, listX + listWidth, listY + listHeight, 0x80202833);
-        drawOutline(context, listX, listY, listWidth, listHeight, 0xFF3A465A);
+        UiStyle style = UiStyle.current();
+        if (style == UiStyle.LEGACY) drawOutline(context, listX, listY, listWidth, listHeight, style.border);
 
         if (visibleRows.isEmpty()) {
-            context.drawCenteredString(
+            UiChrome.centeredText(context,
                     font,
                     Component.translatable("screen.worldedit_selection_overlay.blocks.empty_filter"),
                     listX + listWidth / 2,
@@ -423,14 +446,14 @@ public final class SelectionBlocksScreen extends Screen {
         int rowY = listY + 1;
         for (int index = scrollRows; index < endExclusive; index++) {
             RowItem rowItem = visibleRows.get(index);
-            int rowColor = (index & 1) == 0 ? 0x60212B38 : 0x60404A58;
+            int rowColor = (index & 1) == 0 ? 0x402B3535 : 0x60404A48;
             if (rowItem instanceof StateRow) {
-                rowColor = (index & 1) == 0 ? 0x5030384A : 0x50424A5C;
+                rowColor = (index & 1) == 0 ? 0x50303838 : 0x50424A4A;
             }
             if (rowItem instanceof GroupRow groupRow && groupRow.group().isolated()) {
-                rowColor = (index & 1) == 0 ? 0x70415A34 : 0x70506A3F;
+                rowColor = (index & 1) == 0 ? 0x70517868 : 0x70638374;
             }
-            context.fill(listX + 1, rowY, listX + listWidth - 1, rowY + ROW_HEIGHT - 1, rowColor);
+            UiChrome.fill(context, listX + 1, rowY, listX + listWidth - 1, rowY + ROW_HEIGHT - 1, rowColor);
 
             if (rowItem instanceof GroupRow groupRow) {
                 drawGroupRow(context, groupRow.group(), listX, listWidth, rowY, filteredSelected);
@@ -460,7 +483,7 @@ public final class SelectionBlocksScreen extends Screen {
         if (!stack.isEmpty()) {
             context.renderItem(stack, iconX, iconY);
         } else {
-            context.drawString(font, "AIR", iconX, iconY + 4, 0xFFE1C58A, false);
+            UiChrome.text(context, font, "AIR", iconX, iconY + 4, 0xFFE1C58A, false);
         }
 
         int textX = listX + 52;
@@ -473,7 +496,7 @@ public final class SelectionBlocksScreen extends Screen {
             marker = "[+]";
         }
 
-        context.drawString(
+        UiChrome.text(context,
                 font,
                 marker + " " + group.displayName(),
                 textX,
@@ -486,7 +509,7 @@ public final class SelectionBlocksScreen extends Screen {
                 "screen.worldedit_selection_overlay.blocks.states_count",
                 formatLong(group.states().size())
         ).getString();
-        context.drawString(
+        UiChrome.text(context,
                 font,
                 groupIdLine(group) + "  -  " + stateMeta,
                 textX,
@@ -497,10 +520,10 @@ public final class SelectionBlocksScreen extends Screen {
 
         String countText = formatLong(group.count());
         String percentText = formatPercent(group.count() / (double) loadedSelected);
-        int countX = listX + listWidth - 8 - font.width(countText);
-        int percentX = listX + listWidth - 8 - font.width(percentText);
-        context.drawString(font, countText, countX, rowY + 4, 0xFFF7E27E, false);
-        context.drawString(font, percentText, percentX, rowY + 14, 0xFF8FD3FF, false);
+        int countX = listX + listWidth - 8 - UiChrome.width(font, countText);
+        int percentX = listX + listWidth - 8 - UiChrome.width(font, percentText);
+        UiChrome.text(context, font, countText, countX, rowY + 4, 0xFFF7E27E, false);
+        UiChrome.text(context, font, percentText, percentX, rowY + 14, 0xFF8FD3FF, false);
     }
 
     private void drawStateRow(
@@ -514,7 +537,7 @@ public final class SelectionBlocksScreen extends Screen {
         SelectionBlockSnapshot.BlockEntry entry = state.entry();
         int textX = listX + 64;
 
-        context.drawString(
+        UiChrome.text(context,
                 font,
                 "|- " + state.primaryLabel(),
                 textX,
@@ -523,7 +546,7 @@ public final class SelectionBlocksScreen extends Screen {
                 false
         );
         if (!state.secondaryLabel().isEmpty()) {
-            context.drawString(
+            UiChrome.text(context,
                     font,
                     state.secondaryLabel(),
                     textX,
@@ -535,26 +558,52 @@ public final class SelectionBlocksScreen extends Screen {
 
         String countText = formatLong(entry.count());
         String percentText = formatPercent(entry.count() / (double) loadedSelected);
-        int countX = listX + listWidth - 8 - font.width(countText);
-        int percentX = listX + listWidth - 8 - font.width(percentText);
-        context.drawString(font, countText, countX, rowY + 4, 0xFFEAD186, false);
-        context.drawString(font, percentText, percentX, rowY + 14, 0xFF8FD3FF, false);
+        int countX = listX + listWidth - 8 - UiChrome.width(font, countText);
+        int percentX = listX + listWidth - 8 - UiChrome.width(font, percentText);
+        UiChrome.text(context, font, countText, countX, rowY + 4, 0xFFEAD186, false);
+        UiChrome.text(context, font, percentText, percentX, rowY + 14, 0xFF8FD3FF, false);
     }
 
     private void drawIsolationCheckbox(GuiGraphics context, int x, int y, boolean checked) {
         int borderColor = checked ? 0xFFA8F0C0 : 0xFF758398;
-        int fillColor = checked ? 0xFF254A35 : 0xFF161B22;
-        context.fill(x, y, x + 12, y + 12, fillColor);
-        drawOutline(context, x, y, 12, 12, borderColor);
+        UiChrome.squareOutline(context, x, y, 12, 12, borderColor);
         if (checked) {
-            context.drawString(font, "\u2713", x + 3, y + 1, 0xFFE9FFF0, false);
+            UiChrome.fill(context, x + 1, y + 1, x + 11, y + 11, 0x30254A35);
+            UiChrome.icon(context, "check", x + 1, y + 1, 10, 0xFFE9FFF0);
         }
+    }
+
+    private void drawSelectionSummary(GuiGraphics context) {
+        SelectionBlockSnapshot snapshot = analyzer.snapshot();
+        int x = resetIsolationButton.getX() + resetIsolationButton.getWidth() + 12;
+        int available = Math.max(1, listX() + listWidth() - x - 6);
+        boolean incomplete = snapshot.unloadedSelectedCells() > 0;
+        int y = resetIsolationButton.getY() + (incomplete ? 1 : 6);
+        String totals = Component.translatable("screen.worldedit_selection_overlay.blocks.summary.cells", formatLong(snapshot.selectedCells())).getString()
+                + "  |  " + Component.translatable("screen.worldedit_selection_overlay.blocks.summary.types", formatLong(visibleGroups.size())).getString();
+        drawSummaryLine(context, totals, x, y, available, UiStyle.current().secondaryText);
+        if (incomplete) {
+            String loaded = Component.translatable("screen.worldedit_selection_overlay.blocks.summary.loaded", formatLong(snapshot.loadedSelectedCells())).getString()
+                    + "  |  " + Component.translatable("screen.worldedit_selection_overlay.blocks.summary.unloaded", formatLong(snapshot.unloadedSelectedCells())).getString();
+            drawSummaryLine(context, loaded, x, y + 10, available, 0xFFFFB88A);
+        }
+    }
+
+    private void drawSummaryLine(GuiGraphics context, String text, int x, int y, int width, int color) {
+        float scale = Math.min(1.0f, width / (float) Math.max(1, UiChrome.width(font, text)));
+        var pose = context.pose();
+        pose.pushMatrix();
+        try {
+            pose.translate(x, y + (9 - 9 * scale) / 2);
+            pose.scale(scale, scale);
+            UiChrome.text(context, font, text, 0, 0, color, false);
+        } finally { pose.popMatrix(); }
     }
 
     private void drawFooter(GuiGraphics context, int x, int y, int innerWidth) {
         SelectionBlockSnapshot snapshot = analyzer.snapshot();
         int secondColumnX = x + Math.max(230, innerWidth / 2);
-        context.drawString(
+        UiChrome.text(context,
                 font,
                 Component.translatable("screen.worldedit_selection_overlay.blocks.selected", formatLong(snapshot.selectedCells())),
                 x,
@@ -562,7 +611,7 @@ public final class SelectionBlocksScreen extends Screen {
                 0xFFEAF2FF,
                 false
         );
-        context.drawString(
+        UiChrome.text(context,
                 font,
                 Component.translatable("screen.worldedit_selection_overlay.blocks.loaded", formatLong(snapshot.loadedSelectedCells())),
                 secondColumnX,
@@ -570,7 +619,7 @@ public final class SelectionBlocksScreen extends Screen {
                 0xFFEAF2FF,
                 false
         );
-        context.drawString(
+        UiChrome.text(context,
                 font,
                 Component.translatable("screen.worldedit_selection_overlay.blocks.unloaded", formatLong(snapshot.unloadedSelectedCells())),
                 x,
@@ -578,7 +627,7 @@ public final class SelectionBlocksScreen extends Screen {
                 0xFFFFB88A,
                 false
         );
-        context.drawString(
+        UiChrome.text(context,
                 font,
                 Component.translatable("screen.worldedit_selection_overlay.blocks.entries", formatLong(visibleGroups.size())),
                 secondColumnX,
@@ -591,13 +640,12 @@ public final class SelectionBlocksScreen extends Screen {
     private void drawFilterMenu(GuiGraphics context, int mouseX, int mouseY) {
         int x = filterPanelX();
         int y = filterPanelY();
-        int width = FILTER_PANEL_WIDTH;
+        int width = filterPanelWidth();
         int height = filterPanelHeight();
 
-        context.fill(x, y, x + width, y + height, 0xE4181D25);
-        drawOutline(context, x, y, width, height, 0xFF455267);
+        UiChrome.popup(context, x, y, width, height, UiStyle.current());
 
-        context.drawString(
+        UiChrome.text(context,
                 font,
                 Component.translatable("screen.worldedit_selection_overlay.blocks.filters.title"),
                 x + 10,
@@ -605,7 +653,7 @@ public final class SelectionBlocksScreen extends Screen {
                 0xFFEAF2FF,
                 false
         );
-        context.drawString(
+        UiChrome.text(context,
                 font,
                 Component.translatable(
                         "screen.worldedit_selection_overlay.blocks.filters.excluded",
@@ -617,14 +665,14 @@ public final class SelectionBlocksScreen extends Screen {
                 false
         );
 
-        context.drawCenteredString(
+        UiChrome.centeredText(context,
                 font,
                 Component.translatable("screen.worldedit_selection_overlay.blocks.filters.available"),
                 filterAvailableListX() + filterAvailableListWidth() / 2,
                 y + 52,
                 0xFFCFDEF3
         );
-        context.drawCenteredString(
+        UiChrome.centeredText(context,
                 font,
                 Component.translatable("screen.worldedit_selection_overlay.blocks.filters.hidden"),
                 filterHiddenListX() + filterHiddenListWidth() / 2,
@@ -664,11 +712,11 @@ public final class SelectionBlocksScreen extends Screen {
             int listHeight,
             boolean hiddenColumn
     ) {
-        context.fill(listX, listY, listX + listWidth, listY + listHeight, 0x80202733);
+        UiChrome.fill(context, listX, listY, listX + listWidth, listY + listHeight, 0x80202733);
         drawOutline(context, listX, listY, listWidth, listHeight, 0xFF3A465A);
 
         if (entries.isEmpty()) {
-            context.drawCenteredString(
+            UiChrome.centeredText(context,
                     font,
                     Component.translatable(
                             hiddenColumn
@@ -690,7 +738,7 @@ public final class SelectionBlocksScreen extends Screen {
             int rowColor = hiddenColumn
                     ? ((index & 1) == 0 ? 0x704C3724 : 0x7055402B)
                     : ((index & 1) == 0 ? 0x60303A48 : 0x60404A58);
-            context.fill(listX + 1, rowY, listX + listWidth - 1, rowY + FILTER_ROW_HEIGHT - 1, rowColor);
+            UiChrome.fill(context, listX + 1, rowY, listX + listWidth - 1, rowY + FILTER_ROW_HEIGHT - 1, rowColor);
 
             int iconX = listX + 4;
             int iconY = rowY + 2;
@@ -698,16 +746,16 @@ public final class SelectionBlocksScreen extends Screen {
             if (!stack.isEmpty()) {
                 context.renderItem(stack, iconX, iconY);
             } else {
-                context.drawString(font, "AIR", iconX, rowY + 6, 0xFFE1C58A, false);
+                UiChrome.text(context, font, "AIR", iconX, rowY + 6, 0xFFE1C58A, false);
             }
 
             String countText = formatLong(entry.count());
-            int countWidth = font.width(countText);
+            int countWidth = UiChrome.width(font, countText);
             int labelX = listX + 24;
             int labelMaxWidth = Math.max(28, listWidth - 24 - 8 - countWidth - 6);
             String label = trimWithEllipsis(entry.displayName(), labelMaxWidth);
 
-            context.drawString(
+            UiChrome.text(context,
                     font,
                     label,
                     labelX,
@@ -715,7 +763,7 @@ public final class SelectionBlocksScreen extends Screen {
                     hiddenColumn ? 0xFFFFE3AA : 0xFFE7F0FF,
                     false
             );
-            context.drawString(
+            UiChrome.text(context,
                     font,
                     countText,
                     listX + listWidth - 8 - countWidth,
@@ -1287,9 +1335,23 @@ public final class SelectionBlocksScreen extends Screen {
         return entries.get(absoluteRow).blockId();
     }
 
+    @Override
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent input) {
+        if (isClosing()) return true;
+        if (filtersMenuOpen && input.key() == org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) {
+            setFiltersMenuOpen(false);
+            return true;
+        }
+        return super.keyPressed(input);
+    }
+
     private void setFiltersMenuOpen(boolean open) {
         filtersMenuOpen = open;
+        searchField.setFocused(false);
+        searchField.active = !open;
+        sortButton.active = refreshButton.active = !open;
         updateFilterMenuVisibility();
+        setFocused(open ? filterSearchField : searchField);
     }
 
     private void updateFilterMenuVisibility() {
@@ -1321,9 +1383,9 @@ public final class SelectionBlocksScreen extends Screen {
 
         filterSearchField.setX(x + 10);
         filterSearchField.setY(y + 24);
-        filterSearchField.setWidth(FILTER_PANEL_WIDTH - 20);
+        filterSearchField.setWidth(filterPanelWidth() - 20);
 
-        clearFiltersButton.setX(x + FILTER_PANEL_WIDTH - 74);
+        clearFiltersButton.setX(x + filterPanelWidth() - 74);
         clearFiltersButton.setY(y + height - FILTER_FOOTER_HEIGHT + 6);
     }
 
@@ -1344,7 +1406,7 @@ public final class SelectionBlocksScreen extends Screen {
     private boolean isInsideFilterPanel(double mouseX, double mouseY) {
         int x = filterPanelX();
         int y = filterPanelY();
-        int width = FILTER_PANEL_WIDTH;
+        int width = filterPanelWidth();
         int height = filterPanelHeight();
         return mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height;
     }
@@ -1383,12 +1445,12 @@ public final class SelectionBlocksScreen extends Screen {
     }
 
     private String trimWithEllipsis(String text, int maxWidth) {
-        if (font.width(text) <= maxWidth) {
+        if (UiChrome.width(font, text) <= maxWidth) {
             return text;
         }
 
         String ellipsis = "...";
-        int ellipsisWidth = font.width(ellipsis);
+        int ellipsisWidth = UiChrome.width(font, ellipsis);
         if (ellipsisWidth >= maxWidth) {
             return "";
         }
@@ -1396,7 +1458,7 @@ public final class SelectionBlocksScreen extends Screen {
         int end = text.length();
         while (end > 0) {
             String candidate = text.substring(0, end) + ellipsis;
-            if (font.width(candidate) <= maxWidth) {
+            if (UiChrome.width(font, candidate) <= maxWidth) {
                 return candidate;
             }
             end--;
@@ -1489,22 +1551,27 @@ public final class SelectionBlocksScreen extends Screen {
     }
 
     private static void drawOutline(GuiGraphics context, int x, int y, int width, int height, int color) {
-        context.fill(x, y, x + width, y + 1, color);
-        context.fill(x, y + height - 1, x + width, y + height, color);
-        context.fill(x, y, x + 1, y + height, color);
-        context.fill(x + width - 1, y, x + width, y + height, color);
+        UiChrome.outline(context, x, y, width, height, color);
     }
 
     private void drawScreenBackdrop(GuiGraphics context) {
-        context.fill(0, 0, width, height, 0xA010131A);
+        UiChrome.fill(context, 0, 0, width, height, UiStyle.current() == UiStyle.GLASS ? 0x38000000 : 0x70000000);
     }
 
     private int panelWidth() {
-        int available = Math.max(420, width - PANEL_MARGIN * 2);
-        int adaptive = (int) Math.round(width * 0.72);
-        int preferred = Math.min(PANEL_MAX_WIDTH, adaptive);
-        int clamped = Math.min(available, preferred);
-        return Math.max(Math.min(available, PANEL_MIN_WIDTH), clamped);
+        return Math.max(1, width - panelMargin() * 2);
+    }
+
+    private int panelMargin() {
+        return width < 500 || height < 300 ? 8 : PANEL_MARGIN;
+    }
+
+    private boolean compactToolbar() {
+        return panelWidth() < 600;
+    }
+
+    private boolean hasRail() {
+        return UiStyle.current() == UiStyle.GLASS && !compactToolbar() && height >= 300;
     }
 
     private int panelX() {
@@ -1512,40 +1579,44 @@ public final class SelectionBlocksScreen extends Screen {
     }
 
     private int panelY() {
-        return PANEL_MARGIN;
+        return panelMargin();
     }
 
     private int panelHeight() {
-        return height - PANEL_MARGIN * 2;
+        return Math.max(1, height - panelMargin() * 2);
     }
 
     private int listX() {
-        return panelX() + 10;
+        return hasRail() ? RAIL_WIDTH + 12 : panelX() + 10;
     }
 
     private int listY() {
-        return panelY() + HEADER_HEIGHT;
+        return panelY() + (hasRail() ? 74 : compactToolbar() ? 112 : 112);
     }
 
     private int listWidth() {
-        return panelWidth() - 20;
+        return Math.max(1, panelX() + panelWidth() - 10 - listX());
     }
 
     private int listHeight() {
-        return panelHeight() - HEADER_HEIGHT - FOOTER_HEIGHT;
+        return Math.max(1, panelHeight() - (listY() - panelY()) - (UiStyle.current() == UiStyle.LEGACY ? FOOTER_HEIGHT : 8));
     }
 
     private int filterPanelX() {
-        return panelX() + panelWidth() - FILTER_PANEL_WIDTH - 10;
+        return panelX() + panelWidth() - filterPanelWidth() - 10;
+    }
+
+    private int filterPanelWidth() {
+        return Math.max(80, Math.min(FILTER_PANEL_WIDTH, panelWidth() - 20));
     }
 
     private int filterPanelY() {
-        return panelY() + 52;
+        return panelY() + (compactToolbar() ? 10 : 52);
     }
 
     private int filterPanelHeight() {
-        int maxByScreen = Math.max(170, panelHeight() - 64);
-        return Math.min(FILTER_PANEL_MAX_HEIGHT, maxByScreen);
+        int available = panelHeight() - (compactToolbar() ? 20 : 64);
+        return Math.max(1, Math.min(FILTER_PANEL_MAX_HEIGHT, available));
     }
 
     private int filterListY() {
@@ -1557,7 +1628,7 @@ public final class SelectionBlocksScreen extends Screen {
     }
 
     private int filterAvailableListWidth() {
-        int totalInner = FILTER_PANEL_WIDTH - 20;
+        int totalInner = filterPanelWidth() - 20;
         return (totalInner - FILTER_COLUMNS_GAP) / 2;
     }
 
@@ -1566,7 +1637,7 @@ public final class SelectionBlocksScreen extends Screen {
     }
 
     private int filterHiddenListWidth() {
-        int totalInner = FILTER_PANEL_WIDTH - 20;
+        int totalInner = filterPanelWidth() - 20;
         return totalInner - filterAvailableListWidth() - FILTER_COLUMNS_GAP;
     }
 

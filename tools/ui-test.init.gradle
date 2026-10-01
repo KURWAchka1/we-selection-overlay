@@ -1,0 +1,28 @@
+// Production JAR, real Minecraft client: UI bounds, persistence, screenshots, and CPU samples.
+allprojects {
+    afterEvaluate {
+        def root = file('../tools/ui-test')
+        def tests = sourceSets.create('uiTest') {
+            java.srcDir(new File(root, 'java'))
+            resources.srcDir(new File(root, 'resources'))
+            compileClasspath += sourceSets.main.compileClasspath
+        }
+        dependencies.add('uiTestImplementation', fabricApi.module('fabric-client-gametest-api-v1', fabric_version))
+        def testJar = tasks.register('uiTestJar', Jar) {
+            from(tests.output)
+            archiveClassifier = 'ui-test-only'
+        }
+        def modsConfig = configurations.create('uiProductionMods')
+        dependencies.add(modsConfig.name, "net.fabricmc.fabric-api:fabric-api:${fabric_version}")
+        dependencies.add(modsConfig.name, fabricApi.module('fabric-client-gametest-api-v1', fabric_version))
+        def taskType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')
+        tasks.register('testUniversalUi', taskType) {
+            dependsOn(testJar)
+            mods.setFrom(modsConfig, testJar, file("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar"))
+            runDir = file('run-ui-test')
+            jvmArgs.addAll('-Xmx2G', '-Dfabric.client.gametest', '-Dfabric.debug.disableModShuffle=true', '-Dweso.ui.profile=true')
+            if (project.findProperty('ui_fast') == 'true') jvmArgs.add('-Dweso.ui.skipProfile=true')
+            programArgs.addAll('--width', '1920', '--height', '1080')
+        }
+    }
+}

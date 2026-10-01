@@ -18,6 +18,20 @@ import java.util.zip.ZipInputStream;
 import static org.junit.jupiter.api.Assertions.*;
 
 class UniversalArtifactTest {
+    @Test
+    void uiResourcesAndNoticesAreSharedOnce() throws Exception {
+        try (var jar = artifact()) {
+            String base = "assets/worldedit_selection_overlay/";
+            for (String name : List.of("font/ui.json", "font/manrope.ttf", "font/manrope-ofl.txt",
+                    "shaders/core/ui_surface.fsh", "shaders/core/ui_spectrum.fsh",
+                    "textures/gui/ui/surface.png", "textures/gui/ui/lucide-license.txt")) {
+                assertEquals(1L, jar.stream().filter(entry -> entry.getName().equals(base + name)).count(), name);
+            }
+            assertEquals(9L, jar.stream().filter(entry -> entry.getName().startsWith(base + "textures/gui/ui/")
+                    && entry.getName().endsWith(".png") && !entry.getName().endsWith("/surface.png")).count());
+        }
+    }
+
     private JarFile artifact() throws Exception {
         return new JarFile(System.getProperty("universal.jar"));
     }

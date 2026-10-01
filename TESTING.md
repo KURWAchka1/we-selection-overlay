@@ -1,10 +1,13 @@
 # Verification
 
-Current source verification: 2026-09-29. The test worlds and logs are local generated data and are not committed.
+Current source verification: 2026-10-01. The test worlds and logs are local generated data and are not committed.
 
 ## Release build
 
 The root README build command completed for all six runtimes and both universal packagers. Packager tests checked metadata, version selection, Java bytecode boundaries, and bundled license notices. The resulting Fabric and NeoForge JARs were each under 1 MiB.
+The current tests also verify that UI assets/notices are shared once. JAR and
+runtime input files are declared test inputs so changed binaries invalidate
+previous test results.
 
 ## In-world isolation regression
 
@@ -14,6 +17,8 @@ The packaged universal JAR, not the version-specific source module, was loaded f
 - Each selected block exposes the face touching a hidden block; unselected blocks do not claim that face.
 - Selected block vertices use full light and no ambient or directional shading. Fabric checks vanilla smooth/flat and Indigo paths; NeoForge checks vanilla with ambient occlusion on and off.
 - Screenshots are captured for visual inspection.
+- The actual compact settings screen is opened and captured in every runtime,
+  exercising the rounded-surface shader, font, and icon resources.
 
 | Loader | Minecraft | Result |
 | --- | --- | --- |
@@ -44,6 +49,32 @@ Run NeoForge game tests from the NeoForge universal packager:
 
 Set `JAVA_HOME` to JDK 21 for 1.21.11 and JDK 25 for 26.x. Run the NeoForge default build again after using an overridden version.
 
+### NeoForge Fixture Worlds
+
+Before the NeoForge client tests, prepare a disposable vanilla world made with
+each matching game version. Copy the complete save directory, including
+`level.dat`, to the packager's corresponding path:
+
+```text
+run-isolation-test-1.21.11/saves/weso-fixture/
+run-isolation-test-26.1/saves/weso-fixture/
+run-isolation-test-26.2/saves/weso-fixture/
+```
+
+Do not use a valued player world: the fixture overwrites a small test area and
+changes player mode/location. Existing generated test worlds can be reused;
+the world folders are ignored by Git. Never copy a newer-version world into an
+older runtime. `tools/test-ui-matrix.ps1` checks these paths before each launch.
+
+### UI Verification
+
+The production Fabric universal JAR also passed the dedicated 26.2 UI fixture:
+compact settings, full-screen palette/inspector, three styles, optional blur,
+popup focus and confirmation, Reduced Motion, native input caret padding,
+equal sidebar margins, and scrolling/bounds at 1920x1080 and 1280x720 with
+requested scales 2x/3x/4x. See [UI_VALIDATION.md](UI_VALIDATION.md) for the
+reproduction command, actual screenshots, measured performance, and limits.
+
 ## Remaining coverage
 
-This suite does not yet exercise Sodium, Iris/shaders, LabyMod, a real local WorldEdit selection, remote CUI, or clipboard command behavior. These require separate compatibility runs before release claims. It also does not replace human visual review at different GUI scales.
+This suite does not yet exercise Sodium, Iris/shaders, LabyMod, a real local WorldEdit selection, remote CUI, or clipboard command behavior. These require separate compatibility runs before release claims. Automated bounds checks and screenshot review do not replace user visual acceptance or live narration/IME testing.

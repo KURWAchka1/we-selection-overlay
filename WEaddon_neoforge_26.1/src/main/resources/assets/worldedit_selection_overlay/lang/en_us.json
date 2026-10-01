@@ -13,8 +13,20 @@
   "message.worldedit_selection_overlay.render_mode.smooth": "Smooth",
   "message.worldedit_selection_overlay.ruler.length_blocks": "%s blocks",
   "screen.worldedit_selection_overlay.settings.title": "Overlay Settings",
+  "screen.worldedit_selection_overlay.settings.compact_title": "Selection Overlay",
+  "screen.worldedit_selection_overlay.settings.ui_options": "Appearance",
+  "screen.worldedit_selection_overlay.settings.reduced_motion": "Reduced motion",
+  "screen.worldedit_selection_overlay.settings.blur": "Background blur",
+  "screen.worldedit_selection_overlay.settings.overlay_label": "Selection overlay",
+  "screen.worldedit_selection_overlay.settings.grid_label": "Selection grid",
+  "screen.worldedit_selection_overlay.settings.clipboard_preview_label": "Clipboard preview",
+  "screen.worldedit_selection_overlay.settings.ruler_label": "Dimension ruler",
+  "screen.worldedit_selection_overlay.settings.style.glass": "Glass",
+  "screen.worldedit_selection_overlay.settings.style.studio": "Studio",
+  "screen.worldedit_selection_overlay.settings.style.legacy": "Classic",
+  "screen.worldedit_selection_overlay.settings.motion": "Animations: %s",
   "screen.worldedit_selection_overlay.settings.hint": "Configure display options and close.",
-  "screen.worldedit_selection_overlay.settings.colors_short": "✎",
+  "screen.worldedit_selection_overlay.settings.colors_short": "Overlay palette",
   "screen.worldedit_selection_overlay.settings.overlay": "Show selection overlay: %s",
   "screen.worldedit_selection_overlay.settings.grid": "Show grid: %s",
   "screen.worldedit_selection_overlay.settings.clipboard_preview": "Clipboard preview: %s",
@@ -125,7 +137,6 @@
   "screen.worldedit_selection_overlay.blocks.filters.warning": "Filters hide %s block types (%s selected cells).",
   "screen.worldedit_selection_overlay.blocks.states_count": "%s states",
   "screen.worldedit_selection_overlay.blocks.empty_filter": "No blocks match your search/filter.",
-
   "state.worldedit_selection_overlay.property.age": "Age",
   "state.worldedit_selection_overlay.property.attached": "Attached",
   "state.worldedit_selection_overlay.property.attachment": "Attachment",
@@ -189,7 +200,6 @@
   "state.worldedit_selection_overlay.property.vertical_direction": "Vertical",
   "state.worldedit_selection_overlay.property.waterlogged": "Water",
   "state.worldedit_selection_overlay.property.west": "West",
-
   "state.worldedit_selection_overlay.value.true": "Yes",
   "state.worldedit_selection_overlay.value.false": "No",
   "state.worldedit_selection_overlay.value.north": "North",
@@ -239,5 +249,9 @@
   "state.worldedit_selection_overlay.value.cooldown": "Cooldown",
   "state.worldedit_selection_overlay.value.small": "Small",
   "state.worldedit_selection_overlay.value.large": "Large",
-  "state.worldedit_selection_overlay.value.tall": "Tall"
+  "state.worldedit_selection_overlay.value.tall": "Tall",
+  "screen.worldedit_selection_overlay.blocks.summary.cells": "Cells: %s",
+  "screen.worldedit_selection_overlay.blocks.summary.types": "Types: %s",
+  "screen.worldedit_selection_overlay.blocks.summary.loaded": "Loaded: %s",
+  "screen.worldedit_selection_overlay.blocks.summary.unloaded": "Unloaded: %s"
 }

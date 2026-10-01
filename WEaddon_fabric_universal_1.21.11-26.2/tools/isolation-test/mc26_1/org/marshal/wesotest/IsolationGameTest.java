@@ -45,6 +45,8 @@ public final class IsolationGameTest implements FabricClientGameTest {
             context.waitFor(client -> client.screen != null
                     && client.screen.getClass().getSimpleName().equals("OverlaySettingsScreen"));
             Object overlay = context.computeOnClient(client -> field(client.screen, "overlayClient"));
+            context.waitTicks(12);
+            context.takeScreenshot("ui-settings");
             context.runOnClient(client -> {
                 Object manager = field(overlay, "selectionManager");
                 call(manager, "setFallbackCuboidPoint", 0, new BlockPos(14, 65, 14));

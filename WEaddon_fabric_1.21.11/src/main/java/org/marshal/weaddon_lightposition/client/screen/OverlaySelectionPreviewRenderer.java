@@ -16,6 +16,7 @@ import java.util.List;
 
 final class OverlaySelectionPreviewRenderer {
     private static final int MAX_PREVIEW_SEGMENTS = 1800;
+    private static final ProjectionCache PROJECTION = new ProjectionCache();
     private static final SelectionRegion CUBOID_REGION = createCuboid();
     private static final SelectionRegion POLYGON_REGION = createPolygon();
     private static final SelectionRegion ELLIPSOID_REGION = createEllipsoid();
@@ -45,7 +46,7 @@ final class OverlaySelectionPreviewRenderer {
         if (group == OverlayColorSettingsScreen.ColorGroup.RULER) {
             renderRulerPreview(context, x, y, width, height);
         }
-        drawOutline(context, x, y, width, height, 0xFF2E3B4D);
+        if (UiStyle.current() == UiStyle.LEGACY) drawOutline(context, x, y, width, height, 0xFF2E3B4D);
     }
 
     private static void renderRegion(
@@ -65,32 +66,35 @@ final class OverlaySelectionPreviewRenderer {
             return;
         }
 
-        Bounds bounds = bounds(segments);
-        Vec3d center = bounds.center();
-        double maxSpan = Math.max(1.0, bounds.maxSpan());
-        double scale = Math.min(width, height) * 0.50 * zoom / maxSpan;
-        double yawRad = Math.toRadians(yaw);
-        double pitchRad = Math.toRadians(pitch);
-        double cosYaw = Math.cos(yawRad);
-        double sinYaw = Math.sin(yawRad);
-        double cosPitch = Math.cos(pitchRad);
-        double sinPitch = Math.sin(pitchRad);
+        if (!PROJECTION.matches(segments, x, y, width, height, yaw, pitch, zoom)) {
+            Bounds bounds = bounds(segments);
+            Vec3d center = bounds.center();
+            double maxSpan = Math.max(1.0, bounds.maxSpan());
+            double scale = Math.min(width, height) * 0.50 * zoom / maxSpan;
+            double yawRad = Math.toRadians(yaw);
+            double pitchRad = Math.toRadians(pitch);
+            double cosYaw = Math.cos(yawRad);
+            double sinYaw = Math.sin(yawRad);
+            double cosPitch = Math.cos(pitchRad);
+            double sinPitch = Math.sin(pitchRad);
 
-        int step = Math.max(1, (segments.size() + MAX_PREVIEW_SEGMENTS - 1) / MAX_PREVIEW_SEGMENTS);
-        ArrayList<ProjectedSegment> projected = new ArrayList<>(Math.min(segments.size(), MAX_PREVIEW_SEGMENTS));
-        for (int i = 0; i < segments.size(); i += step) {
-            LineSegment segment = segments.get(i);
-            ProjectedPoint from = project(segment.from(), center, cosYaw, sinYaw, cosPitch, sinPitch, x + width * 0.5, y + height * 0.52, scale);
-            ProjectedPoint to = project(segment.to(), center, cosYaw, sinYaw, cosPitch, sinPitch, x + width * 0.5, y + height * 0.52, scale);
-            if (!from.visible() || !to.visible()) {
-                continue;
+            int step = Math.max(1, (segments.size() + MAX_PREVIEW_SEGMENTS - 1) / MAX_PREVIEW_SEGMENTS);
+            ArrayList<ProjectedSegment> projected = new ArrayList<>(Math.min(segments.size(), MAX_PREVIEW_SEGMENTS));
+            for (int i = 0; i < segments.size(); i += step) {
+                LineSegment segment = segments.get(i);
+                ProjectedPoint from = project(segment.from(), center, cosYaw, sinYaw, cosPitch, sinPitch, x + width * 0.5, y + height * 0.52, scale);
+                ProjectedPoint to = project(segment.to(), center, cosYaw, sinYaw, cosPitch, sinPitch, x + width * 0.5, y + height * 0.52, scale);
+                if (!from.visible() || !to.visible()) {
+                    continue;
+                }
+                projected.add(new ProjectedSegment(from, to, segment.color(), Math.max(1.0f, segment.width()), segment.slot(), (from.depth() + to.depth()) * 0.5));
             }
-            projected.add(new ProjectedSegment(from, to, segment.color(), Math.max(1.0f, segment.width()), segment.slot(), (from.depth() + to.depth()) * 0.5));
-        }
 
+            PROJECTION.update(segments, projected, x, y, width, height, yaw, pitch, zoom);
+        }
         context.enableScissor(x, y, x + width, y + height);
         try {
-            for (ProjectedSegment segment : projected) {
+            for (ProjectedSegment segment : PROJECTION.projected) {
                 drawLineClipped(
                         context,
                         segment.from().x(),
@@ -160,6 +164,7 @@ final class OverlaySelectionPreviewRenderer {
     }
 
     private static void drawViewportBackground(DrawContext context, int x, int y, int width, int height) {
+        if (UiStyle.current() != UiStyle.LEGACY) return;
         context.fillGradient(x, y, x + width, y + height, 0xFF111927, 0xFF070A0F);
     }
 
@@ -333,6 +338,25 @@ final class OverlaySelectionPreviewRenderer {
         context.fill(x, y + height - 1, x + width, y + height, color);
         context.fill(x, y, x + 1, y + height, color);
         context.fill(x + width - 1, y, x + width, y + height, color);
+    }
+
+    private static final class ProjectionCache {
+        private List<LineSegment> source;
+        private List<ProjectedSegment> projected = List.of();
+        private int x, y, width, height;
+        private float yaw, pitch, zoom;
+
+        private boolean matches(List<LineSegment> source, int x, int y, int width, int height, float yaw, float pitch, float zoom) {
+            return this.source == source && this.x == x && this.y == y && this.width == width && this.height == height
+                    && this.yaw == yaw && this.pitch == pitch && this.zoom == zoom;
+        }
+
+        private void update(List<LineSegment> source, List<ProjectedSegment> projected, int x, int y, int width, int height, float yaw, float pitch, float zoom) {
+            this.source = source;
+            this.projected = projected;
+            this.x = x; this.y = y; this.width = width; this.height = height;
+            this.yaw = yaw; this.pitch = pitch; this.zoom = zoom;
+        }
     }
 
     private record ProjectedPoint(double x, double y, double depth, boolean visible) {

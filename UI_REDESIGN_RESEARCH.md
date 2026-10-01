@@ -1,6 +1,7 @@
 # UI redesign research and implementation contract
 
-Status: research and design only. No redesigned UI is implemented by this document.
+Status: shader-backed prototype implemented in all six runtimes; automated UI,
+packaging, and in-world regression checks passed. User visual acceptance pending.
 Reviewed: 2026-10-01. Recheck version-specific API details before writing code.
 
 ## Prototype rejection and supplied JAR inspection (2026-10-01)
@@ -8,8 +9,7 @@ Reviewed: 2026-10-01. Recheck version-specific API details before writing code.
 The user rejected the primitive-based Glass/Studio prototype: drawing stepped
 corners and repeated borders with GUI fills did not deliver the soft, polished
 reference. Do not resume that implementation or treat a recolor as a solution.
-The latest instruction is to inspect the supplied JAR before choosing between
-restoring the old appearance and implementing a different renderer.
+The supplied JAR was inspected before choosing the new renderer described below.
 
 Inspection was read-only: ZIP entries, resource metadata, and `javap -p -c`.
 The reference mod was not executed, installed, decompiled into this repository,
@@ -71,10 +71,44 @@ Minecraft version; a shared visual specification is not a shared binary API.
 Start with the supported single background blur, not Kawaii's multi-layer
 capture machinery. Keep settings compact and inspector/palette full-screen.
 
-Current state: experimental source styling has been removed from the working
-tree, with a recovery patch saved outside the repository. Generated release
-JARs have not been rebuilt following this inspection. No new rendering
-implementation or runtime performance claim is made here.
+The rejected primitive prototype was removed before implementing the current
+shader-backed UI. Its recovery patch remains outside the repository.
+
+## Implemented prototype (2026-10-01)
+
+- Glass uses restrained translucent charcoal surfaces and a mint accent;
+  Studio uses opaque work surfaces, an amber accent, and a top inspector toolbar.
+  Classic retains native buttons as a fallback. The appearance menu is in compact settings.
+- Rounded surfaces use a 32 x 32 signed-distance texture, a small fragment shader,
+  and native GUI pipeline submissions. There are no new renderer mixins, raw
+  OpenGL calls, per-panel framebuffers, or bundled general-purpose GUI engines.
+- Manrope at a subtle 450 weight is rendered and cached by Minecraft's TTF provider. Small
+  Lucide PNG icons are separately licensed. Native input editing, focus,
+  narration, selection, IME, and tooltips remain on Minecraft widgets.
+- Settings remain at most 286 x 304 logical pixels, with internal scrolling
+  on shorter screens. The inspector and palette are full-screen unframed layouts,
+  not nested bordered panels. Palette shape and element rows share symmetric
+  sidebar margins; RGBA labels sit beside their own fields; sliders share track
+  widths and contained thumbs. Isolation checkboxes have no black backing,
+  and preset samples have no small panel borders.
+- Opacity transitions use a monotonic clock: 190 ms opening, 130 ms closing,
+  100 ms hover. They do not move hitboxes or animate world geometry. Reduced
+  Motion and Classic resolve states immediately; a second close is immediate.
+- Backdrop blur is optional and off by default. The native screen wrapper calls
+  the background pass; the mod must not call it again from its content renderer.
+  A real-client test caught and removed that double submission.
+- The HSV plane is one GPU quad. Selection preview projection is reused until
+  the segment list, camera, zoom, or viewport changes. Geometry and rendering
+  budgets are not invalidated by hover/open/close animation.
+- Popovers capture clicks, wheel input, keyboard focus, and underlying widget
+  hover. Preset confirmation still requires the Apply click; Escape cancels.
+- Shared helper mappings are maintained in `tools/sync-ui.mjs`; version-specific
+  screens retain their platform APIs. A universal JAR ships shared assets once,
+  from its 1.21.11 runtime.
+
+See `UI_VALIDATION.md` for screenshots, measured timings, reproducible test
+commands, and remaining coverage. Visual acceptance by the user is separate
+from passing compilation and runtime tests.
 
 ## User intent
 
@@ -96,7 +130,7 @@ or layout to copy. Do not copy another mod's branding, textures, or source code.
 - Open, close, hover, selection, and menu transitions should feel smooth, but
   they must never delay an urgent Escape or make controls feel unresponsive.
 
-## What the current code actually does
+## Baseline Before Implementation
 
 The paths below describe the six version-specific runtimes; the Fabric 26.2
 files are convenient reference copies, not the sole implementation target.

@@ -177,6 +177,8 @@ tasks.named('build') { dependsOn(tasks.named('archiveVersionArtifact')) }
 tasks.named('test') {
     useJUnitPlatform()
     dependsOn(universalJar)
+    inputs.file(universalJar.flatMap { it.archiveFile })
+    inputs.files(app1211, app261, app262)
     systemProperty 'universal.jar', universalJar.get().archiveFile.get().asFile.absolutePath
     systemProperty 'release.version', mod_version
     systemProperty 'runtime.inputs', [app1211, app261, app262].collect { it.absolutePath }.join(File.pathSeparator)

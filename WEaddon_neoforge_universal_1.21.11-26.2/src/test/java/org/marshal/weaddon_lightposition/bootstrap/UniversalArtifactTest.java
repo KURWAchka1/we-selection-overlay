@@ -14,6 +14,20 @@ import java.util.jar.JarFile;
 import static org.junit.jupiter.api.Assertions.*;
 
 class UniversalArtifactTest {
+    @Test
+    void uiResourcesAndNoticesAreSharedOnce() throws Exception {
+        try (var jar = new JarFile(System.getProperty("universal.jar"))) {
+            String base = "assets/worldedit_selection_overlay/";
+            for (String name : List.of("font/ui.json", "font/manrope.ttf", "font/manrope-ofl.txt",
+                    "shaders/core/ui_surface.fsh", "shaders/core/ui_spectrum.fsh",
+                    "textures/gui/ui/surface.png", "textures/gui/ui/lucide-license.txt")) {
+                assertEquals(1L, jar.stream().filter(entry -> entry.getName().equals(base + name)).count(), name);
+            }
+            assertEquals(9L, jar.stream().filter(entry -> entry.getName().startsWith(base + "textures/gui/ui/")
+                    && entry.getName().endsWith(".png") && !entry.getName().endsWith("/surface.png")).count());
+        }
+    }
+
     private Config metadata(JarFile jar) throws Exception {
         var entry = jar.getEntry("META-INF/neoforge.mods.toml");
         assertNotNull(entry);
