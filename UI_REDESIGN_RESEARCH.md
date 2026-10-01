@@ -1,7 +1,80 @@
 # UI redesign research and implementation contract
 
 Status: research and design only. No redesigned UI is implemented by this document.
-Reviewed: 2026-09-29. Recheck version-specific API details before writing code.
+Reviewed: 2026-10-01. Recheck version-specific API details before writing code.
+
+## Prototype rejection and supplied JAR inspection (2026-10-01)
+
+The user rejected the primitive-based Glass/Studio prototype: drawing stepped
+corners and repeated borders with GUI fills did not deliver the soft, polished
+reference. Do not resume that implementation or treat a recolor as a solution.
+The latest instruction is to inspect the supplied JAR before choosing between
+restoring the old appearance and implementing a different renderer.
+
+Inspection was read-only: ZIP entries, resource metadata, and `javap -p -c`.
+The reference mod was not executed, installed, decompiled into this repository,
+or used as a source of redistributable code/assets.
+
+- Supplied filename: `kawaii-privacy-0.3.33.jar`; its `fabric.mod.json` reports
+  Kawaii `0.3.32`, targeting Fabric/Minecraft `1.21.11` and Java 21. Conclusions
+  apply to this exact binary, not necessarily other Kawaii releases.
+- SHA-256: `6635543BEA1A69B4B745E883AFFE1DC6FFC2C724B2D2C4D5E0B8AC37ED4234B1`.
+- `api.ui.UI` extends `BaseScreen`, which extends Minecraft's screen class.
+  Its `renderPanel` calls `RectUtil.drawClientRect`. That helper constructs
+  `BuiltGlass` and passes it to `Render2D.glass`; this is an active menu path,
+  not merely an unused effect bundled in the archive.
+- `GlassRenderer.submit` requests a backdrop capture from `BlurFramebuffer`
+  and submits `GlassRenderState` into Minecraft's GUI render state. The renderer
+  uses custom Blaze3D `RenderPipeline`s, GPU buffers, masks, and scissors.
+- `BlurFramebuffer` exposes Kawase down/up pipelines, reusable target pools,
+  stable backdrop storage, capture limits, and preparation/binding methods.
+  This is actual image processing, not a translucent rectangle pretending to
+  be blurred glass. Pooling/batching are present; their real performance was
+  not benchmarked in this inspection.
+- `CoreShaders`, `GlassShaders`, and `KawaseShaders` embed GLSL in class
+  constants. The missing external `.fsh`/`.vsh` resources therefore do not mean
+  that the mod has no shaders. The core sources include rounded-edge/SDF
+  blending, `smoothstep`, and derivative-based smoothing operations.
+- Menu bytecode calls the custom `Fonts.draw` and `Fonts.msdf` paths.
+  Font PNG/JSON atlases include Montserrat and other families; inspected
+  Montserrat metadata declares `mtsdf`, a distance range, glyph metrics, and
+  atlas dimensions. This typography differs from vanilla bitmap text.
+- `GuiMotionAnimation` tracks alpha, scale, blur radius, closing state, and
+  interaction eligibility using `System.nanoTime`. The inspected animation
+  uses a 500 ms duration. `BaseScreen` supports a detached closing overlay.
+  Copying the architecture does not require copying its duration, parallax,
+  screen shattering, or motion blur.
+- `UiBatch` and the font renderers group work and retain GPU/resource caches.
+  Conversely, `GuiRendererMixin`, `GuiRenderStateMixin`, and
+  `ShaderManagerEmbedMixin` show that this full renderer hooks engine internals.
+  Its implementation cannot simply be dropped into every supported runtime.
+- The archive is about 41.4 MiB. Font assets alone contribute about 8.6 MiB
+  compressed; it also contains cosmetics, audio, native libraries, and nested
+  dependencies unrelated to our UI. The archive size is not an estimate of the
+  minimum cost of a small rounded-panel renderer.
+
+Decision: a new, reduced rendering approach is appropriate for this mod.
+Keep the stable old screens as the implementation baseline; do not reapply the
+rejected primitive chrome. First validate a single compact settings screen with
+smooth rounded surfaces, deliberate typography, real hover/open/close states,
+and a readable non-blurred fallback before migrating the inspector and palette.
+Use a small independently implemented rounded-surface pipeline and licensed
+font/icon resources. Do not copy the supplied mod's classes, GLSL, atlases, or
+branding, and do not import its general rendering engine or unrelated effects.
+
+The documented native GUI state/pipeline route is supported by
+[NeoForge's GUI element documentation](https://docs.neoforged.net/docs/1.21.11/rendering/screens/#guielementrenderstate).
+Fabric's [GUI drawing documentation](https://docs.fabricmc.net/develop/rendering/gui-graphics)
+also describes pipeline-backed texture drawing, scissors, and text. Verify
+submission and shader-resource hooks separately for Fabric/NeoForge and each
+Minecraft version; a shared visual specification is not a shared binary API.
+Start with the supported single background blur, not Kawaii's multi-layer
+capture machinery. Keep settings compact and inspector/palette full-screen.
+
+Current state: experimental source styling has been removed from the working
+tree, with a recovery patch saved outside the repository. Generated release
+JARs have not been rebuilt following this inspection. No new rendering
+implementation or runtime performance claim is made here.
 
 ## User intent
 
