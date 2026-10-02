@@ -3,9 +3,9 @@ package org.marshal.weaddon_lightposition.preview;
 import java.util.Properties;
 
 public record PreviewOptions(boolean enabled, float opacity, int maxCells, int maxRenderBlocks,
-                             int renderDistance, boolean statistics, int debounceMillis) {
+                             int renderDistance, boolean statistics) {
     public static PreviewOptions defaults() {
-        return new PreviewOptions(true, 0.65f, 65_536, 2_048, 96, true, 200);
+        return new PreviewOptions(true, 0.65f, 65_536, 2_048, 96, true);
     }
 
     public static PreviewOptions load(Properties values) {
@@ -15,12 +15,11 @@ public record PreviewOptions(boolean enabled, float opacity, int maxCells, int m
                 integer(values, "maxCells", d.maxCells, 256, 262_144),
                 integer(values, "maxRenderBlocks", d.maxRenderBlocks, 64, 8_192),
                 integer(values, "renderDistance", d.renderDistance, 16, 192),
-                Boolean.parseBoolean(values.getProperty("statistics", "true")),
-                integer(values, "debounceMillis", d.debounceMillis, 100, 1_000));
+                Boolean.parseBoolean(values.getProperty("statistics", "true")));
     }
 
     public PreviewOptions withEnabled(boolean value) {
-        return new PreviewOptions(value, opacity, maxCells, maxRenderBlocks, renderDistance, statistics, debounceMillis);
+        return new PreviewOptions(value, opacity, maxCells, maxRenderBlocks, renderDistance, statistics);
     }
 
     public Properties properties() {
@@ -31,7 +30,6 @@ public record PreviewOptions(boolean enabled, float opacity, int maxCells, int m
         p.setProperty("maxRenderBlocks", Integer.toString(maxRenderBlocks));
         p.setProperty("renderDistance", Integer.toString(renderDistance));
         p.setProperty("statistics", Boolean.toString(statistics));
-        p.setProperty("debounceMillis", Integer.toString(debounceMillis));
         return p;
     }
 

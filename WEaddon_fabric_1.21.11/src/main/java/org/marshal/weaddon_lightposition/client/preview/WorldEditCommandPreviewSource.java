@@ -41,6 +41,9 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
     private static final Direction[] DIRECTIONS = Direction.values();
     private final AtomicLong epoch = new AtomicLong();
     private final AtomicBoolean queued = new AtomicBoolean();
+    private final AtomicBoolean selectionDirty = new AtomicBoolean();
+    private record Request(long token, String draft, PreviewOptions options, UUID player, Object level, IntegratedServer server) { }
+    private volatile Request requested;
     private volatile CommandPreviewSnapshot snapshot = CommandPreviewSnapshot.empty();
     // Only the integrated server thread owns these fields.
     private long jobEpoch = -1;
@@ -50,6 +53,7 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
     private long revision;
     private volatile long idleEpoch = -1;
     private int retryAt;
+    private int workTick = -1;
 
     @Override public void tick(MinecraftClient client, String draft, PreviewOptions options) {
         long token = epoch.get();
@@ -59,15 +63,16 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
             if (!draft.isEmpty()) snapshot = CommandPreviewSnapshot.status(CommandPreviewSnapshot.State.UNAVAILABLE, "local_only", "");
             return;
         }
+        requested = new Request(token, draft, options, client.player.getUuid(), client.world, server);
         if (!queued.compareAndSet(false, true)) return;
-        UUID id = client.player.getUuid();
-        Object level = client.world;
         server.execute(() -> {
+            Request request = requested;
+            long currentToken = request.token;
             try {
-                if (epoch.get() != token) return;
-                if (jobEpoch != token) { jobEpoch = token; job = null; failed = false; terminalFailure = false; }
-                if (draft.isEmpty()) { job = null; idleEpoch = token; return; }
-                ServerPlayerEntity nativePlayer = server.getPlayerManager().getPlayer(id);
+                if (epoch.get() != currentToken || request.server != server) return;
+                if (jobEpoch != currentToken) { jobEpoch = currentToken; job = null; failed = false; terminalFailure = false; }
+                if (request.draft.isEmpty()) { job = null; idleEpoch = currentToken; return; }
+                ServerPlayerEntity nativePlayer = server.getPlayerManager().getPlayer(request.player);
                 if (nativePlayer == null) return;
                 Player actor = FabricAdapter.adaptPlayer(nativePlayer);
                 LocalSession session = WorldEdit.getInstance().getSessionManager().get(actor);
@@ -79,30 +84,48 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
                     return;
                 }
                 if (failed && (terminalFailure || server.getTicks() < retryAt)) return;
-                failed = false;
-                if (job == null) job = createJob(actor, session, draft, options);
+                // Rapid input replaces the queued request; it never queues one task per character.
+                if (workTick == server.getTicks()) return;
+                workTick = server.getTicks();
                 long deadline = System.nanoTime() + WORK_NANOS;
-                if (!job.captured) capture(nativePlayer, actor, job, deadline);
-                else if (!job.program.complete()) job.program.advance(WORK_STEPS, deadline);
-                else if (job.needsValidation) verify(nativePlayer, actor, session, job, deadline);
-                else if (!job.published) finish(job, client, level, token, options, deadline);
-                else if (server.getTicks() % 10 == 0 || job.verifying != null) verify(nativePlayer, actor, session, job, deadline);
-                if (!job.published) publish(client, level, token, new CommandPreviewSnapshot(++revision,
+                failed = false;
+                if (job == null) job = createJob(actor, session, request.draft, request.options);
+                if (job.published) {
+                    if (selectionDirty.getAndSet(false) || server.getTicks() % 10 == 0 || job.verifying != null)
+                        verify(nativePlayer, actor, session, job, deadline);
+                    return;
+                }
+                // Finished phases fall through immediately, sharing one budget rather than one tick each.
+                while (epoch.get() == currentToken && !job.published && System.nanoTime() < deadline) {
+                    if (!job.captured) {
+                        capture(nativePlayer, actor, job, deadline);
+                    } else if (!job.program.complete()) {
+                        job.program.advance(WORK_STEPS, deadline);
+                    } else if (job.needsValidation) {
+                        verify(nativePlayer, actor, session, job, deadline);
+                    } else {
+                        finish(job, client, request.level, currentToken, request.options, deadline);
+                    }
+                }
+                if (epoch.get() == currentToken && !job.published && job.progressScanned != job.scanned) {
+                    job.progressScanned = job.scanned;
+                    publish(client, request.level, currentToken, new CommandPreviewSnapshot(++revision,
                         CommandPreviewSnapshot.State.COMPUTING, "", "", job.scanned, job.total,
                         job.program != null && job.program.random(), false, List.of(), PreviewStatistics.empty()));
+                }
             } catch (IncompleteRegionException ex) {
-                fail(client, level, token, CommandPreviewSnapshot.State.UNAVAILABLE, "selection", "");
+                fail(client, request.level, currentToken, CommandPreviewSnapshot.State.UNAVAILABLE, "selection", "");
             } catch (WorldEditException ex) {
-                fail(client, level, token, CommandPreviewSnapshot.State.ERROR, "invalid", shortDetail(ex.getMessage()));
+                fail(client, request.level, currentToken, CommandPreviewSnapshot.State.ERROR, "invalid", shortDetail(ex.getMessage()));
             } catch (IllegalArgumentException ex) {
                 String reason = ex.getMessage();
                 boolean limit = "too_large".equals(reason) || "worldedit_limit".equals(reason);
-                fail(client, level, token, limit ? CommandPreviewSnapshot.State.LIMIT : CommandPreviewSnapshot.State.ERROR,
+                fail(client, request.level, currentToken, limit ? CommandPreviewSnapshot.State.LIMIT : CommandPreviewSnapshot.State.ERROR,
                         reason == null ? "invalid" : reason, "");
             } catch (RuntimeException | LinkageError ex) {
                 terminalFailure = true;
                 LOGGER.warn("Command preview failed safely; no editing session was created.", ex);
-                fail(client, level, token, CommandPreviewSnapshot.State.ERROR, "failed", "");
+                fail(client, request.level, currentToken, CommandPreviewSnapshot.State.ERROR, "failed", "");
             } finally {
                 if (failed && retryAt <= server.getTicks()) retryAt = server.getTicks() + 20;
                 queued.set(false);
@@ -112,6 +135,7 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
 
     @Override public CommandPreviewSnapshot snapshot() { return snapshot; }
     @Override public void clear() { epoch.incrementAndGet(); snapshot = CommandPreviewSnapshot.empty(); }
+    @Override public void selectionChanged() { selectionDirty.set(true); }
 
     private static Job createJob(Player actor, LocalSession session, String draft, PreviewOptions options) throws WorldEditException {
         PreviewCommand command = PreviewCommand.parse(draft);
@@ -239,6 +263,7 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         Iterator<PreviewChange> output;
         Iterator<Map.Entry<BlockVector3, BaseBlock>> verifying;
         long scanned;
+        long progressScanned = -1;
         boolean captured, published, limited, validated, needsValidation;
         Job(Region region, PreviewExtent memory, Iterator<BlockVector3> capture, long total,
             WorldEditPreviewProgram program, Mask globalMask, int changeLimit, String permission) {

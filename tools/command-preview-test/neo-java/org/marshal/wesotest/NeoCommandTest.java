@@ -28,6 +28,14 @@ public final class NeoCommandTest {
     private int ticks, stage, wait;
     private CompletableFuture<?> setup;
     private Object overlay, clipboardSource, copied, random;
+    private int latencyIndex;
+    private long started;
+    private final long[] latency = new long[8];
+    private long expectedLargeChanges;
+    private long previousFrame;
+    private final java.util.ArrayList<Long> idleFrames = new java.util.ArrayList<>();
+    private final java.util.ArrayList<Long> calculationFrames = new java.util.ArrayList<>();
+    private final java.util.ArrayList<Long> largeRenderFrames = new java.util.ArrayList<>();
 
     public NeoCommandTest() {
         NeoForge.EVENT_BUS.addListener(this::tick);
@@ -35,6 +43,12 @@ public final class NeoCommandTest {
     }
     private void frame(net.neoforged.neoforge.client.event.RenderFrameEvent.Post event) {
         Minecraft client = Minecraft.getInstance(); client.options.pauseOnLostFocus = false;
+        long now = System.nanoTime(), elapsed = now - previousFrame;
+        if (previousFrame != 0 && client.level != null) {
+            var target = stage == 7 ? idleFrames : stage == 16 ? calculationFrames : stage == 18 ? largeRenderFrames : null;
+            if (target != null && target.size() < 512) target.add(elapsed);
+        }
+        previousFrame = now;
         if (client.gui.screen() instanceof net.minecraft.client.gui.screens.AccessibilityOnboardingScreen screen) screen.onClose();
     }
     private void tick(ClientTickEvent.Post event) {
@@ -44,7 +58,7 @@ public final class NeoCommandTest {
         if (wait > 0) { wait--; return; }
         var controller = CommandPreviewController.instance();
         if (stage == 0) {
-            client.options.renderDistance().set(4); client.options.guiScale().set(2); client.resizeGui();
+            client.options.renderDistance().set(4); client.options.guiScale().set(2); client.options.framerateLimit().set(100); client.resizeGui();
             setup = client.getSingleplayerServer().submit(() -> {
                 var server = client.getSingleplayerServer(); server.getWorldData().setAllowCommands(true);
                 for (String command : List.of("fill -8 64 -8 24 64 24 stone", "fill 0 66 0 5 71 5 stone", "gamemode spectator @p", "tp @p 12 77 16 145 30", "time set day"))
@@ -91,7 +105,13 @@ public final class NeoCommandTest {
             client.gui.setScreen(new ChatScreen("//replace stone 70%dirt,30%grass_block", false)); stage = 6;
         } else if (stage == 6) {
             if (!ready(controller)) return; setup.join();
-            check(controller.snapshot().random(), "Percentage mixture not recognized"); random = controller.snapshot(); stage = 7; wait = 25;
+            check(controller.snapshot().random(), "Percentage mixture not recognized"); random = controller.snapshot();
+            for (int i = 0; i < 30; i++) controller.selectionChanged();
+            setup = client.getSingleplayerServer().submit(() -> {
+                var actor = NeoForgeAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst());
+                WorldEdit.getInstance().getSessionManager().get(actor).dispatchCUISelection(actor);
+            });
+            stage = 7; wait = 25;
         } else if (stage == 7) {
             check(random == controller.snapshot(), "Random sample re-rolled"); screenshot(client, "command-random-stable.png");
             client.gui.screen().keyPressed(new KeyEvent(256, 0, 0));
@@ -100,7 +120,8 @@ public final class NeoCommandTest {
         } else if (stage == 8) {
             screenshot(client, "clipboard-after-command.png");
             call(overlay, "setClipboardPreviewEnabled", false);
-            client.gui.setScreen(new ChatScreen("//set diamond_block", false)); stage = 9;
+            started = System.nanoTime();
+            client.gui.setScreen(new ChatScreen("//set gold_block", false)); stage = 12;
         } else if (stage == 9) {
             if (!ready(controller)) return;
             client.gui.screen().keyPressed(new KeyEvent(257, 0, 0)); stage = 10; wait = 25;
@@ -114,7 +135,82 @@ public final class NeoCommandTest {
             if (!setup.isDone()) return; setup.join();
             System.out.println("WESO NEO COMMAND PASS: local WorldEdit, ghost rendering, zero preview writes, stable mixtures, clipboard priority/cache/restore, normal Enter");
             client.stop(); stage = 12;
+        } else if (stage == 12) {
+            if (!ready(controller) || !built(controller)) return;
+            latency[latencyIndex++] = (System.nanoTime() - started) / 1_000_000;
+            if (latencyIndex < latency.length) {
+                started = System.nanoTime();
+                chatInput((ChatScreen) client.gui.screen()).setValue(latencyIndex % 2 == 0 ? "//set gold_block" : "//set diamond_block");
+                return;
+            }
+            System.out.println("WESO NEO COMMAND LATENCY visible-ms=" + java.util.Arrays.toString(latency));
+            java.util.Arrays.sort(latency);
+            check(latency[latency.length / 2] < 250, "Warm preview latency regressed above 250 ms");
+            check(((java.util.Map<?, ?>) field(field(controller, "renderer"), "models")).size() >= 2, "Model cache was cleared by editing");
+            setup = client.reloadResourcePacks(); stage = 13;
+        } else if (stage == 13) {
+            if (!setup.isDone()) return; setup.join(); stage = 14; wait = 20;
+        } else if (stage == 14) {
+            if (!ready(controller) || !built(controller)) return;
+            check(!((List<?>) field(field(controller, "renderer"), "geometry")).isEmpty(), "Reload lost model geometry");
+            check(((java.util.Map<?, ?>) field(field(controller, "renderer"), "models")).size() <= 256, "Unbounded model cache");
+            setup = client.getSingleplayerServer().submit(() -> {
+                var actor = NeoForgeAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst());
+                expectedLargeChanges = 0;
+                for (var point : new CuboidRegion(MIN, MIN.add(39, 39, 39))) {
+                    if (actor.getWorld().getBlock(point).getBlockType() != BlockTypes.DIAMOND_BLOCK) expectedLargeChanges++;
+                }
+                WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(),
+                        new CuboidRegionSelector(actor.getWorld(), MIN, MIN.add(39, 39, 39)));
+            }); stage = 15;
+        } else if (stage == 15) {
+            if (!setup.isDone()) return; setup.join(); started = System.nanoTime();
+            var input = chatInput((ChatScreen) client.gui.screen());
+            for (int i = 0; i < 100; i++) input.setValue(i % 2 == 0 ? "//set dirt" : "//set diamond_block");
+            check(controller.snapshot().cells().isEmpty(), "Burst retained obsolete geometry"); stage = 16;
+        } else if (stage == 16) {
+            if (!ready(controller)) return;
+            check(controller.snapshot().total() == 64_000 && controller.snapshot().statistics().affected() == expectedLargeChanges, "Large selection count: "
+                    + controller.snapshot().statistics().affected() + " total=" + controller.snapshot().total()
+                    + " draft=" + field(controller, "draft") + " input=" + chatInput((ChatScreen) client.gui.screen()).getValue());
+            check(controller.snapshot().limited(), "Large visual cap missing");
+            check(controller.snapshot().cells().size() <= controller.options().maxRenderBlocks(), "Large rendering cap exceeded");
+            check(controller.snapshot().cells().stream().allMatch(c -> c.after() == net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK.defaultBlockState()), "Stale burst result published");
+            System.out.println("WESO NEO COMMAND LARGE 64000 cells ready-ms=" + (System.nanoTime() - started) / 1_000_000);
+            stage = 18; wait = 30;
+        } else if (stage == 18) {
+            check(built(controller), "Large geometry never completed");
+            System.out.println("WESO NEO COMMAND FRAME median-ms idle=" + median(idleFrames)
+                    + " calculating=" + median(calculationFrames) + " large-render=" + median(largeRenderFrames));
+            check(median(calculationFrames) < Math.max(50, median(idleFrames) * 3), "Calculation caused a sustained frame stall");
+            setup = client.getSingleplayerServer().submit(() -> {
+                var actor = NeoForgeAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst());
+                WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(),
+                        new CuboidRegionSelector(actor.getWorld(), MIN, MIN.add(1, 1, 1)));
+            }); stage = 17;
+        } else if (stage == 17) {
+            if (!setup.isDone()) return; setup.join(); controller.selectionChanged();
+            if (!ready(controller) || controller.snapshot().statistics().affected() != 8) return;
+            stage = 9;
         }
+    }
+    private static double median(java.util.ArrayList<Long> values) {
+        check(!values.isEmpty(), "No frame samples");
+        var sorted = new java.util.ArrayList<>(values); java.util.Collections.sort(sorted);
+        return sorted.get(sorted.size() / 2) / 1_000_000.0;
+    }
+    private static boolean built(CommandPreviewController controller) {
+        Object renderer = field(controller, "renderer");
+        return field(renderer, "prepared") == controller.snapshot()
+                && (int) field(renderer, "buildIndex") == controller.snapshot().cells().size();
+    }
+    private static net.minecraft.client.gui.components.EditBox chatInput(ChatScreen screen) {
+        try {
+            for (var f : ChatScreen.class.getDeclaredFields()) if (net.minecraft.client.gui.components.EditBox.class.isAssignableFrom(f.getType())) {
+                f.setAccessible(true); return (net.minecraft.client.gui.components.EditBox) f.get(screen);
+            }
+            throw new AssertionError("Missing native chat input");
+        } catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
     }
     private static boolean ready(CommandPreviewController controller) {
         var state = controller.snapshot().state();

@@ -81,6 +81,7 @@ public final class CommandGameTest implements FabricClientGameTest {
             });
             check(history.equals(onServer(world.getServer(), () -> history(server))), "Preview modified WorldEdit history");
             context.takeScreenshot("command-set-ghost");
+            measureLatency(context);
             context.runOnClient(client -> {
                 var input = chatInput((ChatScreen) client.gui.screen());
                 for (String value : List.of("//set g", "//set gold", "//set gold_block", "//set diamond_block")) input.setValue(value);
@@ -88,11 +89,20 @@ public final class CommandGameTest implements FabricClientGameTest {
             });
             ready(context);
             context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().cells().stream().allMatch(c -> c.kind() == PreviewChangeKind.REPLACED), "Rapid typing published an obsolete result"));
+            checkModelCache(context);
             draft(context, "//replace stone 70%dirt,30%grass_block");
             ready(context);
             Object sample = context.computeOnClient(client -> CommandPreviewController.instance().snapshot());
+            onServer(world.getServer(), () -> {
+                var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+                WorldEdit.getInstance().getSessionManager().get(actor).dispatchCUISelection(actor);
+                return null;
+            });
+            context.runOnClient(client -> {
+                for (int i = 0; i < 30; i++) CommandPreviewController.instance().selectionChanged();
+            });
             context.waitTicks(30);
-            check(sample == context.computeOnClient(client -> CommandPreviewController.instance().snapshot()), "Random sample re-rolled while idle");
+            check(sample == context.computeOnClient(client -> CommandPreviewController.instance().snapshot()), "Repeated CUI updates re-rolled the random sample");
             context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().random(), "Random warning missing"));
             context.takeScreenshot("command-random-stable");
             draft(context, "//set");
@@ -170,6 +180,9 @@ public final class CommandGameTest implements FabricClientGameTest {
             context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().cells().isEmpty(), "Invalid draft retained ghost"));
             draft(context, "//set diamond_block");
             ready(context);
+            stressLargeSelection(context, world.getServer(), server);
+            draft(context, "//set diamond_block");
+            ready(context);
             context.runOnClient(client -> client.gui.screen().keyPressed(new KeyEvent(257, 0, 0)));
             context.waitFor(client -> client.gui.screen() == null);
             context.waitTicks(20);
@@ -243,6 +256,76 @@ public final class CommandGameTest implements FabricClientGameTest {
     }
     private static void draft(ClientGameTestContext context, String command) {
         context.runOnClient(client -> client.gui.setScreen(new ChatScreen(command, false)));
+    }
+    private static void measureLatency(ClientGameTestContext context) {
+        long[] readyMillis = new long[8], visibleMillis = new long[8];
+        for (int i = 0; i < readyMillis.length; i++) {
+            String value = i % 2 == 0 ? "//set gold_block" : "//set diamond_block";
+            long[] start = new long[1];
+            context.runOnClient(client -> {
+                start[0] = System.nanoTime();
+                chatInput((ChatScreen) client.gui.screen()).setValue(value);
+            });
+            ready(context);
+            readyMillis[i] = (System.nanoTime() - start[0]) / 1_000_000;
+            context.waitFor(client -> {
+                var controller = CommandPreviewController.instance();
+                Object renderer = field(controller, "renderer");
+                return field(renderer, "prepared") == controller.snapshot()
+                        && (int) field(renderer, "buildIndex") == controller.snapshot().cells().size();
+            });
+            visibleMillis[i] = (System.nanoTime() - start[0]) / 1_000_000;
+        }
+        System.out.println("WESO COMMAND LATENCY ready-ms=" + java.util.Arrays.toString(readyMillis)
+                + " visible-ms=" + java.util.Arrays.toString(visibleMillis));
+        java.util.Arrays.sort(visibleMillis);
+        check(visibleMillis[visibleMillis.length / 2] < 250, "Warm preview latency regressed above 250 ms");
+    }
+    private static void checkModelCache(ClientGameTestContext context) {
+        context.waitFor(client -> field(field(CommandPreviewController.instance(), "renderer"), "prepared")
+                == CommandPreviewController.instance().snapshot());
+        Object renderer = context.computeOnClient(client -> field(CommandPreviewController.instance(), "renderer"));
+        Object probe = context.computeOnClient(client -> field(renderer, "probeModel"));
+        check(probe != null, "No baked-model cache probe");
+        context.runOnClient(client -> check(((java.util.Map<?, ?>) field(renderer, "models")).size() >= 2,
+                "Editing discarded cached model templates"));
+        Object invalidProbe = new Object();
+        context.runOnClient(client -> {
+            try { var f = renderer.getClass().getDeclaredField("probeModel"); f.setAccessible(true); f.set(renderer, invalidProbe); }
+            catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
+        });
+        context.waitFor(client -> field(renderer, "probeModel") != null && field(renderer, "probeModel") != invalidProbe
+                && !((List<?>) field(renderer, "geometry")).isEmpty());
+        context.runOnClient(client -> {
+            var models = (java.util.Map<?, ?>) field(renderer, "models");
+            check(models.size() <= 256, "Baked-model cache is unbounded");
+            check(!((List<?>) field(renderer, "geometry")).isEmpty(), "Model identity change discarded the preview permanently");
+        });
+    }
+    private static void stressLargeSelection(ClientGameTestContext context,
+            net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext testServer, MinecraftServer server) {
+        onServer(testServer, () -> { select(server, MIN, MIN.add(39, 39, 39)); return null; });
+        draft(context, "//set gold_block");
+        context.waitFor(client -> CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.COMPUTING);
+        long start = System.nanoTime();
+        context.runOnClient(client -> {
+            var input = chatInput((ChatScreen) client.gui.screen());
+            for (int i = 0; i < 100; i++) input.setValue(i % 2 == 0 ? "//set dirt" : "//set diamond_block");
+            check(CommandPreviewController.instance().snapshot().cells().isEmpty(), "Obsolete large result survived editing");
+        });
+        ready(context);
+        context.runOnClient(client -> {
+            var snapshot = CommandPreviewController.instance().snapshot();
+            check(snapshot.statistics().affected() == 64_000, "Large selection count is incomplete");
+            check(snapshot.limited(), "Large rendering cap was not applied");
+            check(snapshot.cells().size() <= CommandPreviewController.instance().options().maxRenderBlocks(), "Visual limit exceeded");
+            check(snapshot.cells().stream().allMatch(c -> call(c, "after") == net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK.defaultBlockState()), "Stale large result published");
+        });
+        System.out.println("WESO COMMAND LARGE 64000 cells ready-ms=" + (System.nanoTime() - start) / 1_000_000);
+        onServer(testServer, () -> { select(server, MIN, MIN.add(1, 1, 1)); return null; });
+        context.runOnClient(client -> CommandPreviewController.instance().selectionChanged());
+        context.waitFor(client -> CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.READY
+                && CommandPreviewController.instance().snapshot().statistics().affected() == 8);
     }
     private static void ready(ClientGameTestContext context) {
         context.waitFor(client -> {

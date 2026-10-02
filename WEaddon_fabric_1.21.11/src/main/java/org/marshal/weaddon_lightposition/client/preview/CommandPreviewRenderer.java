@@ -32,9 +32,16 @@ final class CommandPreviewRenderer {
     private List<Marker> markers = List.of();
     private CommandPreviewSnapshot prepared;
     private Object modelManager;
+    private BlockState probeState;
+    private Object probeModel;
     private int buildIndex;
 
-    void clear() { prepared = null; mesh.clear(); geometry = List.of(); models.clear(); markers = List.of(); buildIndex = 0; }
+    void clearGeometry() { prepared = null; mesh.clear(); geometry = List.of(); markers = List.of(); buildIndex = 0; }
+    void clear() { clearGeometry(); models.clear(); probeState = null; probeModel = null; }
+
+    private Object bakedModel(MinecraftClient client, BlockState state) {
+        return client.getBlockRenderManager().getModel(state);
+    }
 
     void render(WorldRenderContext context, CommandPreviewSnapshot snapshot, PreviewOptions options) {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -49,7 +56,10 @@ final class CommandPreviewRenderer {
     }
 
     private void prepare(MinecraftClient client, CommandPreviewSnapshot snapshot) {
-        if (modelManager != client.getBakedModelManager()) { clear(); modelManager = client.getBakedModelManager(); }
+        if (modelManager != client.getBakedModelManager() || probeState != null && probeModel != bakedModel(client, probeState)) {
+            clear();
+            modelManager = client.getBakedModelManager();
+        }
         if (prepared != snapshot) {
             prepared = snapshot;
             mesh.clear();
@@ -59,12 +69,13 @@ final class CommandPreviewRenderer {
         }
         long deadline = System.nanoTime() + 2_000_000;
         int count = 0;
-        int previous = buildIndex;
-        while (buildIndex < snapshot.cells().size() && count++ < 128 && System.nanoTime() < deadline) {
+        if (buildIndex == snapshot.cells().size()) return;
+        while (buildIndex < snapshot.cells().size() && count++ < 2_048 && System.nanoTime() < deadline) {
             var cell = snapshot.cells().get(buildIndex++);
             if (cell.kind() != PreviewChangeKind.REMOVED && cell.after() != null) mesh.add(new DrawCell(cell, model(client, cell.after())));
         }
-        if (previous != buildIndex) geometry = List.copyOf(mesh);
+        // Publish a complete immutable batch once, not a growing series of partial copies.
+        if (buildIndex == snapshot.cells().size()) geometry = List.copyOf(mesh);
     }
 
     private List<Quad> model(MinecraftClient client, BlockState state) {
@@ -78,6 +89,8 @@ final class CommandPreviewRenderer {
             for (BakedQuad quad : part.getQuads(null)) quads.add(quad(client, state, quad, null));
         }
         cached = List.copyOf(quads);
+        if (models.size() >= 256) { models.clear(); probeState = null; }
+        if (probeState == null) { probeState = state; probeModel = bakedModel(client, state); }
         models.put(state, cached);
         return cached;
     }
@@ -122,8 +135,7 @@ final class CommandPreviewRenderer {
 
     void renderMarkers(CommandPreviewSnapshot snapshot, PreviewOptions options) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.world == null) return;
-        prepare(client, snapshot);
+        if (client.world == null || prepared != snapshot || buildIndex != snapshot.cells().size()) return;
         Vec3d camera = client.gameRenderer.getCamera().getCameraPos();
         double distanceSqr = (double) options.renderDistance() * options.renderDistance();
         for (Marker marker : markers) {

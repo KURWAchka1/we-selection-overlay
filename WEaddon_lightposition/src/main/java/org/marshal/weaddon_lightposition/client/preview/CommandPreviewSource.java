@@ -7,4 +7,5 @@ public interface CommandPreviewSource {
     void tick(Minecraft client, String draft, PreviewOptions options);
     CommandPreviewSnapshot snapshot();
     void clear();
+    void selectionChanged();
 }

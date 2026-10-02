@@ -10,6 +10,8 @@
 - Command Preview toggle in settings and a configurable keybind (default `F8`).
 - Bounded incremental calculation, cancelled stale drafts, source revalidation,
   and separate scan/render caps for large selections.
+- Immediate draft scheduling with coalesced input, shared-budget calculation,
+  reusable model templates, and complete-batch rendering without partial rebuilds.
 
 ## Changed
 

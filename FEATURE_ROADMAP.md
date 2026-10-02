@@ -15,9 +15,10 @@ not a replacement for the features below. Preserve existing settings and feature
    **Live chat workflow:** update the world-space ghost while the user types the
    normal WorldEdit command, before Enter. Do not require a separate command
    editor, intercept submission, or change what Enter executes. Incomplete or
-   invalid drafts immediately discard the old result. Debounce rapid typing.
+   invalid drafts immediately discard the old result. Coalesce rapid typing into
+   the latest queued draft without a deliberate typing-pause delay.
    **Clipboard coexistence:** retain the copied-object preview (off by default).
-   A recognized command draft owns the preview channel, including debounce,
+   A recognized command draft owns the preview channel, including calculation,
    incomplete/error states. Temporarily suppress clipboard rendering, without
    modifying its enable setting, contents, transforms, or cache. Restore it when
    the draft is removed or chat closes. Future paste preview reuses that renderer.

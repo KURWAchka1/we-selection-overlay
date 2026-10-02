@@ -314,7 +314,7 @@ public final class WorldEditPointOverlayClient {
         List<String> args = payload.args();
         if (isSelectionPayload(eventType)) {
             receivedSelectionPackets++;
-            commandPreviewController.invalidate();
+            commandPreviewController.selectionChanged();
         }
 
         switch (eventType) {

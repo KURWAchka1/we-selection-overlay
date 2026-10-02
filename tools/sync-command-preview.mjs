@@ -86,6 +86,8 @@ function legacyRenderer(code, isYarn) {
   code = code.replace('client.getModelManager().getBlockStateModelSet().get(state).collectParts(RandomSource.create(42), parts);',
     isYarn ? 'client.getBlockRenderManager().getModel(state).addParts(RandomSource.create(42), parts);'
       : 'client.getBlockRenderer().getBlockModel(state).collectParts(RandomSource.create(42), parts);');
+  code = code.replaceAll('client.getModelManager().getBlockStateModelSet().get(state)',
+    isYarn ? 'client.getBlockRenderManager().getModel(state)' : 'client.getBlockRenderer().getBlockModel(state)');
   const tintStart = code.indexOf('        if (quad.materialInfo().isTinted())');
   const tintEnd = code.indexOf('\n        return new Quad', tintStart);
   code = code.slice(0, tintStart) + (isYarn
@@ -169,11 +171,12 @@ for (const target of targets) {
     main = main.replace('        clipboardPreviewController.tick(client);', '        clipboardPreviewController.tick(client);\n        commandPreviewController.tick(client);')
       .replace('        clipboardPreviewController.renderBlocks(', '        commandPreviewController.renderBlocks(' + (target.neo ? 'event.getPoseStack());\n        clipboardPreviewController.renderBlocks(' : 'context);\n        clipboardPreviewController.renderBlocks('))
       .replace('            clipboardPreviewController.renderBounds();', '            clipboardPreviewController.renderBounds();\n            commandPreviewController.renderMarkers();')
-      .replace('            receivedSelectionPackets++;', '            receivedSelectionPackets++;\n            commandPreviewController.invalidate();')
+      .replace('            receivedSelectionPackets++;', '            receivedSelectionPackets++;\n            commandPreviewController.selectionChanged();')
       .replace('    private void resetState() {', '    private void resetState() {\n        commandPreviewController.clearDraft();\n        commandPreviewController.invalidate();')
       .replace('    private void handleOpenSettingsKey(', '    public CommandPreviewController commandPreviewController() { return commandPreviewController; }\n\n    private void handleOpenSettingsKey(');
     if (target.neo) main = main.replace('        event.register(deselectKey);', '        event.register(deselectKey);\n        event.register(commandPreviewKey);');
   }
+  main = main.replace('            commandPreviewController.invalidate();', '            commandPreviewController.selectionChanged();');
   main = main.replace(/(?<!if \(!commandPreviewController\.ownsPreviewChannel\(\)\) )clipboardPreviewController\.renderBlocks\(/g,
     'if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(')
     .replace(/(?<!if \(!commandPreviewController\.ownsPreviewChannel\(\)\) )clipboardPreviewController\.renderBounds\(\);/g,

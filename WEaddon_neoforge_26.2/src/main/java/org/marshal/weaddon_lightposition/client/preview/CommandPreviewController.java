@@ -29,7 +29,6 @@ public final class CommandPreviewController {
     private Path settings;
     private KeyMapping toggleKey;
     private String draft = "";
-    private long editedAt;
     private Object lastLevel;
     private record HudLine(net.minecraft.util.FormattedCharSequence text, int color) { }
     private List<HudLine> hud = List.of();
@@ -85,22 +84,25 @@ public final class CommandPreviewController {
     }
 
     public void invalidate() {
-        editedAt = System.nanoTime();
         if (source != null) source.clear();
-        renderer.clear();
+        renderer.clearGeometry();
+        request(Minecraft.getInstance());
+    }
+
+    public void selectionChanged() { if (source != null) source.selectionChanged(); }
+
+    private void request(Minecraft client) {
+        if (source != null) source.tick(client, ownsPreviewChannel() ? draft : "", options);
     }
 
     public void clearDraft() { edited(""); }
     public void tick(Minecraft client) {
-        if (client.level != lastLevel) { lastLevel = client.level; clearDraft(); invalidate(); }
+        if (client.level != lastLevel) { lastLevel = client.level; clearDraft(); invalidate(); renderer.clear(); }
         if (!(client.gui.screen() instanceof ChatScreen)) clearDraft();
         if (toggleKey != null && !(client.gui.screen() instanceof ChatScreen)) {
             while (toggleKey.consumeClick()) setEnabled(!options.enabled());
         }
-        if (source == null) return;
-        boolean ready = options.enabled() && recognizes(draft)
-                && System.nanoTime() - editedAt >= options.debounceMillis() * 1_000_000L;
-        source.tick(client, ready ? draft : "", options);
+        request(client);
     }
 
     public void renderBlocks(PoseStack context) {

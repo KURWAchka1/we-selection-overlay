@@ -2,8 +2,8 @@
 
 ## User workflow
 
-Type a normal WorldEdit command in chat. After a short typing pause, a textured
-ghost shows the changed cells in place. Enter still submits the original command
+Type a normal WorldEdit command in chat. Each edit requests a textured ghost
+without a typing-pause timer. Enter still submits the original command
 to WorldEdit; Escape clears the preview without executing anything.
 
 Supported initial commands: `//set`, `//replace`, `//walls`, `//faces`,
@@ -48,14 +48,25 @@ instead of displaying a misleading approximation. Permissions, build height,
 unloaded chunks, and the WorldEdit change limit are checked. The initial
 bounding-box cap is conservative even for sparse/non-cuboid selections.
 
-Each work slice has a 1,024-step / 2 ms target, checked between cells. Snapshot
-capture, simulation, output conversion/statistics, and source validation resume
-over multiple ticks. A slow external WorldEdit API call cannot be preempted,
+At most one calculation slice runs per integrated-server tick, with a shared
+2 ms target checked between cells in batches of up to 1,024 steps. Capture,
+simulation, output conversion/statistics, and source validation proceed in the
+same slice whenever time remains; larger jobs resume over multiple ticks.
+Rapid edits replace the single queued request rather than adding tasks per
+character. Repeated CUI packets request source verification without discarding
+the result or re-rolling a random sample. A slow external API call cannot be preempted,
 so this is a work budget, not a hard latency guarantee. Obsolete drafts cancel
 by generation token; stale results cannot be published into another world.
 Selection membership and captured blocks are incrementally revalidated.
-Model geometry is cached, built incrementally, and capped separately from
-statistics. The HUD explicitly reports truncated visual output.
+Native model templates survive draft changes, with a 256-state cache cap and
+baked-model identity checks after resource reloads. Geometry preparation has a
+separate 2 ms per-render-call target and publishes a complete immutable batch
+once, not partial batches that appear to rebuild. Render limits remain separate
+from statistics. The HUD explicitly reports truncated visual output.
+
+There is no universal instantaneous-result guarantee for cold/large selections:
+reading and verifying their blocks still costs real work. The implementation
+removes artificial waiting without turning large jobs into an unbounded task.
 
 Advanced options are saved separately beside the existing mod settings as
 `command-preview.properties`; existing settings are not migrated or discarded.
@@ -68,15 +79,16 @@ Advanced options are saved separately beside the existing mod settings as
 | `maxRenderBlocks` | `2048` | 64-8192 |
 | `renderDistance` | `96` | 16-192 blocks |
 | `statistics` | `true` | boolean (transition details) |
-| `debounceMillis` | `200` | 100-1000 |
 
 Manual property changes are loaded on the next game start. The on/off setting
-is saved immediately. These limits are safeguards, not hardware-specific FPS
+is saved immediately. The obsolete `debounceMillis` property is ignored even in
+existing configurations; other settings are retained. These limits are safeguards, not hardware-specific FPS
 promises.
 
 ## Implementation references
 
 - [WorldEdit extent model](https://worldedit.enginehub.org/en/latest/api/concepts/extents/)
+- [Fabric world rendering and immutable extraction/drawing state](https://docs.fabricmc.net/develop/rendering/world)
 - [WorldEdit patterns and relative weights](https://worldedit.enginehub.org/en/latest/usage/general/patterns/)
 - [WorldEdit clipboard/session behavior](https://worldedit.enginehub.org/en/latest/usage/clipboard/)
 - [WorldEdit 7.4 source](https://github.com/EngineHub/WorldEdit/tree/version/7.4.x)

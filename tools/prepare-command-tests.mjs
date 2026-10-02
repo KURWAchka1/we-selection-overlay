@@ -29,7 +29,9 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('getViewDistance().set(', 'getViewDistance().setValue(').replaceAll('getGuiScale().set(', 'getGuiScale().setValue(')
     .replaceAll('getMaxFps().set(', 'getMaxFps().setValue(').replaceAll('world.getConnection()', 'world.getClientWorld()');
   if (loader === 'fabric' && family === '1.21.11') source = source.replaceAll('net.minecraft.client.gui.components.EditBox', 'net.minecraft.client.gui.widget.TextFieldWidget')
-    .replaceAll('input.setValue(value)', 'input.setText(value)');
+    .replaceAll('input.setValue(', 'input.setText(')
+    .replaceAll('chatInput((ChatScreen) client.currentScreen).setValue(', 'chatInput((ChatScreen) client.currentScreen).setText(')
+    .replaceAll('net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK.defaultBlockState()', 'net.minecraft.block.Blocks.DIAMOND_BLOCK.getDefaultState()');
   const dir = path.join(base, `generated/${loader}-${family}/org/marshal/wesotest`);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(path.join(dir, loader === 'fabric' ? 'CommandGameTest.java' : 'NeoCommandTest.java'), source);
