@@ -271,10 +271,10 @@
   "preview.worldedit_selection_overlay.session_state": "Режим инвентаря и другой мир пока не поддерживаются.",
   "preview.worldedit_selection_overlay.permission": "Недостаточно прав WorldEdit.",
   "preview.worldedit_selection_overlay.height": "Выделение выходит за высоту строительства.",
-  "preview.worldedit_selection_overlay.unloaded": "В выделении нет загруженных чанков.",
+  "preview.worldedit_selection_overlay.unloaded": "Нужные для расчёта чанки не загружены.",
   "preview.worldedit_selection_overlay.worldedit_limit": "Результат превышает лимит изменений WorldEdit.",
   "preview.worldedit_selection_overlay.outside_snapshot": "Операция читает за пределами снимка выделения.",
   "preview.worldedit_selection_overlay.failed": "Превью недоступно; мир не изменён.",
   "screen.worldedit_selection_overlay.settings.command_preview_label": "Превью команд",
-  "preview.worldedit_selection_overlay.loaded_scope": "Результат в загруженных чанках выделения."
+  "preview.worldedit_selection_overlay.loaded_scope": "Результат в загруженных клиентом чанках."
 }

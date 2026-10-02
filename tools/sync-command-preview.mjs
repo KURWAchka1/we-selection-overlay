@@ -16,7 +16,8 @@ const targets = [
 ];
 const files = ['client/preview/CommandPreviewSnapshot.java', 'client/preview/CommandPreviewSource.java',
   'client/preview/WorldEditCommandPreviewSource.java', 'client/preview/CommandPreviewController.java',
-  'client/preview/CommandPreviewRenderer.java', 'client/preview/CommandPreviewGpuSection.java', 'mixin/ChatCommandPreviewMixin.java'];
+  'client/preview/CommandPreviewRenderer.java', 'client/preview/CommandPreviewGpuSection.java',
+  'client/preview/CommandPreviewMask.java', 'client/preview/CommandPreviewTerrainState.java', 'mixin/ChatCommandPreviewMixin.java'];
 const copies = new Map();
 for (const file of files) copies.set(file, await fs.readFile(path.join(root, canonical, java, file), 'utf8'));
 
@@ -34,6 +35,7 @@ function yarn(code) {
     ['net.minecraft.util.FormattedCharSequence', 'net.minecraft.text.OrderedText'],
     ['net.minecraft.locale.Language', 'net.minecraft.util.Language'],
     ['net.minecraft.core.BlockPos', 'net.minecraft.util.math.BlockPos'],
+    ['net.minecraft.core.SectionPos', 'net.minecraft.util.math.ChunkSectionPos'],
     ['net.minecraft.core.Direction', 'net.minecraft.util.math.Direction'],
     ['net.minecraft.world.level.block.state.BlockState', 'net.minecraft.block.BlockState'],
     ['com.mojang.blaze3d.vertex.PoseStack', 'net.minecraft.client.util.math.MatrixStack'],
@@ -57,7 +59,7 @@ function yarn(code) {
     ['Component', 'Text'], ['KeyEvent', 'KeyInput'], ['ServerPlayer', 'ServerPlayerEntity'], ['EditBox', 'TextFieldWidget'],
     ['PoseStack', 'MatrixStack'], ['BlockStateModelPart', 'BlockModelPart'], ['RenderTypes', 'RenderLayers'],
     ['TextureAtlas', 'SpriteAtlasTexture'], ['GizmoStyle', 'DrawStyle'], ['Gizmos', 'GizmoDrawing'], ['RandomSource', 'Random'],
-    ['AABB', 'Box'], ['Vec3', 'Vec3d']]) code = code.replace(new RegExp(`\\b${a}\\b`, 'g'), b);
+    ['AABB', 'Box'], ['Vec3', 'Vec3d'], ['SectionPos', 'ChunkSectionPos']]) code = code.replace(new RegExp(`\\b${a}\\b`, 'g'), b);
   return code.replaceAll('client.gui.screen()', 'client.currentScreen').replaceAll('client.level', 'client.world')
     .replaceAll('getSingleplayerServer()', 'getServer()').replaceAll('getUUID()', 'getUuid()')
     .replaceAll('getPlayerList()', 'getPlayerManager()').replaceAll('getTickCount()', 'getTicks()')
@@ -106,6 +108,7 @@ for (const target of targets) {
   for (const file of files) {
     let code = copies.get(file);
     if (target.version !== '26.2') code = code.replaceAll('client.gui.screen()', 'client.screen');
+    if (target.version !== '26.2') code = code.replaceAll('client.levelExtractor', 'client.levelRenderer');
     if (target.version === '26.1') code = code.replaceAll('client.gameRenderer.mainCamera()', 'client.gameRenderer.getMainCamera()');
     if (target.neo) {
       if (file.endsWith('CommandPreviewController.java')) code = code.replace(
@@ -152,6 +155,11 @@ for (const target of targets) {
         .replaceAll('GizmoDrawing.cuboid(', 'GizmoDrawing.box(').replaceAll('DrawStyle.strokeAndFill(', 'DrawStyle.filledAndStroked(')
         .replaceAll('.setAlwaysOnTop()', '.ignoreOcclusion()').replaceAll('net.minecraft.world.level.block.RenderShape.MODEL', 'net.minecraft.block.BlockRenderType.MODEL')
         .replaceAll('getRenderShape()', 'getRenderType()');
+      code = code.replaceAll('client.levelRenderer', 'client.worldRenderer')
+        .replaceAll('setSectionRangeDirty(', 'scheduleChunkRenders(')
+        .replaceAll('ChunkSectionPos.x(', 'ChunkSectionPos.unpackX(')
+        .replaceAll('ChunkSectionPos.y(', 'ChunkSectionPos.unpackY(')
+        .replaceAll('ChunkSectionPos.z(', 'ChunkSectionPos.unpackZ(');
       code = code.replaceAll('Optional.empty()', 'java.util.OptionalInt.empty()')
         .replaceAll('client.player.blockPosition()', 'client.player.getBlockPos()')
         .replaceAll('client.options.getEffectiveRenderDistance()', 'client.options.getClampedViewDistance()')
@@ -197,6 +205,25 @@ for (const target of targets) {
     await fs.writeFile(entryPath, entry);
   }
   const mainPath = path.join(root, target.name, java, 'client/WorldEditPointOverlayClient.java');
+  const isolationPath = path.join(root, target.name, java, 'client/BlockIsolationController.java');
+  let isolation = await fs.readFile(isolationPath, 'utf8');
+  {
+    for (const method of ['shouldHideBlock', 'shouldHideFluid', 'shouldForceFullbright', 'shouldForceFullbrightFluid', 'shouldDrawFaceAgainstHiddenNeighbor']) {
+      const start = isolation.indexOf(`public static boolean ${method}(`);
+      const end = isolation.indexOf('\n    public static ', start + 20);
+      if (isolation.slice(start, end >= 0 ? end : isolation.length).includes('CommandPreviewTerrainState')) continue;
+      const insert = method === 'shouldDrawFaceAgainstHiddenNeighbor' && ['yarn', '1.21.11'].includes(target.version)
+        ? isolation.indexOf('        BlockPos currentPos =', start)
+        : isolation.indexOf('        IsolationSnapshot current = snapshot;', start);
+      if (start < 0 || insert < 0) throw new Error(`Missing isolation integration: ${target.name} ${method}`);
+      const neighbor = target.version === 'yarn' ? 'neighborPos.offset(direction.getOpposite())' : 'neighborPos.relative(direction.getOpposite())';
+      const snippet = method === 'shouldDrawFaceAgainstHiddenNeighbor'
+        ? `        if (org.marshal.weaddon_lightposition.client.preview.CommandPreviewTerrainState.hides(neighborPos))\n            return !shouldHideBlock(state, ${neighbor});\n\n`
+        : `        if (org.marshal.weaddon_lightposition.client.preview.CommandPreviewTerrainState.hides(pos)) return ${method.startsWith('shouldForce') ? 'false' : 'true'};\n\n`;
+      isolation = isolation.slice(0, insert) + snippet + isolation.slice(insert);
+    }
+    await fs.writeFile(isolationPath, isolation);
+  }
   let main = await fs.readFile(mainPath, 'utf8');
   if (!main.includes('commandPreviewController =')) {
     main = main.replace('import org.marshal.weaddon_lightposition.client.clipboard.ClipboardPreviewController;', 'import org.marshal.weaddon_lightposition.client.clipboard.ClipboardPreviewController;\nimport org.marshal.weaddon_lightposition.client.preview.CommandPreviewController;')

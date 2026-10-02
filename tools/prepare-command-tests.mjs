@@ -31,7 +31,14 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
   if (loader === 'fabric' && family === '1.21.11') source = source.replaceAll('net.minecraft.client.gui.components.EditBox', 'net.minecraft.client.gui.widget.TextFieldWidget')
     .replaceAll('input.setValue(', 'input.setText(')
     .replaceAll('chatInput((ChatScreen) client.currentScreen).setValue(', 'chatInput((ChatScreen) client.currentScreen).setText(')
-    .replaceAll('net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK.defaultBlockState()', 'net.minecraft.block.Blocks.DIAMOND_BLOCK.getDefaultState()');
+    .replaceAll('net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK.defaultBlockState()', 'net.minecraft.block.Blocks.DIAMOND_BLOCK.getDefaultState()')
+    .replaceAll('net.minecraft.world.level.block.Blocks.GOLD_BLOCK.defaultBlockState()', 'net.minecraft.block.Blocks.GOLD_BLOCK.getDefaultState()');
+  if (loader === 'fabric' && family === '1.21.11') source = source.replaceAll('client.level.getBlockState(', 'client.world.getBlockState(')
+    .replaceAll('net.minecraft.world.level.block.Blocks.STONE', 'net.minecraft.block.Blocks.STONE')
+    .replaceAll('client.level, net.minecraft.block.Blocks.STONE.defaultBlockState()', 'client.world, net.minecraft.block.Blocks.STONE.getDefaultState()')
+    .replaceAll('net.minecraft.core.BlockPos', 'net.minecraft.util.math.BlockPos')
+    .replaceAll('net.minecraft.core.Direction', 'net.minecraft.util.math.Direction')
+    .replaceAll('inside.offset(-20, 0, 0)', 'inside.add(-20, 0, 0)');
   const dir = path.join(base, `generated/${loader}-${family}/org/marshal/wesotest`);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(path.join(dir, loader === 'fabric' ? 'CommandGameTest.java' : 'NeoCommandTest.java'), source);

@@ -81,6 +81,8 @@ public final class BlockIsolationController {
             return false;
         }
 
+        if (org.marshal.weaddon_lightposition.client.preview.CommandPreviewTerrainState.hides(pos)) return true;
+
         IsolationSnapshot current = snapshot;
         SelectionIsolationMask mask = current.mask();
         if (mask == null || current.selectedBlockIds().isEmpty() || !mask.containsBlock(pos)) {
@@ -94,6 +96,8 @@ public final class BlockIsolationController {
         if (fluidState == null || fluidState.isEmpty() || pos == null) {
             return false;
         }
+
+        if (org.marshal.weaddon_lightposition.client.preview.CommandPreviewTerrainState.hides(pos)) return true;
 
         IsolationSnapshot current = snapshot;
         SelectionIsolationMask mask = current.mask();
@@ -121,6 +125,8 @@ public final class BlockIsolationController {
             return false;
         }
 
+        if (org.marshal.weaddon_lightposition.client.preview.CommandPreviewTerrainState.hides(pos)) return false;
+
         IsolationSnapshot current = snapshot;
         SelectionIsolationMask mask = current.mask();
         if (mask == null || current.selectedBlockIds().isEmpty() || !mask.containsBlock(pos)) {
@@ -138,6 +144,8 @@ public final class BlockIsolationController {
         if (fluidState == null || fluidState.isEmpty() || pos == null) {
             return false;
         }
+
+        if (org.marshal.weaddon_lightposition.client.preview.CommandPreviewTerrainState.hides(pos)) return false;
 
         IsolationSnapshot current = snapshot;
         SelectionIsolationMask mask = current.mask();
@@ -157,6 +165,9 @@ public final class BlockIsolationController {
         if (world == null || state == null || direction == null || neighborPos == null) {
             return false;
         }
+
+        if (org.marshal.weaddon_lightposition.client.preview.CommandPreviewTerrainState.hides(neighborPos))
+            return !shouldHideBlock(state, neighborPos.relative(direction.getOpposite()));
 
         IsolationSnapshot current = snapshot;
         SelectionIsolationMask mask = current.mask();

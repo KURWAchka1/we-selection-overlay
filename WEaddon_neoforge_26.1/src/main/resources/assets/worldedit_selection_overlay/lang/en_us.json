@@ -271,10 +271,10 @@
   "preview.worldedit_selection_overlay.session_state": "Inventory mode or world override is not previewed.",
   "preview.worldedit_selection_overlay.permission": "Missing WorldEdit permission.",
   "preview.worldedit_selection_overlay.height": "Selection exceeds the world's build height.",
-  "preview.worldedit_selection_overlay.unloaded": "No loaded chunks inside the selection.",
+  "preview.worldedit_selection_overlay.unloaded": "Required source chunks are not loaded.",
   "preview.worldedit_selection_overlay.worldedit_limit": "Result exceeds your WorldEdit change limit.",
   "preview.worldedit_selection_overlay.outside_snapshot": "Operation reads outside the captured selection.",
   "preview.worldedit_selection_overlay.failed": "Preview unavailable; the world was not changed.",
   "screen.worldedit_selection_overlay.settings.command_preview_label": "Command preview",
-  "preview.worldedit_selection_overlay.loaded_scope": "Result inside the selection's loaded chunks."
+  "preview.worldedit_selection_overlay.loaded_scope": "Result within client-loaded chunks."
 }

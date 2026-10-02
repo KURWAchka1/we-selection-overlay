@@ -129,8 +129,8 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
                 failed = false;
                 if (job == null) {
                     job = createJob(actor, session, request.draft, request.chunks);
-                    coverage = new Coverage(job.region.getMinimumPoint().x() >> 4, job.region.getMinimumPoint().z() >> 4,
-                            job.region.getMaximumPoint().x() >> 4, job.region.getMaximumPoint().z() >> 4);
+                    coverage = new Coverage(job.memory.getMinimumPoint().x() >> 4, job.memory.getMinimumPoint().z() >> 4,
+                            job.memory.getMaximumPoint().x() >> 4, job.memory.getMaximumPoint().z() >> 4);
                 }
                 if (job.published) {
                     if (selectionDirty.getAndSet(false) || server.getTickCount() % 10 == 0 || job.verifying != null)
@@ -153,7 +153,7 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
                     job.progressScanned = job.scanned;
                     publish(client, request.level, currentToken, new CommandPreviewSnapshot(++revision,
                         CommandPreviewSnapshot.State.COMPUTING, "", "", job.scanned, job.total,
-                        job.program != null && job.program.random(), false, List.of(), PreviewStatistics.empty()));
+                        job.program != null && job.program.random(), false, List.of(), PreviewStatistics.empty(), CommandPreviewMask.empty()));
                 }
             } catch (IncompleteRegionException ex) {
                 fail(client, request.level, currentToken, CommandPreviewSnapshot.State.UNAVAILABLE, "selection", "");
@@ -197,7 +197,24 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         if (!actor.hasPermission(permission)) throw new IllegalArgumentException("permission");
         Region region = session.getSelection(actor.getWorld()).clone();
         BlockVector3 min = region.getMinimumPoint(), max = region.getMaximumPoint();
-        if (command.kind() == PreviewCommand.Kind.OVERLAY) max = max.add(0, 1, 0);
+        if (command.kind() == PreviewCommand.Kind.OVERLAY || command.kind() == PreviewCommand.Kind.FLORA || command.kind() == PreviewCommand.Kind.NATURALIZE) max = max.add(0, 1, 0);
+        if (command.kind() == PreviewCommand.Kind.LINE || command.kind() == PreviewCommand.Kind.CURVE) {
+            WorldEdit.getInstance().checkMaxRadius(command.thickness());
+            int radius = (int) Math.ceil(command.thickness());
+            BlockVector3 padding = BlockVector3.at(radius, radius, radius);
+            if (command.kind() == PreviewCommand.Kind.CURVE) {
+                // Zero-tension Catmull-Rom tangents can overshoot control points.
+                // A quarter of each axis span is a conservative capture bound.
+                var span = max.subtract(min);
+                padding = padding.add(span.x() / 4 + 1, span.y() / 4 + 1, span.z() / 4 + 1);
+            }
+            min = min.subtract(padding); max = max.add(padding);
+            min = min.withY(Math.max(min.y(), actor.getWorld().getMinimumPoint().y()));
+            max = max.withY(Math.min(max.y(), actor.getWorld().getMaximumPoint().y()));
+        }
+        if (command.kind() == PreviewCommand.Kind.HOLLOW) {
+            min = min.subtract(1, 1, 1); max = max.add(1, 1, 1);
+        }
         if (min.y() < actor.getWorld().getMinimumPoint().y() || max.y() > actor.getWorld().getMaximumPoint().y())
             throw new IllegalArgumentException("height");
         ArrayList<CuboidRegion> boxes = new ArrayList<>();
@@ -216,7 +233,7 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         parser.setSession(session);
         parser.setWorld(actor.getWorld());
         parser.setRestricted(true);
-        parser.setTryLegacy(false);
+        parser.setTryLegacy(true);
         WorldEditPreviewProgram program = new WorldEditPreviewProgram(command, region, memory, parser, session.getMask(),
                 () -> boxes.stream().flatMap(box -> java.util.stream.StreamSupport.stream(box.spliterator(), false)).iterator(),
                 () -> boxes.stream().flatMap(box -> java.util.stream.StreamSupport.stream(box.asFlatRegion().spliterator(), false)).iterator());
@@ -241,6 +258,8 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         int count = 0;
         while (job.output.hasNext() && count++ < WORK_STEPS && System.nanoTime() < deadline) {
             PreviewChange change = job.output.next();
+            if (!change.before().getBlockType().getMaterial().isAir())
+                job.terrain.add(change.position().x(), change.position().y(), change.position().z());
             job.statistics.accept(change.kind(), job.name(change.before()), job.name(change.after()));
             int faces = surfaceFaces(change, job.memory);
             if (faces == 0) continue;
@@ -253,13 +272,16 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         PreviewStatistics statistics = job.statistics.finish();
         job.published = true;
         publish(client, level, token, new CommandPreviewSnapshot(++revision, CommandPreviewSnapshot.State.READY,
-                "", "", job.scanned, job.total, job.program.random(), job.limited, List.copyOf(job.cells), statistics));
+                "", "", job.scanned, job.total, job.program.random(), job.limited, List.copyOf(job.cells), statistics, job.terrain.build()));
     }
 
     private void verify(ServerPlayer nativePlayer, Player actor, LocalSession session, Job job, long deadline) throws IncompleteRegionException {
         Region current = session.getSelection(actor.getWorld());
         if (current.getClass() != job.region.getClass() || !current.getMinimumPoint().equals(job.region.getMinimumPoint())
                 || !current.getMaximumPoint().equals(job.region.getMaximumPoint())) { clear(); return; }
+        if (current instanceof com.sk89q.worldedit.regions.ConvexPolyhedralRegion convex
+                && job.region instanceof com.sk89q.worldedit.regions.ConvexPolyhedralRegion previous
+                && !List.copyOf(convex.getVertices()).equals(List.copyOf(previous.getVertices()))) { clear(); return; }
         if (job.verifying == null) job.verifying = job.memory.original().entrySet().iterator();
         int count = 0;
         while (job.verifying.hasNext() && count++ < WORK_STEPS && System.nanoTime() < deadline) {
@@ -317,6 +339,7 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         final int changeLimit;
         final String permission;
         final ArrayList<CommandPreviewSnapshot.Cell> cells = new ArrayList<>();
+        final CommandPreviewMask.Builder terrain = new CommandPreviewMask.Builder();
         final PreviewStatistics.Accumulator statistics = new PreviewStatistics.Accumulator();
         final Map<com.sk89q.worldedit.world.block.BlockState, String> names = new java.util.HashMap<>();
         String name(BaseBlock block) { return names.computeIfAbsent(block.toImmutableState(), s -> s.getAsString()); }

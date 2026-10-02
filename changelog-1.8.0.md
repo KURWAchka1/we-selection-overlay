@@ -3,10 +3,15 @@
 ## Added
 
 - Live in-world command preview while typing `//set`, `//replace`, `//walls`,
-  `//faces` / `//outline`, and `//overlay` in normal chat.
-- Block-state patterns and percentage mixtures through WorldEdit's parser,
+  `//faces` / `//outline`, `//overlay`, `//center` / `//middle`, `//naturalize`,
+  `//hollow`, `//line`, `//curve`, and `//flora` in normal chat.
+- Line/curve thickness and hollow shells (`-h`), hollowing thickness/fill,
+  and flora density, with WorldEdit selection-type rules.
+- Block states, legacy numeric IDs/data values and percentage mixtures through WorldEdit's parser,
   with a stable sample and a warning that execution rolls random placements again.
 - Full-bright ghost textures, removal markers, and compact change statistics.
+- Render-only suppression of replaced source blocks, including partial models;
+  original world data/collisions stay unchanged and return when the draft closes.
 - Command Preview toggle in settings and a configurable keybind (default `F8`).
 - Complete previews inside the selection's loaded chunks, without block-count
   or fixed-distance caps; cancelled stale drafts and source revalidation.

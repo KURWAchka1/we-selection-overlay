@@ -56,3 +56,37 @@ every supported shape; selections beyond 65,536 input and 2,048 visible cells;
 partial/hugely unloaded bounds; cancellation; source changes; resource reload;
 clipboard restoration; unchanged world/history; frame and memory measurements.
 Do not infer unlimited hardware capacity or zero FPS cost from capped-FPS tests.
+
+## Additional Region Providers and Source Rendering
+
+The inspected [official region declarations](https://github.com/EngineHub/WorldEdit/blob/version/7.4.x/worldedit-core/src/main/java/com/sk89q/worldedit/command/RegionCommands.java)
+and [EditSession algorithms](https://github.com/EngineHub/WorldEdit/blob/version/7.4.x/worldedit-core/src/main/java/com/sk89q/worldedit/EditSession.java)
+do not expose a single side-effect-free, resumable preview dispatcher. Invoking
+ordinary commands would risk session/clipboard/history mutation and native
+generation. The implemented providers keep memory-only writes and incremental
+steps: center rounding, natural-material layers, exterior flood/Manhattan shells,
+line rasterization and spline dilation. Curves use EngineHub's official
+Kochanek-Bartels interpolator. Flora reuses EngineHub's public plant patterns
+and NoiseFilter2D/RandomNoise instead of a private distribution table.
+
+Do not call Operations.complete on a whole region from a GUI or server tick.
+Flood processing, shell expansion/merging and geometry dilation must yield too,
+not just block writes. An unknown connected exterior invalidates hollowing;
+unloaded blocks are not substituted with invented air. Convex vertex order is
+revalidated separately from bounds/membership, since identical hulls can produce
+different splines. Complete coverage and remaining providers are tracked in
+`COMMAND_PREVIEW_COVERAGE.md`.
+
+Legacy input uses ParserContext.setTryLegacy and the official LegacyMapper;
+numeric IDs are not independently mapped. Compare partial models against direct
+WorldEdit writes with native side effects disabled, then explicitly document
+that normal execution can drop unsupported blocks or propagate fluids.
+
+A ghost button over an unchanged stone cube does not communicate replacement.
+Publish an immutable section-local BitSet mask of *all replaced non-air source
+cells*, separately from culled visible ghost faces. Existing native, Indigo,
+block-entity and optional Sodium visibility hooks consult this render-only mask.
+Never change client block storage or collisions. Diff masks by section, invalidate
+only changed sections plus their immediate neighbors, and coalesce invalidations
+under a per-tick target. Cancellation restores the same source sections without
+a global renderer reload. No new rendering dependency is introduced.

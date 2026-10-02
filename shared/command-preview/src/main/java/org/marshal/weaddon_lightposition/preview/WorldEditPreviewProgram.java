@@ -39,6 +39,7 @@ public final class WorldEditPreviewProgram {
         PROVIDERS.put(PreviewCommand.Kind.WALLS, c -> boundary(c, false));
         PROVIDERS.put(PreviewCommand.Kind.FACES, c -> boundary(c, true));
         PROVIDERS.put(PreviewCommand.Kind.OVERLAY, WorldEditPreviewProgram::overlay);
+        PROVIDERS.put(PreviewCommand.Kind.CENTER, WorldEditPreviewProgram::center);
     }
 
     private final PreviewProvider provider;
@@ -55,6 +56,28 @@ public final class WorldEditPreviewProgram {
                                    ParserContext parser, Mask globalMask,
                                    Supplier<Iterator<BlockVector3>> candidates,
                                    Supplier<Iterator<BlockVector2>> columns) throws WorldEditException {
+        if (command.kind() == PreviewCommand.Kind.NATURALIZE) {
+            random = false;
+            provider = naturalize(new Context(region, extent, null, copyMask(globalMask, extent), candidates, columns));
+            return;
+        }
+        if (command.kind() == PreviewCommand.Kind.FLORA) {
+            Mask global = copyMask(globalMask, extent);
+            var temperate = com.sk89q.worldedit.function.generator.FloraGenerator.getTemperatePattern();
+            var desert = com.sk89q.worldedit.function.generator.FloraGenerator.getDesertPattern();
+            var density = new com.sk89q.worldedit.function.mask.NoiseFilter2D(
+                    new com.sk89q.worldedit.math.noise.RandomNoise(), Double.parseDouble(command.pattern()) / 100);
+            random = true;
+            Context context = new Context(region, extent, null, null, candidates, columns);
+            provider = ground(context, p -> {
+                var soil = extent.getBlock(p).getBlockType();
+                Pattern plants = soil == com.sk89q.worldedit.world.block.BlockTypes.GRASS_BLOCK ? temperate
+                        : soil == com.sk89q.worldedit.world.block.BlockTypes.SAND ? desert : null;
+                BlockVector3 output = p.add(0, 1, 0);
+                return plants != null && global.test(output) && extent.setBlock(output, plants.applyBlock(p));
+            }, density);
+            return;
+        }
         validatePattern(command.pattern());
         parser.setExtent(extent);
         Pattern pattern = WorldEdit.getInstance().getPatternFactory().parseFromInput(command.pattern(), parser);
@@ -70,7 +93,12 @@ public final class WorldEditPreviewProgram {
             filter = WorldEdit.getInstance().getMaskFactory().parseFromInput(command.mask(), parser);
             filter = copyMask(filter, extent);
         }
-        provider = PROVIDERS.get(command.kind()).apply(new Context(region, extent, maskedReplace, filter, candidates, columns));
+        Context context = new Context(region, extent, maskedReplace, filter, candidates, columns);
+        provider = switch (command.kind()) {
+            case HOLLOW -> new PreviewHollowProvider(region, extent, maskedReplace, (int) command.thickness(), candidates);
+            case LINE, CURVE -> new PreviewGeometryProvider(command, region, extent, maskedReplace);
+            default -> PROVIDERS.get(command.kind()).apply(context);
+        };
     }
 
     public boolean random() { return random; }
@@ -120,6 +148,57 @@ public final class WorldEditPreviewProgram {
     // LayerVisitor/GroundFunction semantics: skip underground columns, then the first
     // non-air surface within minY..maxY. The block above maxY is intentionally included.
     private static PreviewProvider overlay(Context c) {
+        return ground(c, p -> c.replace.apply(p.add(0, 1, 0)), null);
+    }
+
+    private static PreviewProvider center(Context c) {
+        var middle = c.region.getCenter();
+        var points = new CuboidRegion(BlockVector3.at((int) middle.x(), (int) middle.y(), (int) middle.z()),
+                BlockVector3.at(com.sk89q.worldedit.math.MathUtils.roundHalfUp(middle.x()),
+                        com.sk89q.worldedit.math.MathUtils.roundHalfUp(middle.y()),
+                        com.sk89q.worldedit.math.MathUtils.roundHalfUp(middle.z()))).iterator();
+        return new PreviewProvider() {
+            public boolean hasNext() { return points.hasNext(); }
+            public void advance() throws WorldEditException {
+                var p = points.next();
+                if (c.extent.captured(p)) c.replace.apply(p);
+            }
+        };
+    }
+
+    // Naturalizer is coupled to EditSession. Preserve its layer/material semantics
+    // without constructing an editing session or traversing a whole column per step.
+    private static PreviewProvider naturalize(Context c) {
+        var columns = c.columns.get();
+        var footprint = Regions.asFlatRegion(c.region);
+        int minY = c.region.getMinimumPoint().y(), maxY = c.region.getMaximumPoint().y();
+        Mask soil = new BlockTypeMask(c.extent, com.sk89q.worldedit.world.block.BlockTypes.GRASS_BLOCK,
+                com.sk89q.worldedit.world.block.BlockTypes.DIRT, com.sk89q.worldedit.world.block.BlockTypes.STONE);
+        return new PreviewProvider() {
+            BlockVector2 column;
+            int y, groundY;
+            boolean found;
+            public boolean hasNext() { return column != null || columns.hasNext(); }
+            public void advance() throws WorldEditException {
+                if (column == null) {
+                    var next = columns.next();
+                    if (!footprint.contains(next.toBlockVector3(minY)) || soil.test(next.toBlockVector3(maxY + 1))) return;
+                    column = next; y = maxY; found = false;
+                }
+                var p = column.toBlockVector3(y);
+                if (soil.test(p)) {
+                    if (!found) { found = true; groundY = y; }
+                    int depth = groundY - y;
+                    var type = depth == 0 ? com.sk89q.worldedit.world.block.BlockTypes.GRASS_BLOCK
+                            : depth <= 3 ? com.sk89q.worldedit.world.block.BlockTypes.DIRT : com.sk89q.worldedit.world.block.BlockTypes.STONE;
+                    if (c.filter.test(p)) c.extent.setBlock(p, type.getDefaultState());
+                }
+                if (--y < minY) column = null;
+            }
+        };
+    }
+
+    private static PreviewProvider ground(Context c, RegionFunction atGround, com.sk89q.worldedit.function.mask.Mask2D density) {
         Iterator<BlockVector2> columns = c.columns.get();
         var footprint = Regions.asFlatRegion(c.region);
         int minY = c.region.getMinimumPoint().y(), maxY = c.region.getMaximumPoint().y();
@@ -132,12 +211,13 @@ public final class WorldEditPreviewProgram {
                 if (column == null) {
                     BlockVector2 next = columns.next();
                     if (!footprint.contains(next.toBlockVector3(minY))) return;
+                    if (density != null && !density.test(next)) return;
                     if (ground.test(next.toBlockVector3(maxY + 1))) return;
                     column = next;
                     y = maxY;
                 }
                 if (ground.test(column.toBlockVector3(y))) {
-                    c.replace.apply(column.toBlockVector3(y + 1));
+                    atGround.apply(column.toBlockVector3(y));
                     column = null;
                 } else if (--y < minY) {
                     column = null;

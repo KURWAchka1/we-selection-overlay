@@ -32,6 +32,12 @@ public final class NeoCommandTest {
     private long started;
     private final long[] latency = new long[8];
     private long expectedLargeChanges;
+    private int replacementIndex;
+    private int regionCommandIndex;
+    private static final List<String> REGION_COMMANDS = List.of("//center gold_block", "//naturalize", "//hollow 1", "//line gold_block", "//line -h gold_block 1");
+    private static final long[] REGION_COUNTS = {8, 144, 216, 6, 36};
+    private Object floraSample;
+    private static final List<String> REPLACEMENTS = List.of("stone_button[face=floor]", "oak_slab[type=bottom]", "oak_stairs[facing=east]", "oak_fence", "glass_pane", "oak_trapdoor[open=true]", "77", "35:14");
     private long previousFrame;
     private final java.util.ArrayList<Long> idleFrames = new java.util.ArrayList<>();
     private final java.util.ArrayList<Long> calculationFrames = new java.util.ArrayList<>();
@@ -102,7 +108,67 @@ public final class NeoCommandTest {
                 var actor = NeoForgeAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst());
                 check(actor.getWorld().getBlock(MIN).getBlockType() == BlockTypes.STONE, "Preview wrote the world");
             });
-            client.gui.setScreen(new ChatScreen("//replace stone 70%dirt,30%grass_block", false)); stage = 6;
+            client.gui.setScreen(new ChatScreen("//replace 1 " + REPLACEMENTS.getFirst(), false)); stage = 20;
+        } else if (stage == 20) {
+            if (!ready(controller) || !built(controller)) return;
+            check(controller.snapshot().statistics().replaced() == 216, "Partial model or numeric ID replacement failed");
+            stage = 21; wait = 12;
+        } else if (stage == 21) {
+            var inside = controller.snapshot().cells().getFirst().position();
+            check(org.marshal.weaddon_lightposition.runtime.mc26_2.client.preview.CommandPreviewTerrainState.hides(inside), "Replacement source remains visible");
+            check(!org.marshal.weaddon_lightposition.runtime.mc26_2.client.preview.CommandPreviewTerrainState.hides(inside.offset(-20, 0, 0)), "Unrelated source terrain hidden");
+            check(client.level.getBlockState(inside).getBlock() == net.minecraft.world.level.block.Blocks.STONE, "Client block data mutated");
+            if (replacementIndex == 0) screenshot(client, "command-button-replacement.png");
+            if (++replacementIndex < REPLACEMENTS.size()) {
+                client.gui.setScreen(new ChatScreen("//replace 1 " + REPLACEMENTS.get(replacementIndex), false)); stage = 20;
+            } else {
+                client.gui.screen().keyPressed(new KeyEvent(256, 0, 0));
+                check(!org.marshal.weaddon_lightposition.runtime.mc26_2.client.preview.CommandPreviewTerrainState.hides(inside), "Escape retained hidden terrain");
+                setup = client.getSingleplayerServer().submit(() -> {
+                    var server = client.getSingleplayerServer();
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "fill 0 66 0 5 72 5 air");
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "fill 0 66 0 5 66 5 grass_block");
+                    var actor = NeoForgeAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+                    WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(), new CuboidRegionSelector(actor.getWorld(), MIN, MIN.add(5, 0, 5)));
+                });
+                stage = 30;
+            }
+        } else if (stage == 30) {
+            if (!setup.isDone()) return; setup.join();
+            client.gui.setScreen(new ChatScreen("//flora 100", false)); stage = 31;
+        } else if (stage == 31) {
+            if (!ready(controller) || !built(controller)) return;
+            check(controller.snapshot().random() && controller.snapshot().statistics().added() == 36, "Flora surface/density mismatch");
+            floraSample = controller.snapshot();
+            for (int i = 0; i < 30; i++) controller.selectionChanged();
+            stage = 32; wait = 20;
+        } else if (stage == 32) {
+            check(floraSample == controller.snapshot(), "Flora sample re-rolled");
+            screenshot(client, "command-flora.png");
+            var plants = controller.snapshot().cells();
+            setup = client.getSingleplayerServer().submit(() -> {
+                var server = client.getSingleplayerServer();
+                var actor = NeoForgeAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+                for (var cell : plants) check(actor.getWorld().getBlock(BlockVector3.at(cell.position().getX(), 67, cell.position().getZ())).getBlockType().getMaterial().isAir(), "Flora wrote server world");
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "fill 0 66 0 5 71 5 stone");
+                WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(), new CuboidRegionSelector(actor.getWorld(), MIN, MAX));
+            });
+            stage = 33;
+        } else if (stage == 33) {
+            if (!setup.isDone()) return; setup.join();
+            client.gui.setScreen(new ChatScreen(REGION_COMMANDS.getFirst(), false)); stage = 40;
+        } else if (stage == 40) {
+            if (!ready(controller) || !built(controller)) return;
+            check(controller.snapshot().statistics().affected() == REGION_COUNTS[regionCommandIndex], "Region command mismatch: " + REGION_COMMANDS.get(regionCommandIndex)
+                    + " got " + controller.snapshot().statistics().affected());
+            stage = 41; wait = 10;
+        } else if (stage == 41) {
+            if (++regionCommandIndex < REGION_COMMANDS.size()) {
+                client.gui.setScreen(new ChatScreen(REGION_COMMANDS.get(regionCommandIndex), false)); stage = 40;
+            } else {
+                screenshot(client, "command-line.png");
+                client.gui.setScreen(new ChatScreen("//replace stone 70%dirt,30%grass_block", false)); stage = 6;
+            }
         } else if (stage == 6) {
             if (!ready(controller)) return; setup.join();
             check(controller.snapshot().random(), "Percentage mixture not recognized"); random = controller.snapshot();

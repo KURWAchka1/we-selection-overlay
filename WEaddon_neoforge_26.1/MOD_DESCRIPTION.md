@@ -80,17 +80,20 @@ Clipboard preview requires the WorldEdit mod on the client/integrated server. Se
 ## Live Command Preview
 
 See a ghost of the result while typing `//set`, `//replace`, `//walls`,
-`//faces` / `//outline`, or `//overlay`, before pressing Enter.
+`//faces`, `//overlay`, `//center`, `//naturalize`, `//hollow`, `//line`,
+`//curve`, or `//flora`, before pressing Enter.
 
 * Textured changed blocks, removal markers, and compact change counts
 * Complete results within loaded selection chunks, without a block-count cap
-* Block states and percentage mixtures, with a stable random sample
+* Block states, numeric IDs, percentage mixtures, and flora density
+* Line/curve thickness and shells; replaced source blocks disappear visually
 * Quick toggle in settings or with configurable `F8`
 * Clipboard preview pauses temporarily, then returns when chat closes
 
 Requires integrated singleplayer WorldEdit. Random execution rolls again;
-the displayed sample is not a promise of exact placements. Preview does not
-edit the world; Enter runs your normal WorldEdit command.
+the displayed sample is not a promise of exact placements or later block physics.
+Hollowing needs the complete source area loaded. Preview does not edit the world;
+Enter runs your normal WorldEdit command.
 
 ***
 

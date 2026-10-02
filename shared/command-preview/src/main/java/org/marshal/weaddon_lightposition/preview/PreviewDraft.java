@@ -5,7 +5,8 @@ import java.util.Set;
 
 /** Chat routing must remain available when WorldEdit is not installed. */
 public final class PreviewDraft {
-    private static final Set<String> COMMANDS = Set.of("//set", "//replace", "//walls", "//faces", "//outline", "//overlay");
+    private static final Set<String> COMMANDS = Set.of("//set", "//replace", "//re", "//rep", "//walls", "//faces", "//outline", "//overlay", "//flora",
+            "//center", "//middle", "//naturalize", "//hollow", "//line", "//curve");
     private PreviewDraft() { }
     public static boolean recognizes(String input) {
         String text = input.stripLeading();

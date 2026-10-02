@@ -96,6 +96,67 @@ public final class CommandGameTest implements FabricClientGameTest {
             ready(context);
             context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().cells().stream().allMatch(c -> c.kind() == PreviewChangeKind.REPLACED), "Rapid typing published an obsolete result"));
             checkModelCache(context);
+            for (String pattern : List.of("stone_button[face=floor]", "oak_slab[type=bottom]", "oak_stairs[facing=east]", "oak_fence", "glass_pane", "oak_trapdoor[open=true]", "77", "35:14")) {
+                draft(context, "//replace 1 " + pattern);
+                ready(context);
+                context.waitTicks(10);
+                context.runOnClient(client -> {
+                    var snapshot = CommandPreviewController.instance().snapshot();
+                    var inside = cellPos(snapshot.cells().getFirst());
+                    check(snapshot.statistics().replaced() == 216, "Incomplete partial-model or legacy replacement");
+                    check(hiddenSource(inside), "Old block remains under ghost model");
+                    check(!hiddenSource(inside.offset(-20, 0, 0)), "Preview hides unrelated terrain");
+                    check(client.level.getBlockState(inside).getBlock() == net.minecraft.world.level.block.Blocks.STONE, "Preview mutated client block data");
+                    check((boolean) callStatic(org.marshal.weaddon_lightposition.runtime.mc26_2.client.BlockIsolationController.class, "shouldDrawFaceAgainstHiddenNeighbor",
+                            client.level, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), net.minecraft.core.Direction.EAST,
+                            inside), "Unchanged neighbor face remains cut off");
+                });
+                if (pattern.equals("stone_button[face=floor]")) context.takeScreenshot("command-button-replacement");
+            }
+            draft(context, "//replace 1 70%35:14,30%35:0");
+            ready(context);
+            context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().random()
+                    && CommandPreviewController.instance().snapshot().statistics().replaced() == 216, "Legacy weighted pattern failed"));
+            checkFlora(context, world.getServer(), server);
+            List<String> regionCommands = List.of("//center gold_block", "//naturalize", "//hollow 1", "//line gold_block", "//line -h gold_block 1");
+            long[] counts = {8, 144, 216, 6, 36};
+            for (int i = 0; i < regionCommands.size(); i++) {
+                draft(context, regionCommands.get(i)); ready(context);
+                final int index = i;
+                context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().statistics().affected() == counts[index],
+                        "Region command count mismatch: " + regionCommands.get(index) + " got " + CommandPreviewController.instance().snapshot().statistics().affected()));
+                if (i == 4) { context.waitTicks(10); context.takeScreenshot("command-line"); }
+            }
+            onServer(world.getServer(), () -> {
+                var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+                for (var p : new CuboidRegion(MIN, MAX)) check(actor.getWorld().getBlock(p).getBlockType() == com.sk89q.worldedit.world.block.BlockTypes.STONE, "New region preview wrote world");
+                var selector = new com.sk89q.worldedit.regions.selector.ConvexPolyhedralRegionSelector(actor.getWorld());
+                var convex = (ConvexPolyhedralRegion) selector.getIncompleteRegion();
+                for (var p : List.of(MIN, MIN.add(5, 0, 0), MIN.add(0, 0, 5), MIN.add(1, 5, 1))) convex.addVertex(p);
+                selector.learnChanges();
+                WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(), selector);
+                return null;
+            });
+            draft(context, "//curve -h gold_block 1"); ready(context); context.waitTicks(12);
+            context.runOnClient(client -> {
+                var snapshot = CommandPreviewController.instance().snapshot();
+                check(snapshot.statistics().affected() > 0 && !snapshot.random(), "Convex curve did not render");
+                check(snapshot.cells().stream().allMatch(c -> call(c, "after") == net.minecraft.world.level.block.Blocks.GOLD_BLOCK.defaultBlockState()), "Curve model state incorrect");
+            });
+            context.takeScreenshot("command-curve");
+            Object curve = context.computeOnClient(client -> CommandPreviewController.instance().snapshot());
+            onServer(world.getServer(), () -> {
+                var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+                var selector = new com.sk89q.worldedit.regions.selector.ConvexPolyhedralRegionSelector(actor.getWorld());
+                var convex = (ConvexPolyhedralRegion) selector.getIncompleteRegion();
+                for (var p : List.of(MIN.add(1, 5, 1), MIN.add(0, 0, 5), MIN.add(5, 0, 0), MIN)) convex.addVertex(p);
+                selector.learnChanges();
+                WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(), selector);
+                return null;
+            });
+            context.waitFor(client -> CommandPreviewController.instance().snapshot() != curve
+                    && CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.READY);
+            onServer(world.getServer(), () -> { select(server, MIN, MAX); return null; });
             draft(context, "//set water");
             ready(context);
             context.waitFor(client -> {
@@ -251,7 +312,7 @@ public final class CommandGameTest implements FabricClientGameTest {
                 check(player.getWorld().getBlock(MIN).getBlockType().id().equals("minecraft:diamond_block"), "Enter no longer executes normal WorldEdit command");
                 return null;
             });
-            System.out.println("WESO COMMAND PASS: 80 full/clipped WorldEdit comparisons, complete loaded results beyond former caps, zero preview writes/history, stable mixtures, clipboard coexistence, F8/cancellation, selection/source/mask invalidation, unloaded/limit/invalid drafts, unchanged Enter submission");
+            System.out.println("WESO COMMAND PASS: expanded full/clipped WorldEdit comparisons, center/naturalize/hollow/line/curve, partial-model source hiding/restoration, legacy IDs/data/mixtures, flora, complete loaded results beyond former caps, zero preview writes/history, clipboard coexistence, F8/cancellation, unchanged Enter submission");
         }
     }
 
@@ -277,6 +338,47 @@ public final class CommandGameTest implements FabricClientGameTest {
         } catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
     }
 
+    private static void checkFlora(ClientGameTestContext context,
+            net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext testServer, MinecraftServer server) {
+        context.runOnClient(client -> client.gui.screen().keyPressed(new KeyEvent(256, 0, 0)));
+        context.runOnClient(client -> check(!hiddenSource(
+                new net.minecraft.core.BlockPos(0, 66, 0)), "Escape did not restore source terrain"));
+        testServer.runCommand("fill 0 66 0 5 72 5 air");
+        testServer.runCommand("fill 0 66 0 5 66 5 grass_block");
+        onServer(testServer, () -> { select(server, MIN, MIN.add(5, 0, 5)); return null; });
+        draft(context, "//flora 100"); ready(context); context.waitTicks(12);
+        var sample = context.computeOnClient(client -> CommandPreviewController.instance().snapshot());
+        check(sample.statistics().added() == 36 && sample.random(), "Flora surface/density semantics mismatch");
+        context.runOnClient(client -> {
+            check(!(boolean) call(sample.terrain(), "contains", new net.minecraft.core.BlockPos(0, 66, 0)), "Flora hides its supporting ground");
+            for (var cell : sample.cells()) check(cellPos(cell).getY() == 67, "Flora wrote the wrong layer");
+            for (int i = 0; i < 30; i++) CommandPreviewController.instance().selectionChanged();
+        });
+        context.waitTicks(20);
+        check(sample == context.computeOnClient(client -> CommandPreviewController.instance().snapshot()), "Flora re-rolled on repeated CUI");
+        context.takeScreenshot("command-flora");
+        onServer(testServer, () -> {
+            var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+            for (var cell : sample.cells()) check(actor.getWorld().getBlock(BlockVector3.at(cellPos(cell).getX(), 67, cellPos(cell).getZ())).getBlockType().getMaterial().isAir(), "Flora preview wrote server world");
+            try (var actual = WorldEdit.getInstance().newEditSessionBuilder().world(actor.getWorld()).actor(actor).maxBlocks(-1).build()) {
+                new com.sk89q.worldedit.command.RegionCommands().flora(actor, actual, new CuboidRegion(MIN, MIN.add(5, 0, 5)), 100);
+            }
+            for (var cell : sample.cells()) check(!actor.getWorld().getBlock(BlockVector3.at(cellPos(cell).getX(), 67, cellPos(cell).getZ())).getBlockType().getMaterial().isAir(), "Flora result differs from official generator coverage");
+            return null;
+        });
+        testServer.runCommand("fill 0 67 0 5 72 5 air");
+        draft(context, "//flora 0"); ready(context);
+        context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().statistics().affected() == 0, "Zero-density flora adds plants"));
+        onServer(testServer, () -> { mask(server, "stone"); return null; });
+        draft(context, "//flora 100"); ready(context);
+        context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().statistics().affected() == 0, "Flora ignored global mask"));
+        onServer(testServer, () -> { mask(server, null); return null; });
+        draft(context, "//flora 101");
+        context.waitFor(client -> CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.ERROR);
+        testServer.runCommand("fill 0 66 0 5 71 5 stone");
+        onServer(testServer, () -> { select(server, MIN, MAX); return null; });
+    }
+
     private static void comparePrograms(MinecraftServer server) throws Exception {
         var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
         var world = actor.getWorld();
@@ -286,41 +388,92 @@ public final class CommandGameTest implements FabricClientGameTest {
                 new EllipsoidRegion(world, BlockVector3.at(3, 69, 3), Vector3.at(2, 2, 2)),
                 new CylinderRegion(world, BlockVector3.at(3, 66, 3), Vector2.at(2, 2), 66, 71),
                 new Polygonal2DRegion(world, List.of(BlockVector2.at(0, 0), BlockVector2.at(5, 0), BlockVector2.at(3, 5)), 66, 71), convex);
-        for (Region region : regions) for (String draft : List.of("//set gold_block", "//replace stone diamond_block", "//walls glass", "//faces bricks", "//overlay dirt", "//outline bricks", "//replace gold_block", "//set oak_log[axis=x]")) {
+        int comparisons = 0;
+        for (Region region : regions) {
+            var drafts = new java.util.ArrayList<>(List.of("//set gold_block", "//replace stone diamond_block", "//walls glass", "//faces bricks", "//overlay dirt", "//outline bricks", "//replace gold_block", "//set oak_log[axis=x]",
+                "//replace stone stone_button[face=floor]", "//replace stone oak_slab[type=bottom]", "//replace stone oak_stairs[facing=east]", "//replace stone oak_fence",
+                "//replace stone glass_pane", "//replace stone oak_trapdoor[open=true]", "//replace 1 77", "//set 35:14",
+                "//center gold_block", "//middle diamond_block", "//naturalize", "//hollow", "//hollow 1", "//hollow 2 glass"));
+            if (region instanceof CuboidRegion || region instanceof ConvexPolyhedralRegion)
+                drafts.addAll(List.of("//line gold_block", "//line gold_block 1", "//line -h gold_block 2", "//line gold_block 0.5"));
+            if (region instanceof ConvexPolyhedralRegion)
+                drafts.addAll(List.of("//curve gold_block", "//curve gold_block 1", "//curve -h gold_block 2"));
+            for (String draft : drafts) {
             try (var reset = WorldEdit.getInstance().newEditSessionBuilder().world(world).maxBlocks(-1).build()) {
-                reset.setBlocks(new CuboidRegion(MIN.subtract(1, 1, 1), MAX.add(1, 2, 1)), com.sk89q.worldedit.world.block.BlockTypes.AIR.getDefaultState());
+                reset.setBlocks(new CuboidRegion(MIN.subtract(8, 8, 8), MAX.add(8, 8, 8)), com.sk89q.worldedit.world.block.BlockTypes.AIR.getDefaultState());
                 reset.setBlocks(new CuboidRegion(MIN, MAX), com.sk89q.worldedit.world.block.BlockTypes.STONE.getDefaultState());
             }
-            BlockVector3 min = region.getMinimumPoint(), max = region.getMaximumPoint().add(0, 1, 0);
+            BlockVector3 min = region.getMinimumPoint().subtract(4, 4, 4), max = region.getMaximumPoint().add(4, 4, 4);
             PreviewExtent memory = new PreviewExtent(min, max);
             for (BlockVector3 p : new CuboidRegion(min, max)) memory.capture(p, world.getFullBlock(p));
             PreviewCommand command = PreviewCommand.parse(draft);
             ParserContext parser = new ParserContext(); parser.setActor(actor); parser.setWorld(world); parser.setRestricted(true);
+            parser.setTryLegacy(true);
             WorldEditPreviewProgram program = new WorldEditPreviewProgram(command, region, memory, parser, null);
             int passes = 0;
-            while (!program.complete()) { program.advance(7, System.nanoTime() + 5_000_000); check(++passes < 1000, "Provider never completed"); }
-            var clip = new CuboidRegion(min, BlockVector3.at(Math.min(min.x() + 1, max.x()), max.y(), max.z()));
+            while (!program.complete()) { program.advance(7, System.nanoTime() + 5_000_000); check(++passes < 30000, "Provider never completed"); }
+            var clip = new CuboidRegion(min, BlockVector3.at(Math.min(region.getMinimumPoint().x() + 1, max.x()), max.y(), max.z()));
             PreviewExtent partial = new PreviewExtent(min, max);
             for (var entry : memory.original().entrySet()) if (clip.contains(entry.getKey())) partial.capture(entry.getKey(), entry.getValue());
             WorldEditPreviewProgram clipped = new WorldEditPreviewProgram(command, region, partial, parser, null,
                     clip::iterator, () -> clip.asFlatRegion().iterator());
-            while (!clipped.complete()) clipped.advance(7, System.nanoTime() + 5_000_000);
+            if (command.kind() == PreviewCommand.Kind.HOLLOW) {
+                try { clipped.advance(7, System.nanoTime() + 5_000_000); throw new AssertionError("Incomplete exterior flood accepted"); }
+                catch (IllegalArgumentException ex) { check(ex.getMessage().equals("unloaded"), "Wrong partial hollow failure"); }
+            } else while (!clipped.complete()) clipped.advance(7, System.nanoTime() + 5_000_000);
             for (var p : memory.original().entrySet()) check(world.getFullBlock(p.getKey()).equals(p.getValue()), "Domain simulation wrote world");
             try (var actual = WorldEdit.getInstance().newEditSessionBuilder().world(world).actor(actor).maxBlocks(-1).build()) {
+                // Unsupported buttons can drop during native updates. Compare direct
+                // writes for partial models; server physics is not the preview contract.
+                if (draft.contains("button") || draft.contains("slab") || draft.contains("stairs") || draft.contains("fence")
+                        || draft.contains("pane") || draft.contains("trapdoor") || draft.equals("//replace 1 77"))
+                    actual.setSideEffectApplier(com.sk89q.worldedit.util.SideEffectSet.none());
                 ParserContext official = new ParserContext(); official.setActor(actor); official.setWorld(world); official.setExtent(actual); official.setRestricted(true);
-                var pattern = WorldEdit.getInstance().getPatternFactory().parseFromInput(command.pattern(), official);
+                official.setTryLegacy(true);
+                var pattern = command.pattern().isEmpty() ? null : WorldEdit.getInstance().getPatternFactory().parseFromInput(command.pattern(), official);
                 switch (command.kind()) {
                     case SET -> actual.setBlocks(region, pattern);
                     case REPLACE -> actual.replaceBlocks(region, WorldEdit.getInstance().getMaskFactory().parseFromInput(command.mask(), official), pattern);
                     case WALLS -> actual.makeWalls(region, pattern);
                     case FACES -> actual.makeFaces(region, pattern);
                     case OVERLAY -> actual.overlayCuboidBlocks(region, pattern);
+                    case CENTER -> actual.center(region, pattern);
+                    case NATURALIZE -> actual.naturalizeCuboidBlocks(region);
+                    case HOLLOW -> actual.hollowOutRegion(region, (int) command.thickness(), pattern);
+                    case LINE -> actual.drawLine(pattern, region instanceof CuboidRegion cube ? List.of(cube.getPos1(), cube.getPos2())
+                            : List.copyOf(((ConvexPolyhedralRegion) region).getVertices()), command.thickness(), !command.shell());
+                    case CURVE -> actual.drawSpline(pattern, List.copyOf(((ConvexPolyhedralRegion) region).getVertices()), 0, 0, 0, 10, command.thickness(), !command.shell());
                 }
             }
             for (BlockVector3 p : new CuboidRegion(min, max)) check(world.getFullBlock(p).equals(memory.getFullBlock(p)), "Result differs from WorldEdit: " + region.getClass().getSimpleName() + " " + draft + " at " + p);
-            for (BlockVector3 p : clip) check(world.getFullBlock(p).equals(partial.getFullBlock(p)), "Loaded intersection differs from WorldEdit: " + region.getClass().getSimpleName() + " " + draft + " at " + p);
+            comparisons++;
+            if (command.kind() != PreviewCommand.Kind.HOLLOW) {
+                for (BlockVector3 p : clip) check(world.getFullBlock(p).equals(partial.getFullBlock(p)), "Loaded intersection differs from WorldEdit: " + region.getClass().getSimpleName() + " " + draft + " at " + p);
+                comparisons++;
+            }
+            }
         }
+        for (int thickness = 0; thickness < 4; thickness++) {
+            var region = new CuboidRegion(MIN, MAX);
+            var bounds = new CuboidRegion(MIN.subtract(1, 1, 1), MAX.add(1, 1, 1));
+            try (var reset = WorldEdit.getInstance().newEditSessionBuilder().world(world).maxBlocks(-1).build()) {
+                reset.setBlocks(bounds, com.sk89q.worldedit.world.block.BlockTypes.AIR.getDefaultState());
+                reset.setBlocks(new CuboidRegion(MIN.add(1, 1, 1), MAX.subtract(1, 1, 1)), com.sk89q.worldedit.world.block.BlockTypes.STONE.getDefaultState());
+            }
+            PreviewExtent memory = new PreviewExtent(bounds.getMinimumPoint(), bounds.getMaximumPoint());
+            for (var p : bounds) memory.capture(p, world.getFullBlock(p));
+            ParserContext parser = new ParserContext(); parser.setActor(actor); parser.setWorld(world); parser.setRestricted(true);
+            var program = new WorldEditPreviewProgram(PreviewCommand.parse("//hollow " + thickness), region, memory, parser, null);
+            while (!program.complete()) program.advance(7, System.nanoTime() + 5_000_000);
+            try (var actual = WorldEdit.getInstance().newEditSessionBuilder().world(world).maxBlocks(-1).build()) {
+                actual.hollowOutRegion(region, thickness, com.sk89q.worldedit.world.block.BlockTypes.AIR.getDefaultState());
+            }
+            for (var p : bounds) check(world.getFullBlock(p).equals(memory.getFullBlock(p)), "Exterior-connected hollow mismatch: " + thickness + " at " + p);
+            comparisons++;
+        }
+        System.out.println("WESO COMMAND COMPARISONS exact-full-and-clipped=" + comparisons);
         try (var reset = WorldEdit.getInstance().newEditSessionBuilder().world(world).maxBlocks(-1).build()) {
+            reset.setBlocks(new CuboidRegion(MIN.subtract(8, 8, 8), MAX.add(8, 8, 8)), com.sk89q.worldedit.world.block.BlockTypes.AIR.getDefaultState());
             reset.setBlocks(new CuboidRegion(MIN, MAX), com.sk89q.worldedit.world.block.BlockTypes.STONE.getDefaultState());
         }
         var quoted = PreviewCommand.parse("//set \"stone\""); check(quoted.pattern().equals("stone"), "Quoted parser mismatch");
@@ -449,6 +602,18 @@ public final class CommandGameTest implements FabricClientGameTest {
         try {
             for (var method : object.getClass().getMethods()) if (method.getName().equals(name) && method.getParameterCount() == args.length) return method.invoke(object, args);
             throw new AssertionError("Missing method " + name);
+        } catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
+    }
+    // The 1.21.11 production JAR uses intermediary native signatures. Reflection
+    // keeps the fixture's compile-time named Minecraft types out of those calls.
+    private static net.minecraft.core.BlockPos cellPos(Object cell) { return (net.minecraft.core.BlockPos) call(cell, "position"); }
+    private static boolean hiddenSource(Object pos) {
+        return (boolean) callStatic(org.marshal.weaddon_lightposition.runtime.mc26_2.client.preview.CommandPreviewTerrainState.class, "hides", pos);
+    }
+    private static Object callStatic(Class<?> type, String name, Object... args) {
+        try {
+            for (var method : type.getMethods()) if (method.getName().equals(name) && method.getParameterCount() == args.length) return method.invoke(null, args);
+            throw new AssertionError("Missing static method " + name);
         } catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
     }
 }

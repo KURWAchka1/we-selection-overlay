@@ -6,21 +6,33 @@ Type a normal WorldEdit command in chat. Each edit requests a textured ghost
 without a typing-pause timer. Enter still submits the original command
 to WorldEdit; Escape clears the preview without executing anything.
 
-Supported initial commands: `//set`, `//replace`, `//walls`, `//faces`,
-`//outline`, and `//overlay`. Literal block IDs, block states, comma mixtures,
+Supported commands: `//set`, `//replace` / `//re` / `//rep`, `//walls`,
+`//faces` / `//outline`, `//overlay`, `//center` / `//middle`, `//naturalize`,
+`//hollow`, `//line`, `//curve`, and `//flora`. Literal block IDs, block states, comma mixtures,
 and percentage weights use WorldEdit's parser. Replace supports literal block
 masks and `#existing`; omitted masks mean existing non-air blocks.
+Legacy numeric IDs and `id:data` use WorldEdit's own LegacyMapper, including
+replace masks and percentage mixtures. See [command coverage](COMMAND_PREVIEW_COVERAGE.md)
+for arguments, shape constraints and intentionally unsupported operations.
 
 Added/replaced cells use lightly accented, full-bright textures. Removed cells
 use red volume markers, not fake air blocks. Unchanged cells have no ghost.
 Fluids and non-model content use volume markers rather than claiming accurate
-fluid or block-entity rendering. Original blocks stay intact and visible;
-this is a ghost overlay, not a client-side simulation of all world effects.
+fluid or block-entity rendering. Changed original non-air blocks are suppressed
+in native terrain rendering while the result is displayed, including the interiors
+of volumes culled out of the ghost mesh. This makes buttons, slabs, stairs, fences,
+panes and trapdoors visibly replace their source rather than sit on top of it.
+Client/server block data and collisions remain intact. Unchanged neighbors stay
+visible, with exposed faces restored. Cancelling or changing the draft restores
+the source. This predicts direct writes, not subsequent physics or random ticks:
+an unsupported button can drop when the actual command runs.
 
 The compact chat HUD shows exact added/replaced/removed counts and up to three
 of the largest tracked block transitions (the histogram tracks at most 512
 distinct pairs; this does not limit the total change counts).
 Random mixtures display an explicit sample warning.
+Flora uses official temperate/desert plant patterns and the official density mask;
+like weighted block mixtures, it is an illustrative stable random sample.
 The sample stays stable for the same draft and source state. WorldEdit rolls
 again on execution: individual random placements are not guaranteed to match.
 
@@ -42,14 +54,20 @@ touch undo history, or force-load chunks. It reads on the integrated server
 thread and writes only an isolated memory extent. Normal WorldEdit submission
 is deliberately untouched.
 
-Unsupported flags, NBT, dynamic/script/expression patterns, complex masks,
+Unsupported flags (apart from line/curve `-h`), NBT, dynamic/script/expression patterns, complex masks,
 unknown extension masks, inventory mode, and world overrides fail visibly
 instead of displaying a misleading approximation. Permissions, build height,
 and the WorldEdit change limit are checked. Only the intersection of the
-selection and actual client-loaded chunks is calculated. An entirely unloaded
+selection and actual client-loaded chunks is calculated for region filling.
+Overlay/flora include the cell above the surface; line/curve include their
+thickness and spline overshoot, still clipped to client-loaded chunks.
+Hollow requires its complete source bounds plus a one-cell read halo to be
+loaded: a missing connected exterior cannot be safely guessed as air or solid.
+An entirely unloaded
 selection has no result; a partly loaded selection previews its loaded part.
 The HUD identifies this scope. Loading/unloading relevant chunks invalidates
-the source. Chunks outside the selection do not restart its calculation.
+the source. Chunks outside the command's source footprint do not restart its
+calculation; that footprint includes required surface, thickness and curve context.
 There is no scanned-cell, displayed-block or fixed-distance result cap.
 An enormous unloaded bounding box is intersected with loaded chunk columns
 before iteration, rather than traversed to discover that most cells are absent.
@@ -79,7 +97,9 @@ incrementally; every section is included, with native frustum culling and no
 fixed preview radius. One render pass draws visible sections back-to-front.
 Camera movement may update transparent indices with a separate 1 ms target,
 but does not rebuild textured vertices. Model/resource changes and obsolete
-drafts dispose GPU geometry. The original chunk meshes are never replaced.
+drafts dispose GPU geometry. Source suppression dirties only changed sections
+and their immediate neighbors through native section invalidation. A coalesced
+1 ms per-tick queue avoids whole-world reloads and never alters chunk block data.
 Removal/fluid markers are merged incrementally inside the same preparation
 budget, not globally sorted in one frame; offscreen/unloaded markers are skipped.
 
@@ -115,7 +135,8 @@ for the inspected primary implementations and architecture decisions.
 The command argument tokenizer is WorldEdit's public-but-internal
 `CommandArgParser`; compatibility is verified against the bundled target
 WorldEdit versions, not promised for every future parser version.
-`BlockReplace`, official pattern/mask factories, and memory-bound masks provide
+`BlockReplace`, official pattern/mask factories, flora patterns/density mask,
+Kochanek-Bartels interpolation, and memory-bound masks provide
 the domain behavior. Resumable iterators mirror the verified RegionShape and
 LayerVisitor/GroundFunction rules because RegionVisitor.resume in these versions
 does not yield to a per-tick RunContext budget.

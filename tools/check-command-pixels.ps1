@@ -20,10 +20,10 @@ foreach ($name in $targets.Keys | Sort-Object) {
         for ($y = 270; $y -lt 490; $y++) {
             for ($x = 520; $x -lt 750; $x++) {
                 $pixel = $bitmap.GetPixel($x, $y)
-                if ($pixel.G -gt $pixel.R + 15 -and $pixel.B -gt $pixel.R + 15) { $cyan++ }
+                if ($pixel.G -gt $pixel.R + 20 -and $pixel.B -gt $pixel.R + 20 -and [Math]::Abs($pixel.G - $pixel.B) -lt 35) { $cyan++ }
             }
         }
-        # A few grid lines do not prove the diamond texture has actually rendered.
+        # Exclude blue sky; a few grid lines do not prove a diamond model rendered.
         if ($cyan -lt 8000) { throw "Missing/incorrect diamond ghost texture: $name ($cyan cyan pixels)" }
         Write-Host "$name diamond texture pixels: $cyan"
     } finally { $bitmap.Dispose() }

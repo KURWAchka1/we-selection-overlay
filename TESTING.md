@@ -1,6 +1,6 @@
 # Verification
 
-Current source verification: 1.8.0, 2026-10-02. The test worlds, generated
+Current source verification: 1.8.0, 2026-10-03. The test worlds, generated
 fixtures, screenshots, and logs are local data and are not committed.
 
 ## Release build
@@ -10,7 +10,7 @@ packagers. Packager tests checked metadata, version selection, Java bytecode
 boundaries, bundled license notices, and registration of the chat-preview mixin
 for every runtime. Each universal JAR is approximately 1.2 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,224,464 bytes (Fabric) and 1,196,772 bytes
+The archived release outputs are 1,283,800 bytes (Fabric) and 1,255,947 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -40,11 +40,15 @@ temporary command priority without changing its preference or cached snapshot,
 Escape restoration, and normal WorldEdit execution on Enter. The NeoForge runs
 also exercise the real WorldEdit CUI handshake and native clipboard adapters.
 
-The three Fabric runs additionally perform 80 deterministic comparisons per
-runtime against real WorldEdit EditSession results: eight drafts across cuboid,
-ellipsoid, cylinder, polygon, and convex regions, with full and clipped input
-coverage. These include walls, faces,
-outline, overlay, replace with an omitted mask, and an explicit block state.
+The three Fabric runs additionally perform 231 deterministic comparisons per
+runtime against real WorldEdit EditSession results across cuboid, ellipsoid,
+cylinder, polygon, and convex regions, with full and clipped input where valid.
+These include the original fill/boundary/surface operations, partial models,
+legacy IDs/data, center aliases, naturalization, hollowing, thick/hollow lines
+and convex splines. Four extra exterior-connected hollow cases cover thickness
+0-3; an incomplete hollow source must be rejected, not approximated.
+Partial-model reference edits explicitly disable native side effects: this
+compares direct writes, not dropping unsupported buttons or later world physics.
 WorldEdit history is checked before/after preview, and rapid native chat edits
 must immediately discard obsolete geometry.
 
@@ -52,12 +56,22 @@ Their lifecycle tests cover global mask replacement, source block changes with
 an unchanged draft, selection changes without a CUI notification, F8 in chat,
 unloaded selections, scan/change limits, unsupported flags, invalid patterns,
 no-op changes, and removal markers. The shared simulation is the same domain
-implementation on NeoForge, but the full 80-case comparison/lifecycle matrix
+implementation on NeoForge, but the full 231-case comparison/lifecycle matrix
 has only been executed on Fabric; it is not claimed as six equivalent suites.
+
+All six additionally test eight partial-model/legacy replacements, unchanged
+native client block data, source masking/restoration, flora density 100%, and
+center/naturalize/hollow/line calculation. Fabric also checks flora 0%, invalid
+density, global masking, ground visibility and official generator coverage.
+Convex curves are rendered in Fabric, and changing vertex order with identical
+bounds/membership must recalculate the result without a CUI notification.
 
 Screenshot review and a separate pixel check verify actual diamond textures,
 not only a nonempty geometry buffer. All six set-preview screenshots pass
-the cyan surface test (36,062 Fabric / 36,463 NeoForge pixels in the fixed crop).
+the cyan surface test; its color predicate excludes blue sky, not only neutral
+stone. Partial replacement, flora, line and curve screenshots are also inspected.
+The fixed crop contains 34,099 diamond-texture pixels on each Fabric runtime,
+24,978 on NeoForge 1.21.11 and 24,981 on NeoForge 26.x.
 The texture check complements native-buffer assertions; a nonempty GPU buffer
 alone does not establish correct world projection or texture sampling.
 
@@ -89,7 +103,8 @@ Fabric additionally checks 274,625 affected cells / 24,578 exposed cells, a
 selection bounding box spanning two million blocks on X/Z clipped to 117 actual
 loaded chunks, and teleporting away/back to unload/reload the selection. Capture
 is clipped to loaded selection bounds (including read-only shape/overlay
-context); simulated writes and displayed results obey the original region.
+context); region filling obeys the original region, while line/curve include
+their generated thickness/overshoot inside client-loaded chunks.
 Unloaded geometry is released, and chunks are not forcibly loaded.
 Exact section-local marker merging reduces a solid 6x6x6 fluid fallback to one
 box without filling gaps. Palette tests cover uniform storage and 8/16/32-bit
@@ -106,12 +121,12 @@ boundaries, so these are practical latency samples rather than microbenchmarks.
 
 | Loader | Minecraft | Small preview median | Cold input cells | Calculation ready |
 | --- | --- | --- | --- | --- |
-| Fabric | 1.21.11 | 50 ms | 64,000 | 903 ms |
-| Fabric | 26.1 | 49 ms | 64,000 | 1,559 ms |
-| Fabric | 26.2 | 49 ms | 64,000 | 1,595 ms |
-| NeoForge | 1.21.11 | 50 ms | 110,592 | 2,220 ms |
-| NeoForge | 26.1.2 | 50 ms | 110,592 | 2,114 ms |
-| NeoForge | 26.2 | 51 ms | 110,592 | 1,862 ms |
+| Fabric | 1.21.11 | 50 ms | 64,000 | 804 ms |
+| Fabric | 26.1 | 50 ms | 64,000 | 1,657 ms |
+| Fabric | 26.2 | 50 ms | 64,000 | 1,755 ms |
+| NeoForge | 1.21.11 | 50 ms | 110,592 | 2,232 ms |
+| NeoForge | 26.1.2 | 51 ms | 110,592 | 1,921 ms |
+| NeoForge | 26.2 | 50 ms | 110,592 | 1,761 ms |
 
 Small timings include geometry completion. Cold timings measure calculation
 readiness; section geometry uploads then progress within their frame budget.
@@ -130,9 +145,9 @@ and 30 ticks of the completed full large preview:
 
 | Minecraft | Idle median | Calculating median | Large-preview median |
 | --- | --- | --- | --- |
-| 1.21.11 | 10.029 ms | 10.035 ms | 10.026 ms |
-| 26.1.2 | 10.074 ms | 9.995 ms | 9.967 ms |
-| 26.2 | 10.039 ms | 10.018 ms | 10.023 ms |
+| 1.21.11 | 10.014 ms | 10.049 ms | 10.047 ms |
+| 26.1.2 | 10.019 ms | 10.071 ms | 9.999 ms |
+| 26.2 | 10.030 ms | 9.996 ms | 10.020 ms |
 
 This is a capped local responsiveness check, not proof of zero rendering cost,
 unchanged uncapped FPS, or performance on every modpack. Individual external API
@@ -142,9 +157,10 @@ deadline. Raw samples appear in the command-matrix logs as `WESO ... LATENCY`,
 
 ## In-world isolation regression
 
-This section records the preceding baseline verification. Isolation and UI
-behavior were not changed by the complete-command-preview work; these dedicated
-suites were not rerun for this change and are not new coverage claims.
+This suite was rerun because command source suppression reuses the isolation
+visibility hooks. With no command draft, the ordinary isolation and no-WorldEdit
+startup paths must retain their established behavior. The broader responsive UI
+fixture below remains an earlier baseline, not a new UI coverage claim.
 
 The packaged universal JAR, not the version-specific source module, was loaded for each run. The test fixture selects diamond and gold blocks inside stone, switches isolation eight times, and checks:
 

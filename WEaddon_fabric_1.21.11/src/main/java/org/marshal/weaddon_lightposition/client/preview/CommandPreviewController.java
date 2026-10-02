@@ -86,6 +86,7 @@ public final class CommandPreviewController {
 
     public void invalidate() {
         if (source != null) source.clear();
+        CommandPreviewTerrainState.update(MinecraftClient.getInstance(), CommandPreviewMask.empty());
         renderer.clearGeometry();
         request(MinecraftClient.getInstance());
     }
@@ -101,6 +102,7 @@ public final class CommandPreviewController {
         draft = "";
         if (source != null) source.clear();
         renderer.clear();
+        CommandPreviewTerrainState.update(MinecraftClient.getInstance(), CommandPreviewMask.empty());
     }
     public void tick(MinecraftClient client) {
         if (client.world != lastLevel) { lastLevel = client.world; clearDraft(); invalidate(); renderer.clear(); }
@@ -109,6 +111,8 @@ public final class CommandPreviewController {
             while (toggleKey.wasPressed()) setEnabled(!options.enabled());
         }
         request(client);
+        CommandPreviewTerrainState.update(client, active() ? snapshot().terrain() : CommandPreviewMask.empty());
+        CommandPreviewTerrainState.flush(client);
         if (!active()) renderer.clearGeometry();
     }
 
