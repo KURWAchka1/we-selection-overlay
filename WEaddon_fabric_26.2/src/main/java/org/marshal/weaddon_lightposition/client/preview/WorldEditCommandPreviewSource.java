@@ -93,9 +93,11 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
             chunksDirty = false;
             List<Chunk> current = trackedChunks.stream().sorted(java.util.Comparator.comparingInt(Chunk::z).thenComparingInt(Chunk::x)).toList();
             Coverage bounds = coverage;
-            boolean changed = bounds != null && !current.stream().filter(bounds::contains).toList().equals(loaded.stream().filter(bounds::contains).toList());
+            boolean removed = bounds != null && loaded.stream().filter(bounds::contains).anyMatch(c -> !trackedChunks.contains(c));
             loaded = current;
-            if (!draft.isEmpty() && changed) { clear(); token = epoch.get(); }
+            // New chunks extend a completed preview in the background; they must not
+            // cancel the first calculation every time terrain arrives from the server.
+            if (!draft.isEmpty() && removed) { clear(); token = epoch.get(); }
         }
         requested = new Request(token, draft, options, client.player.getUUID(), client.level, server, loaded);
         if (!queued.compareAndSet(false, true)) return;
@@ -131,6 +133,9 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
                 if (job.published) {
                     if (selectionDirty.getAndSet(false) || server.getTickCount() % 10 == 0 || job.verifying != null)
                         verify(nativePlayer, actor, session, job, deadline);
+                    Coverage bounds = coverage;
+                    if (epoch.get() == currentToken && job.published && bounds != null
+                            && !job.chunks.equals(request.chunks.stream().filter(bounds::contains).toList())) job = null;
                     return;
                 }
                 // Finished phases fall through immediately, sharing one budget rather than one tick each.
@@ -145,7 +150,8 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
                         finish(job, client, request.level, currentToken, request.options, deadline);
                     }
                 }
-                if (epoch.get() == currentToken && !job.published && job.progressScanned != job.scanned) {
+                if (epoch.get() == currentToken && !job.published && job.progressScanned != job.scanned
+                        && snapshot.state() != CommandPreviewSnapshot.State.READY) {
                     job.progressScanned = job.scanned;
                     publish(client, request.level, currentToken, new CommandPreviewSnapshot(++revision,
                         CommandPreviewSnapshot.State.COMPUTING, "", "", job.scanned, job.total,
@@ -214,12 +220,14 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         if (min.y() < actor.getWorld().getMinimumPoint().y() || max.y() > actor.getWorld().getMaximumPoint().y())
             throw new IllegalArgumentException("height");
         ArrayList<CuboidRegion> boxes = new ArrayList<>();
+        ArrayList<Chunk> included = new ArrayList<>();
         long volume = 0;
         for (Chunk chunk : chunks) {
             int minX = Math.max(min.x(), chunk.x * 16), maxX = Math.min(max.x(), chunk.x * 16 + 15);
             int minZ = Math.max(min.z(), chunk.z * 16), maxZ = Math.min(max.z(), chunk.z * 16 + 15);
             if (minX > maxX || minZ > maxZ) continue;
             boxes.add(new CuboidRegion(BlockVector3.at(minX, min.y(), minZ), BlockVector3.at(maxX, max.y(), maxZ)));
+            included.add(chunk);
             volume += (long) (maxX - minX + 1) * (maxZ - minZ + 1) * (max.y() - min.y() + 1);
         }
         if (boxes.isEmpty()) throw new IllegalArgumentException("unloaded");
@@ -234,7 +242,7 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
                 () -> boxes.stream().flatMap(box -> java.util.stream.StreamSupport.stream(box.spliterator(), false)).iterator(),
                 () -> boxes.stream().flatMap(box -> java.util.stream.StreamSupport.stream(box.asFlatRegion().spliterator(), false)).iterator());
         return new Job(region, memory, boxes.stream().flatMap(box -> java.util.stream.StreamSupport.stream(box.spliterator(), false)).iterator(), volume, program,
-                session.getMask(), session.getBlockChangeLimit(), permission);
+                session.getMask(), session.getBlockChangeLimit(), permission, List.copyOf(included));
     }
 
     private static void capture(ServerPlayer nativePlayer, Player actor, Job job, long deadline) {
@@ -249,6 +257,9 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
     }
 
     private void finish(Job job, Minecraft client, Object level, long token, PreviewOptions options, long deadline) {
+        // Validate before assembling output. Independent changes repair the captured
+        // cell in place, so a random tick cannot discard a large completed scan.
+        if (!job.validated) { job.needsValidation = true; return; }
         if (job.changeLimit >= 0 && job.memory.changes().size() > job.changeLimit) throw new IllegalArgumentException("worldedit_limit");
         if (job.output == null) job.output = job.memory.changes().values().iterator();
         int count = 0;
@@ -263,15 +274,13 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
                     FabricAdapter.get().toNativeBlockState(change.after().toImmutableState()), change.kind(), faces));
         }
         if (job.output.hasNext()) return;
-        // Validate the captured source before publishing, not only after displaying it.
-        if (!job.validated) { job.needsValidation = true; return; }
         PreviewStatistics statistics = job.statistics.finish();
         job.published = true;
         publish(client, level, token, new CommandPreviewSnapshot(++revision, CommandPreviewSnapshot.State.READY,
                 "", "", job.scanned, job.total, job.program.random(), job.limited, List.copyOf(job.cells), statistics, job.terrain.build()));
     }
 
-    private void verify(ServerPlayer nativePlayer, Player actor, LocalSession session, Job job, long deadline) throws IncompleteRegionException {
+    private void verify(ServerPlayer nativePlayer, Player actor, LocalSession session, Job job, long deadline) throws WorldEditException {
         Region current = session.getSelection(actor.getWorld());
         if (current.getClass() != job.region.getClass() || !current.getMinimumPoint().equals(job.region.getMinimumPoint())
                 || !current.getMaximumPoint().equals(job.region.getMaximumPoint())) { clear(); return; }
@@ -284,13 +293,20 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
             Map.Entry<BlockVector3, BaseBlock> entry = job.verifying.next();
             BlockVector3 p = entry.getKey();
             if (!nativePlayer.level().hasChunk(p.x() >> 4, p.z() >> 4)
-                    || current.contains(p) != job.region.contains(p)
-                    || !entry.getValue().equals(actor.getWorld().getFullBlock(p))) {
+                    || current.contains(p) != job.region.contains(p)) {
                 clear();
                 return;
             }
+            // Supported masks/patterns inspect states, not changing block-entity NBT.
+            if (!entry.getValue().toImmutableState().equals(actor.getWorld().getBlock(p))) {
+                if (!job.program.supportsPointRefresh()) { clear(); return; }
+                job.outputDirty |= job.program.refreshPoint(p, actor.getWorld().getFullBlock(p));
+            }
         }
-        if (!job.verifying.hasNext()) { job.verifying = null; job.validated = true; job.needsValidation = false; }
+        if (!job.verifying.hasNext()) {
+            job.verifying = null; job.validated = true; job.needsValidation = false;
+            if (job.outputDirty) { job.resetOutput(); job.outputDirty = false; }
+        }
     }
 
     private static int surfaceFaces(PreviewChange c, PreviewExtent memory) {
@@ -334,21 +350,27 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         final Mask globalMask;
         final int changeLimit;
         final String permission;
+        final List<Chunk> chunks;
         final ArrayList<CommandPreviewSnapshot.Cell> cells = new ArrayList<>();
-        final CommandPreviewMask.Builder terrain = new CommandPreviewMask.Builder();
-        final PreviewStatistics.Accumulator statistics = new PreviewStatistics.Accumulator();
+        CommandPreviewMask.Builder terrain = new CommandPreviewMask.Builder();
+        PreviewStatistics.Accumulator statistics = new PreviewStatistics.Accumulator();
         final Map<com.sk89q.worldedit.world.block.BlockState, String> names = new java.util.HashMap<>();
         String name(BaseBlock block) { return names.computeIfAbsent(block.toImmutableState(), s -> s.getAsString()); }
         Iterator<PreviewChange> output;
         Iterator<Map.Entry<BlockVector3, BaseBlock>> verifying;
         long scanned;
         long progressScanned = -1;
-        boolean captured, published, limited, validated, needsValidation;
+        boolean captured, published, limited, validated, needsValidation, outputDirty;
         Job(Region region, PreviewExtent memory, Iterator<BlockVector3> capture, long total,
-            WorldEditPreviewProgram program, Mask globalMask, int changeLimit, String permission) {
+            WorldEditPreviewProgram program, Mask globalMask, int changeLimit, String permission, List<Chunk> chunks) {
             this.region = region; this.memory = memory; this.capture = capture; this.total = total;
             this.program = program; this.globalMask = globalMask; this.changeLimit = changeLimit;
             this.permission = permission;
+            this.chunks = chunks;
+        }
+        void resetOutput() {
+            output = null; cells.clear(); published = false;
+            terrain = new CommandPreviewMask.Builder(); statistics = new PreviewStatistics.Accumulator();
         }
     }
 }

@@ -10,7 +10,7 @@ packagers. Packager tests checked metadata, version selection, Java bytecode
 boundaries, bundled license notices, and registration of the chat-preview mixin
 for every runtime. Each universal JAR is approximately 1.2 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,283,800 bytes (Fabric) and 1,255,947 bytes
+The archived release outputs are 1,287,867 bytes (Fabric) and 1,259,956 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -71,7 +71,7 @@ not only a nonempty geometry buffer. All six set-preview screenshots pass
 the cyan surface test; its color predicate excludes blue sky, not only neutral
 stone. Partial replacement, flora, line and curve screenshots are also inspected.
 The fixed crop contains 34,099 diamond-texture pixels on each Fabric runtime,
-24,978 on NeoForge 1.21.11 and 24,981 on NeoForge 26.x.
+33,561 on NeoForge 1.21.11 and 24,981 on NeoForge 26.x.
 The texture check complements native-buffer assertions; a nonempty GPU buffer
 alone does not establish correct world projection or texture sampling.
 
@@ -121,12 +121,12 @@ boundaries, so these are practical latency samples rather than microbenchmarks.
 
 | Loader | Minecraft | Small preview median | Cold input cells | Calculation ready |
 | --- | --- | --- | --- | --- |
-| Fabric | 1.21.11 | 50 ms | 64,000 | 804 ms |
-| Fabric | 26.1 | 50 ms | 64,000 | 1,657 ms |
-| Fabric | 26.2 | 50 ms | 64,000 | 1,755 ms |
-| NeoForge | 1.21.11 | 50 ms | 110,592 | 2,232 ms |
-| NeoForge | 26.1.2 | 51 ms | 110,592 | 1,921 ms |
-| NeoForge | 26.2 | 50 ms | 110,592 | 1,761 ms |
+| Fabric | 1.21.11 | 50 ms | 64,000 | 704 ms |
+| Fabric | 26.1 | 50 ms | 64,000 | 1,709 ms |
+| Fabric | 26.2 | 50 ms | 64,000 | 1,555 ms |
+| NeoForge | 1.21.11 | 50 ms | 110,592 | 1,961 ms |
+| NeoForge | 26.1.2 | 51 ms | 110,592 | 1,761 ms |
+| NeoForge | 26.2 | 50 ms | 110,592 | 1,610 ms |
 
 Small timings include geometry completion. Cold timings measure calculation
 readiness; section geometry uploads then progress within their frame budget.
@@ -137,23 +137,52 @@ Server work remains one shared 2 ms target per tick; no command-preview scan run
 without an active command draft. Geometry has its own bounded preparation and
 no result-size or fixed-distance preview cap. Large cold results are not
 promised instantly: snapshot capture, simulation, verification, and uploads
-still take real work. Relevant loaded-chunk coverage changes currently rebuild
-the snapshot rather than selectively reusing source tiles.
+still take real work. Relevant chunk gains extend the source after the in-flight
+result, retaining displayed output during background capture. That expansion
+still reads the complete loaded footprint instead of selectively reusing source
+tiles. Chunk losses invalidate immediately.
 
 NeoForge frame sampling compares an idle weighted preview, the large calculation,
 and 30 ticks of the completed full large preview:
 
 | Minecraft | Idle median | Calculating median | Large-preview median |
 | --- | --- | --- | --- |
-| 1.21.11 | 10.014 ms | 10.049 ms | 10.047 ms |
-| 26.1.2 | 10.019 ms | 10.071 ms | 9.999 ms |
-| 26.2 | 10.030 ms | 9.996 ms | 10.020 ms |
+| 1.21.11 | 10.038 ms | 10.036 ms | 10.020 ms |
+| 26.1.2 | 10.034 ms | 10.013 ms | 10.079 ms |
+| 26.2 | 10.020 ms | 10.022 ms | 10.087 ms |
 
 This is a capped local responsiveness check, not proof of zero rendering cost,
 unchanged uncapped FPS, or performance on every modpack. Individual external API
 calls, model baking, GC, and cold initialization cannot be preempted by a cell
 deadline. Raw samples appear in the command-matrix logs as `WESO ... LATENCY`,
 `LARGE`, and `FRAME` lines; profiling code belongs only to the test fixture JAR.
+
+### Changing grass and chunk arrival regression
+
+The new fixture first reproduced full-scan cancellation against the preceding
+Fabric 1.21.11 artifact: one changed source cell caused the assertion
+`One changing grass block restarted the entire large preview` to fail.
+
+The corrected universal artifacts passed on all six runtimes. In a 40x40x40
+grass area, an end-of-server-tick fixture keeps one source cell opposite to its
+captured value while `//replace grass_block dirt` calculates. The cancellation
+epoch must stay unchanged, the result must complete, and after restoring the
+cell all 64,000 replacements must appear with dirt models. These are deliberate
+fixture world writes, not mod preview writes. The printed mutation count is
+the number of tick injections, not a claim that every setBlock changed the world.
+
+The chunk fixture stages nine load notifications backed by actually loaded
+native chunks. Gains must not change the cancellation epoch, clear a displayed
+snapshot or lose any of the final 64,000 cells. This verifies the source's event
+handling, not network timing under every real streaming pattern. The established
+teleport unload/reload checks still pass on Fabric.
+
+The three Fabric runs additionally compare isolated point refreshes to fresh
+domain results for literal set/replace, masks, removals and legacy IDs. Weighted
+refreshes must retain the exact previous choices at all other cells. Source
+validation compares states; dynamic NBT-only data is outside supported syntax.
+Dependent providers still rebuild for meaningful source-state changes rather
+than using the set/replace repair path. No larger tick budget is used.
 
 ## In-world isolation regression
 

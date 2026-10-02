@@ -91,6 +91,12 @@ public final class PreviewExtent extends NullExtent {
         if (!section.captured.get(index)) { section.captured.set(index); capturedCount++; }
         section.original.set(index, section.id(block));
     }
+    public void recapture(BlockVector3 p, BaseBlock block) {
+        Section section = sections.get(Key.at(p));
+        if (section == null || !section.captured.get(index(p))) throw new IllegalArgumentException("outside_snapshot");
+        if (section.changed.get(index(p))) { section.changed.clear(index(p)); changedCount--; }
+        capture(p, block);
+    }
     public Map<BlockVector3, BaseBlock> original() { return originalView; }
     public Map<BlockVector3, PreviewChange> changes() { return changesView; }
     public boolean captured(BlockVector3 p) { return originalAt(p) != null; }

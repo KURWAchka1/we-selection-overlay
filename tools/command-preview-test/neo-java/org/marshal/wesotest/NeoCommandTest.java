@@ -37,6 +37,14 @@ public final class NeoCommandTest {
     private static final List<String> REGION_COMMANDS = List.of("//center gold_block", "//naturalize", "//hollow 1", "//line gold_block", "//line -h gold_block 1");
     private static final long[] REGION_COUNTS = {8, 144, 216, 6, 36};
     private Object floraSample;
+    private final java.util.concurrent.atomic.AtomicBoolean changingGrass = new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicInteger grassMutations = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicReference<Throwable> grassFailure = new java.util.concurrent.atomic.AtomicReference<>();
+    private volatile Object grassSource;
+    private long grassEpoch;
+    private List<?> streamingChunks;
+    private int streamingIndex;
+    private boolean streamingDisplayed;
     private static final List<String> REPLACEMENTS = List.of("stone_button[face=floor]", "oak_slab[type=bottom]", "oak_stairs[facing=east]", "oak_fence", "glass_pane", "oak_trapdoor[open=true]", "77", "35:14");
     private long previousFrame;
     private final java.util.ArrayList<Long> idleFrames = new java.util.ArrayList<>();
@@ -46,6 +54,21 @@ public final class NeoCommandTest {
     public NeoCommandTest() {
         NeoForge.EVENT_BUS.addListener(this::tick);
         NeoForge.EVENT_BUS.addListener(this::frame);
+        NeoForge.EVENT_BUS.addListener(this::serverTick);
+    }
+    private void serverTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        if (!changingGrass.get() || grassSource == null) return;
+        try {
+            Object job = field(grassSource, "job");
+            if (job == null) return;
+            var memory = (org.marshal.weaddon_lightposition.runtime.mc26_2.preview.PreviewExtent) field(job, "memory");
+            var original = memory.original().get(MIN);
+            if (original == null) return;
+            var actor = NeoForgeAdapter.get().fromNativePlayer(event.getServer().getPlayerList().getPlayers().getFirst());
+            var type = original.getBlockType() == BlockTypes.GRASS_BLOCK ? BlockTypes.DIRT : BlockTypes.GRASS_BLOCK;
+            actor.getWorld().setBlock(MIN, type.getDefaultState());
+            grassMutations.incrementAndGet();
+        } catch (Throwable ex) { grassFailure.compareAndSet(null, ex); changingGrass.set(false); }
     }
     private void frame(net.neoforged.neoforge.client.event.RenderFrameEvent.Post event) {
         Minecraft client = Minecraft.getInstance(); client.options.pauseOnLostFocus = false;
@@ -257,8 +280,86 @@ public final class NeoCommandTest {
         } else if (stage == 17) {
             if (!setup.isDone()) return; setup.join(); controller.selectionChanged();
             if (!ready(controller) || controller.snapshot().statistics().affected() != 8) return;
-            stage = 9;
+            client.gui.setScreen(null);
+            setup = client.getSingleplayerServer().submit(() -> {
+                var server = client.getSingleplayerServer();
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamerule randomTickSpeed 0");
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamerule minecraft:random_tick_speed 0");
+                var actor = NeoForgeAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+                try (var edit = WorldEdit.getInstance().newEditSessionBuilder().world(actor.getWorld()).maxBlocks(-1).build()) {
+                    edit.setSideEffectApplier(com.sk89q.worldedit.util.SideEffectSet.none());
+                    edit.setBlocks(new CuboidRegion(MIN, MIN.add(39, 39, 39)), BlockTypes.GRASS_BLOCK.getDefaultState());
+                } catch (Exception ex) { throw new RuntimeException(ex); }
+                WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(),
+                        new CuboidRegionSelector(actor.getWorld(), MIN, MIN.add(39, 39, 39)));
+            });
+            stage = 80;
+        } else if (stage == 80) {
+            if (!setup.isDone()) return; setup.join();
+            grassSource = field(controller, "source"); changingGrass.set(true);
+            client.gui.setScreen(new ChatScreen("//replace grass_block dirt", false)); stage = 81;
+        } else if (stage == 81) {
+            if (controller.snapshot().state() != CommandPreviewSnapshot.State.COMPUTING) return;
+            grassEpoch = ((java.util.concurrent.atomic.AtomicLong) field(grassSource, "epoch")).get(); stage = 82;
+        } else if (stage == 82) {
+            if (grassFailure.get() != null) throw new AssertionError("Changing-grass fixture failed", grassFailure.get());
+            check(((java.util.concurrent.atomic.AtomicLong) field(grassSource, "epoch")).get() == grassEpoch,
+                    "One grass block restarted the complete large scan");
+            if (!ready(controller)) return;
+            changingGrass.set(false);
+            check(grassMutations.get() > 5, "Changing-source test did not run multiple ticks");
+            setup = client.getSingleplayerServer().submit(() -> {
+                var actor = NeoForgeAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst());
+                try { actor.getWorld().setBlock(MIN, BlockTypes.GRASS_BLOCK.getDefaultState()); }
+                catch (Exception ex) { throw new RuntimeException(ex); }
+            }); stage = 83;
+        } else if (stage == 83) {
+            if (!setup.isDone()) return; setup.join();
+            if (!ready(controller) || controller.snapshot().statistics().replaced() != 64_000) return;
+            check(controller.snapshot().cells().stream().allMatch(c -> c.after() == net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState()),
+                    "Grass repair kept an obsolete model");
+            System.out.println("WESO NEO CHANGING GRASS PASS: 64000 cells, mutations=" + grassMutations.get() + ", preserved source epoch");
+            client.gui.setScreen(null);
+            streamingChunks = ((List<?>) field(grassSource, "loaded")).stream().filter(c -> (int) field(c, "x") >= 0 && (int) field(c, "x") <= 2
+                    && (int) field(c, "z") >= 0 && (int) field(c, "z") <= 2).toList();
+            check(streamingChunks.size() == 9, "Native streaming fixture chunks are not loaded");
+            for (int i = 1; i < streamingChunks.size(); i++) chunkEvent(grassSource, streamingChunks.get(i), false);
+            client.gui.setScreen(new ChatScreen("//replace grass_block dirt", false)); stage = 84;
+        } else if (stage == 84) {
+            if (controller.snapshot().state() != CommandPreviewSnapshot.State.COMPUTING) return;
+            grassEpoch = ((java.util.concurrent.atomic.AtomicLong) field(grassSource, "epoch")).get();
+            streamingIndex = 1; stage = 85;
+        } else if (stage == 85) {
+            check(((java.util.concurrent.atomic.AtomicLong) field(grassSource, "epoch")).get() == grassEpoch,
+                    "Arriving chunk discarded the in-flight capture");
+            if (streamingIndex < streamingChunks.size()) chunkEvent(grassSource, streamingChunks.get(streamingIndex++), true);
+            else stage = 86;
+        } else if (stage == 86) {
+            if (streamingDisplayed) check(controller.snapshot().state() == CommandPreviewSnapshot.State.READY, "Background chunks cleared visible geometry");
+            streamingDisplayed |= ready(controller);
+            if (!streamingDisplayed || controller.snapshot().total() != 64_000 || controller.snapshot().statistics().replaced() != 64_000) return;
+            System.out.println("WESO NEO STREAMING PASS: 9 chunks, preserved epoch, complete background expansion");
+            client.gui.setScreen(null);
+            setup = client.getSingleplayerServer().submit(() -> {
+                var actor = NeoForgeAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst());
+                try (var edit = WorldEdit.getInstance().newEditSessionBuilder().world(actor.getWorld()).maxBlocks(-1).build()) {
+                    edit.setSideEffectApplier(com.sk89q.worldedit.util.SideEffectSet.none());
+                    edit.setBlocks(new CuboidRegion(MIN, MIN.add(39, 39, 39)), BlockTypes.AIR.getDefaultState());
+                    edit.setBlocks(new CuboidRegion(MIN, MAX), BlockTypes.STONE.getDefaultState());
+                } catch (Exception ex) { throw new RuntimeException(ex); }
+                WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(), new CuboidRegionSelector(actor.getWorld(), MIN, MIN.add(1, 1, 1)));
+            }); stage = 87;
+        } else if (stage == 87) {
+            if (!setup.isDone()) return; setup.join();
+            client.gui.setScreen(new ChatScreen("//set diamond_block", false)); stage = 9;
         }
+    }
+    private static void chunkEvent(Object source, Object chunk, boolean present) {
+        try {
+            var method = source.getClass().getDeclaredMethod("chunkChanged", Object.class, int.class, int.class, boolean.class);
+            method.setAccessible(true);
+            method.invoke(source, field(source, "trackedLevel"), field(chunk, "x"), field(chunk, "z"), present);
+        } catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
     }
     private static double median(java.util.ArrayList<Long> values) {
         check(!values.isEmpty(), "No frame samples");

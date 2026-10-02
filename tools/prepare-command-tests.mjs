@@ -32,6 +32,7 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('input.setValue(', 'input.setText(')
     .replaceAll('chatInput((ChatScreen) client.currentScreen).setValue(', 'chatInput((ChatScreen) client.currentScreen).setText(')
     .replaceAll('net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK.defaultBlockState()', 'net.minecraft.block.Blocks.DIAMOND_BLOCK.getDefaultState()')
+    .replaceAll('net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState()', 'net.minecraft.block.Blocks.DIRT.getDefaultState()')
     .replaceAll('net.minecraft.world.level.block.Blocks.GOLD_BLOCK.defaultBlockState()', 'net.minecraft.block.Blocks.GOLD_BLOCK.getDefaultState()');
   if (loader === 'fabric' && family === '1.21.11') source = source.replaceAll('client.level.getBlockState(', 'client.world.getBlockState(')
     .replaceAll('net.minecraft.world.level.block.Blocks.STONE', 'net.minecraft.block.Blocks.STONE')

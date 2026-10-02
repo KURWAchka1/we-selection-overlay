@@ -19,6 +19,8 @@
   or fixed-distance caps; cancelled stale drafts and source revalidation.
 - Immediate draft scheduling with coalesced input, shared-budget calculation,
   compact section palettes, reusable models, and persistent section GPU buffers.
+- Incremental source-cell refresh for set/replace, stable unchanged random choices,
+  and background expansion when more selection chunks become loaded.
 
 ### Changed
 

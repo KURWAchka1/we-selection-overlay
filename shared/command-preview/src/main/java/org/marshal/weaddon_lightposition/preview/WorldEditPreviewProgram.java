@@ -20,6 +20,7 @@ import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.regions.Regions;
 import com.sk89q.worldedit.world.block.BlockStateHolder;
+import com.sk89q.worldedit.world.block.BaseBlock;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Iterator;
@@ -43,6 +44,8 @@ public final class WorldEditPreviewProgram {
     }
 
     private final PreviewProvider provider;
+    private final PreviewExtent extent;
+    private final RegionFunction pointRefresh;
     private final boolean random;
     private long visited;
 
@@ -56,12 +59,15 @@ public final class WorldEditPreviewProgram {
                                    ParserContext parser, Mask globalMask,
                                    Supplier<Iterator<BlockVector3>> candidates,
                                    Supplier<Iterator<BlockVector2>> columns) throws WorldEditException {
+        this.extent = extent;
         if (command.kind() == PreviewCommand.Kind.NATURALIZE) {
+            pointRefresh = null;
             random = false;
             provider = naturalize(new Context(region, extent, null, copyMask(globalMask, extent), candidates, columns));
             return;
         }
         if (command.kind() == PreviewCommand.Kind.FLORA) {
+            pointRefresh = null;
             Mask global = copyMask(globalMask, extent);
             var temperate = com.sk89q.worldedit.function.generator.FloraGenerator.getTemperatePattern();
             var desert = com.sk89q.worldedit.function.generator.FloraGenerator.getDesertPattern();
@@ -94,6 +100,11 @@ public final class WorldEditPreviewProgram {
             filter = copyMask(filter, extent);
         }
         Context context = new Context(region, extent, maskedReplace, filter, candidates, columns);
+        pointRefresh = switch (command.kind()) {
+            case SET -> p -> region.contains(p) && context.replace.apply(p);
+            case REPLACE -> p -> region.contains(p) && context.filter.test(p) && context.replace.apply(p);
+            default -> null;
+        };
         provider = switch (command.kind()) {
             case HOLLOW -> new PreviewHollowProvider(region, extent, maskedReplace, (int) command.thickness(), candidates);
             case LINE, CURVE -> new PreviewGeometryProvider(command, region, extent, maskedReplace);
@@ -104,6 +115,14 @@ public final class WorldEditPreviewProgram {
     public boolean random() { return random; }
     public long visited() { return visited; }
     public boolean complete() { return !provider.hasNext(); }
+    public boolean supportsPointRefresh() { return pointRefresh != null; }
+    public boolean refreshPoint(BlockVector3 point, BaseBlock source) throws WorldEditException {
+        if (pointRefresh == null || !complete()) throw new IllegalStateException("Point refresh requires a completed independent operation");
+        PreviewChange previous = extent.changes().get(point);
+        extent.recapture(point, source);
+        pointRefresh.apply(point);
+        return !java.util.Objects.equals(previous, extent.changes().get(point));
+    }
     public void advance(int maxSteps, long deadlineNanos) throws WorldEditException {
         int steps = 0;
         while (provider.hasNext() && steps++ < maxSteps && System.nanoTime() < deadlineNanos) {

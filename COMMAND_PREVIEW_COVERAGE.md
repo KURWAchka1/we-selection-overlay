@@ -34,6 +34,12 @@ than turning unloaded cells into artificial air. Region fills and surface
 operations otherwise preview the loaded intersection. Lines/curves include
 their generated footprint, never force-loading chunks.
 
+`set`/`replace` refresh changed source cells independently; unchanged weighted
+choices are retained. Other providers conservatively rebuild on state changes.
+Newly loaded chunks are coalesced after the in-flight result instead of resetting
+its progress; a displayed snapshot remains until the expanded result is ready.
+Unloading required chunks and meaningful selection/session edits still cancel.
+
 ## Not Implemented Yet
 
 | Group | Commands / modes | Required work before honest support |

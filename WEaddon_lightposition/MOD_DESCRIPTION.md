@@ -87,6 +87,7 @@ See a ghost of the result while typing `//set`, `//replace`, `//walls`,
 * Complete results within loaded selection chunks, without a block-count cap
 * Block states, numeric IDs, percentage mixtures, and flora density
 * Line/curve thickness and shells; replaced source blocks disappear visually
+* Incremental set/replace updates without restarting for each changed source block
 * Quick toggle in settings or with configurable `F8`
 * Clipboard preview pauses temporarily, then returns when chat closes
 

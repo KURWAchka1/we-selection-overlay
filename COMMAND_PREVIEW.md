@@ -65,8 +65,11 @@ Hollow requires its complete source bounds plus a one-cell read halo to be
 loaded: a missing connected exterior cannot be safely guessed as air or solid.
 An entirely unloaded
 selection has no result; a partly loaded selection previews its loaded part.
-The HUD identifies this scope. Loading/unloading relevant chunks invalidates
-the source. Chunks outside the command's source footprint do not restart its
+The HUD identifies this scope. Arriving chunks do not cancel an in-flight scan:
+its first result completes, then the expanded footprint is captured in the
+background while that result stays displayed. Chunk removal invalidates the
+source immediately to stop reading or displaying unloaded input.
+Chunks outside the command's source footprint do not restart its
 calculation; that footprint includes required surface, thickness and curve context.
 There is no scanned-cell, displayed-block or fixed-distance result cap.
 An enormous unloaded bounding box is intersected with loaded chunk columns
@@ -81,7 +84,16 @@ character. Repeated CUI packets request source verification without discarding
 the result or re-rolling a random sample. A slow external API call cannot be preempted,
 so this is a work budget, not a hard latency guarantee. Obsolete drafts cancel
 by generation token; stale results cannot be published into another world.
-Selection membership and captured blocks are incrementally revalidated.
+Selection membership and captured block states are incrementally revalidated.
+For `//set` and `//replace`, a changed source cell is recaptured and reapplied
+through the existing WorldEdit masks/pattern without discarding the whole scan
+or re-rolling unchanged random cells. Verification precedes output assembly;
+refreshing a displayed result keeps its snapshot until replacement output is ready.
+Neighbor-dependent providers still invalidate on relevant state changes rather
+than applying an incorrect single-cell repair. Supported syntax does not depend
+on changing block-entity NBT, so NBT-only activity is not a reason to restart.
+The captured input is read and verified incrementally, not an atomic freeze of
+the entire world; updates during output assembly are picked up by the next pass.
 Captured states and results use section palettes/local indices instead of
 per-cell retained hash-map entries and change objects. Uniform sections need no
 per-cell index array; varied palettes use one, two or four bytes per index as

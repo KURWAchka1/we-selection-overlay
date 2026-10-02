@@ -1,5 +1,34 @@
 # Complete loaded-chunk command previews
 
+## State and chunk refresh (2026-10-03)
+
+The large grass-to-dirt regression was reproduced on Fabric 1.21.11: one cell
+changing after capture invalidated every captured cell before publication.
+The `set`/`replace` provider has no neighbor-dependent source reads under the
+supported literal/global masks. Repair that cell with the same parsed WorldEdit
+BlockReplace and masks; clear its former change before replacing its original
+state. Keep all other source data and random choices. Validate before assembling
+output, then retain the displayed snapshot while assembling a refresh.
+This is incremental live capture, not a globally atomic world snapshot.
+
+Only block-state changes matter for the supported syntax: changing inventory,
+furnace timers or other NBT does not invalidate a state-only result. WorldEdit's
+[BaseBlock equality](https://github.com/EngineHub/WorldEdit/blob/version/7.4.x/worldedit-core/src/main/java/com/sk89q/worldedit/world/block/BaseBlock.java)
+also compares NBT; using it as a whole-job invalidation predicate can restart
+unrelated previews. Full blocks are still captured when an actual state changes.
+
+Chunk gains are coalesced after the current result. The expanded source is read
+under the same work budget, and a ready snapshot remains visible until replaced.
+This does not yet implement selective reuse of source tiles for chunk expansion.
+Chunk losses, changed selection membership, permissions, masks and session mode
+still invalidate; dependent operations such as hollowing do not use point repair.
+No world writes, worker-thread Minecraft access or larger tick budget are added.
+
+The regression fixtures keep a captured source divergent at every server tick, assert
+an unchanged cancellation epoch, and stage nine chunk notifications backed by
+actually loaded native chunks. They also compare point repairs to fresh results
+and check that unchanged weighted cells retain their samples.
+
 ## Scope
 
 Preview the selection intersected with actual client-loaded chunks. Do not cap

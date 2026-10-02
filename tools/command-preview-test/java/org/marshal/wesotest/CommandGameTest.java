@@ -42,7 +42,7 @@ public final class CommandGameTest implements FabricClientGameTest {
             world.getServer().runCommand("time set day");
             world.getConnection().waitForChunksRender();
             MinecraftServer server = context.computeOnClient(client -> client.getSingleplayerServer());
-            onServer(world.getServer(), () -> { comparePrograms(server); select(server, MIN, MAX); return null; });
+            onServer(world.getServer(), () -> { comparePrograms(server); checkPointRefreshPrograms(server); select(server, MIN, MAX); return null; });
             List<?> history = onServer(world.getServer(), () -> history(server));
             context.runOnClient(client -> net.minecraft.client.KeyMapping.click(com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(79)));
             context.waitFor(client -> client.gui.screen() != null && client.gui.screen().getClass().getSimpleName().equals("OverlaySettingsScreen"));
@@ -302,6 +302,7 @@ public final class CommandGameTest implements FabricClientGameTest {
             draft(context, "//set diamond_block");
             ready(context);
             stressLargeSelection(context, world.getServer(), server);
+            stressChangingGrass(context, world.getServer(), server);
             draft(context, "//set diamond_block");
             ready(context);
             context.runOnClient(client -> client.gui.screen().keyPressed(new KeyEvent(257, 0, 0)));
@@ -484,6 +485,39 @@ public final class CommandGameTest implements FabricClientGameTest {
         var session = WorldEdit.getInstance().getSessionManager().get(actor);
         session.setRegionSelector(actor.getWorld(), new CuboidRegionSelector(actor.getWorld(), min, max));
     }
+    private static void checkPointRefreshPrograms(MinecraftServer server) throws Exception {
+        var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+        var region = new CuboidRegion(MIN, MIN.add(1, 1, 1));
+        for (String draft : List.of("//set gold_block", "//replace stone diamond_block", "//replace #existing air",
+                "//replace 1 77", "//set 70%gold_block,30%diamond_block")) {
+            var memory = new PreviewExtent(region.getMinimumPoint(), region.getMaximumPoint());
+            for (var p : region) memory.capture(p, com.sk89q.worldedit.world.block.BlockTypes.STONE.getDefaultState().toBaseBlock());
+            var parser = new ParserContext(); parser.setActor(actor); parser.setWorld(actor.getWorld()); parser.setTryLegacy(true);
+            var program = new WorldEditPreviewProgram(PreviewCommand.parse(draft), region, memory, parser, null);
+            check(program.supportsPointRefresh(), "Independent operation cannot refresh: " + draft);
+            try { program.refreshPoint(MIN, com.sk89q.worldedit.world.block.BlockTypes.AIR.getDefaultState().toBaseBlock());
+                throw new AssertionError("Point refresh before domain completion accepted"); }
+            catch (IllegalStateException expected) { }
+            while (!program.complete()) program.advance(3, System.nanoTime() + 5_000_000);
+            var unchanged = new java.util.HashMap<>(memory.changes()); unchanged.remove(MIN);
+            for (var type : List.of(com.sk89q.worldedit.world.block.BlockTypes.AIR,
+                    com.sk89q.worldedit.world.block.BlockTypes.DIRT, com.sk89q.worldedit.world.block.BlockTypes.STONE)) {
+                program.refreshPoint(MIN, type.getDefaultState().toBaseBlock());
+                check(memory.original().size() == 8, "Recapture duplicated source cells");
+                check(memory.original().get(MIN).getBlockType() == type, "Recapture kept the old source");
+                var result = new java.util.HashMap<>(memory.changes()); result.remove(MIN);
+                check(result.equals(unchanged), "Point refresh re-rolled or modified another cell");
+                if (!program.random()) {
+                    var expected = new PreviewExtent(region.getMinimumPoint(), region.getMaximumPoint());
+                    for (var p : region) expected.capture(p, memory.original().get(p));
+                    var reference = new WorldEditPreviewProgram(PreviewCommand.parse(draft), region, expected, parser, null);
+                    while (!reference.complete()) reference.advance(3, System.nanoTime() + 5_000_000);
+                    check(memory.changes().equals(expected.changes()), "Point refresh differs from a complete fresh result: " + draft);
+                }
+            }
+        }
+        System.out.println("WESO COMMAND POINT REFRESH PASS: masks, removals, legacy IDs, unchanged random cells");
+    }
     private static void mask(MinecraftServer server, String input) throws Exception {
         var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
         ParserContext parser = new ParserContext(); parser.setActor(actor); parser.setWorld(actor.getWorld()); parser.setExtent(actor.getWorld());
@@ -576,6 +610,121 @@ public final class CommandGameTest implements FabricClientGameTest {
                 throw new AssertionError("Preview failed: " + s.reason() + " " + s.detail());
             return s.state() == CommandPreviewSnapshot.State.READY;
         });
+    }
+    private static void stressChangingGrass(ClientGameTestContext context,
+            net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext testServer, MinecraftServer server) {
+        context.runOnClient(client -> client.gui.setScreen(null));
+        // Game-rule names changed between the supported native runtimes.
+        testServer.runCommand("gamerule randomTickSpeed 0");
+        testServer.runCommand("gamerule minecraft:random_tick_speed 0");
+        var max = MIN.add(39, 39, 39);
+        onServer(testServer, () -> {
+            var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+            select(server, MIN, max);
+            try (var edit = WorldEdit.getInstance().newEditSessionBuilder().world(actor.getWorld()).maxBlocks(-1).build()) {
+                edit.setSideEffectApplier(com.sk89q.worldedit.util.SideEffectSet.none());
+                edit.setBlocks(new CuboidRegion(MIN, max), com.sk89q.worldedit.world.block.BlockTypes.GRASS_BLOCK.getDefaultState());
+            }
+            return null;
+        });
+        Object source = context.computeOnClient(client -> field(CommandPreviewController.instance(), "source"));
+        var changing = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var failure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        var mutations = new java.util.concurrent.atomic.AtomicInteger();
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(ticked -> {
+            if (ticked != server || !changing.get()) return;
+            try {
+                Object job = field(source, "job");
+                if (job == null) return;
+                var memory = (PreviewExtent) field(job, "memory");
+                var captured = memory.original().get(MIN);
+                if (captured == null) return;
+                var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+                var type = captured.getBlockType() == com.sk89q.worldedit.world.block.BlockTypes.GRASS_BLOCK
+                        ? com.sk89q.worldedit.world.block.BlockTypes.DIRT : com.sk89q.worldedit.world.block.BlockTypes.GRASS_BLOCK;
+                actor.getWorld().setBlock(MIN, type.getDefaultState());
+                mutations.incrementAndGet();
+            } catch (Throwable ex) { failure.compareAndSet(null, ex); changing.set(false); }
+        });
+        try {
+            draft(context, "//replace grass_block dirt");
+            context.waitFor(client -> CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.COMPUTING);
+            long epoch = ((java.util.concurrent.atomic.AtomicLong) field(source, "epoch")).get();
+            context.waitFor(client -> {
+                if (failure.get() != null) throw new AssertionError("Changing-grass fixture failed", failure.get());
+                check(((java.util.concurrent.atomic.AtomicLong) field(source, "epoch")).get() == epoch,
+                        "One changing grass block restarted the entire large preview");
+                return CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.READY;
+            });
+        } finally { changing.set(false); }
+        check(mutations.get() > 5, "Large-source mutation test did not exercise multiple ticks");
+        onServer(testServer, () -> {
+            var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+            actor.getWorld().setBlock(MIN, com.sk89q.worldedit.world.block.BlockTypes.GRASS_BLOCK.getDefaultState());
+            return null;
+        });
+        context.waitFor(client -> CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.READY
+                && CommandPreviewController.instance().snapshot().statistics().replaced() == 64_000);
+        context.waitTicks(15);
+        context.runOnClient(client -> {
+            var snapshot = CommandPreviewController.instance().snapshot();
+            check(snapshot.statistics().affected() == 64_000, "Grass refresh lost result cells");
+            check(snapshot.cells().stream().allMatch(c -> call(c, "after") == net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState()),
+                    "Grass refresh kept an obsolete model");
+        });
+        stressChunkStreaming(context, source);
+        context.runOnClient(client -> client.gui.setScreen(null));
+        onServer(testServer, () -> {
+            var actor = FabricAdapter.get().fromNativePlayer(server.getPlayerList().getPlayers().getFirst());
+            try (var edit = WorldEdit.getInstance().newEditSessionBuilder().world(actor.getWorld()).maxBlocks(-1).build()) {
+                edit.setSideEffectApplier(com.sk89q.worldedit.util.SideEffectSet.none());
+                edit.setBlocks(new CuboidRegion(MIN, max), com.sk89q.worldedit.world.block.BlockTypes.AIR.getDefaultState());
+                edit.setBlocks(new CuboidRegion(MIN, MAX), com.sk89q.worldedit.world.block.BlockTypes.STONE.getDefaultState());
+            }
+            select(server, MIN, MIN.add(1, 1, 1));
+            return null;
+        });
+        System.out.println("WESO COMMAND CHANGING GRASS PASS: 64000 cells, mutations=" + mutations.get() + ", no full capture restart");
+    }
+    private static void stressChunkStreaming(ClientGameTestContext context, Object source) {
+        context.runOnClient(client -> client.gui.setScreen(null));
+        var chunks = context.computeOnClient(client -> ((List<?>) field(source, "loaded")).stream()
+                .filter(c -> (int) field(c, "x") >= 0 && (int) field(c, "x") <= 2
+                        && (int) field(c, "z") >= 0 && (int) field(c, "z") <= 2).toList());
+        check(chunks.size() == 9, "Streaming fixture is missing its actual native chunks");
+        try {
+            context.runOnClient(client -> {
+                for (int i = 1; i < chunks.size(); i++) chunkEvent(source, chunks.get(i), false);
+            });
+            draft(context, "//replace grass_block dirt");
+            context.waitFor(client -> CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.COMPUTING);
+            long epoch = ((java.util.concurrent.atomic.AtomicLong) field(source, "epoch")).get();
+            for (int i = 1; i < chunks.size(); i++) {
+                final Object chunk = chunks.get(i);
+                context.runOnClient(client -> chunkEvent(source, chunk, true));
+                context.waitTicks(1);
+                check(((java.util.concurrent.atomic.AtomicLong) field(source, "epoch")).get() == epoch,
+                        "Chunk arrival discarded the in-flight source scan");
+            }
+            boolean[] displayed = {false};
+            context.waitFor(client -> {
+                var snapshot = CommandPreviewController.instance().snapshot();
+                if (displayed[0]) check(snapshot.state() == CommandPreviewSnapshot.State.READY,
+                        "Background chunk refresh removed the displayed result");
+                displayed[0] |= snapshot.state() == CommandPreviewSnapshot.State.READY;
+                return displayed[0] && snapshot.total() == 64_000 && snapshot.statistics().replaced() == 64_000;
+            });
+            System.out.println("WESO COMMAND STREAMING PASS: 9 loaded chunks, preserved epoch, complete background expansion");
+        } finally {
+            context.runOnClient(client -> { for (var c : chunks) chunkEvent(source, c, true); });
+        }
+    }
+    private static void chunkEvent(Object source, Object chunk, boolean present) {
+        try {
+            var method = source.getClass().getDeclaredMethod("chunkChanged", Object.class, int.class, int.class, boolean.class);
+            method.setAccessible(true);
+            method.invoke(source, field(source, "trackedLevel"), field(chunk, "x"), field(chunk, "z"), present);
+        } catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
     }
     private static <T> T onServer(net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext server, Callable<T> task) {
         try { return server.computeOnServer(ignored -> task.call()); }
