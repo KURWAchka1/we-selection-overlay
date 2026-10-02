@@ -8,6 +8,7 @@
   ],
   "client": [
     "ChatCommandPreviewMixin",
+    "CommandPreviewFrustumMixin",
     "BlockEntityRenderManagerMixin",
     "BlockModelRendererBrightnessCacheMixin",
     "BlockModelRendererMixin",

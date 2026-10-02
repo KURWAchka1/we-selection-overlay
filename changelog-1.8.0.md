@@ -8,10 +8,10 @@
   with a stable sample and a warning that execution rolls random placements again.
 - Full-bright ghost textures, removal markers, and compact change statistics.
 - Command Preview toggle in settings and a configurable keybind (default `F8`).
-- Bounded incremental calculation, cancelled stale drafts, source revalidation,
-  and separate scan/render caps for large selections.
+- Complete previews inside the selection's loaded chunks, without block-count
+  or fixed-distance caps; cancelled stale drafts and source revalidation.
 - Immediate draft scheduling with coalesced input, shared-budget calculation,
-  reusable model templates, and complete-batch rendering without partial rebuilds.
+  compact section palettes, reusable models, and persistent section GPU buffers.
 
 ## Changed
 

@@ -1,16 +1,16 @@
 package org.marshal.weaddon_lightposition.client.preview;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.Map;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.dispatch.BlockStateModelPart;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
-import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.resources.model.geometry.BakedQuad;
 import net.minecraft.core.Direction;
 import net.minecraft.gizmos.GizmoStyle;
@@ -24,19 +24,29 @@ import org.marshal.weaddon_lightposition.preview.PreviewOptions;
 
 final class CommandPreviewRenderer {
     private record Quad(BakedQuad baked, int tint, Direction cull) { }
-    private record DrawCell(CommandPreviewSnapshot.Cell cell, List<Quad> quads) { }
     private record Marker(AABB box, int color, boolean fill) { }
     private final IdentityHashMap<BlockState, List<Quad>> models = new IdentityHashMap<>();
-    private final ArrayList<DrawCell> mesh = new ArrayList<>();
-    private List<DrawCell> geometry = List.of();
-    private List<Marker> markers = List.of();
+    private final Map<SectionKey, CommandPreviewGpuSection> sections = new LinkedHashMap<>();
+    private record SectionKey(int x, int y, int z) { }
+    private List<CommandPreviewGpuSection> visible = List.of();
+    private final List<Marker> markers = new ArrayList<>();
+    private net.minecraft.client.renderer.culling.Frustum cullFrustum;
     private CommandPreviewSnapshot prepared;
     private Object modelManager;
     private BlockState probeState;
     private Object probeModel;
     private int buildIndex;
+    private CommandPreviewGpuSection building;
+    private int sortCursor;
+    private SectionKey markerSection;
+    private int markerStart;
+    private record MarkerSpan(double minX, double maxX, double minOther, double maxOther, int color) { }
 
-    void clearGeometry() { prepared = null; mesh.clear(); geometry = List.of(); markers = List.of(); buildIndex = 0; }
+    void clearGeometry() {
+        for (var section : sections.values()) section.close();
+        sections.clear(); visible = List.of(); prepared = null; markers.clear(); buildIndex = 0; building = null; sortCursor = 0; cullFrustum = null;
+        markerSection = null; markerStart = 0;
+    }
     void clear() { clearGeometry(); models.clear(); probeState = null; probeModel = null; }
 
     private Object bakedModel(Minecraft client, BlockState state) {
@@ -46,37 +56,59 @@ final class CommandPreviewRenderer {
     void render(LevelRenderContext context, CommandPreviewSnapshot snapshot, PreviewOptions options) {
         Minecraft client = Minecraft.getInstance();
         if (client.level == null || snapshot.state() != CommandPreviewSnapshot.State.READY) return;
-        prepare(client, snapshot);
+        prepare(client, snapshot, options);
         Vec3 camera = client.gameRenderer.getMainCamera().position();
-        double distanceSqr = (double) options.renderDistance() * options.renderDistance();
-        int alpha = Math.round(options.opacity() * 255);
-        List<DrawCell> batch = geometry;
-        context.submitNodeCollector().submitCustomGeometry(context.poseStack(),
-                RenderTypes.entityTranslucentEmissive(TextureAtlas.LOCATION_BLOCKS), (pose, consumer) ->
-                        draw(pose, consumer, camera, distanceSqr, alpha, batch));
+        var frustum = context.levelState().cameraRenderState.cullFrustum;
+        cullFrustum = frustum;
+        visible = sections.values().stream().filter(s -> s.uploaded() && !s.empty()
+                && client.level.getChunkSource().getChunk(s.x >> 4, s.z >> 4,
+                    net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) != null
+                && (frustum == null || frustum.isVisible(s.bounds))).sorted(Comparator.comparingDouble(
+                    (CommandPreviewGpuSection s) -> s.bounds.getCenter().distanceToSqr(camera)).reversed()).toList();
+        long sortDeadline = System.nanoTime() + 1_000_000;
+        for (int i = 0; i < visible.size() && System.nanoTime() < sortDeadline; i++) {
+            var section = visible.get(sortCursor++ % visible.size());
+            if (section.needsSort(camera)) section.sort(camera);
+        }
+        if (sortCursor > 1_000_000) sortCursor = 0;
+        if (visible.isEmpty()) return;
+        for (var section : visible) section.prepareTransform(context.poseStack().last().pose(), camera);
+        try (var pass = CommandPreviewGpuSection.begin(client)) {
+            for (var section : visible) section.draw(pass);
+        }
     }
 
-    private void prepare(Minecraft client, CommandPreviewSnapshot snapshot) {
+    private void prepare(Minecraft client, CommandPreviewSnapshot snapshot, PreviewOptions options) {
         if (modelManager != client.getModelManager() || probeState != null && probeModel != bakedModel(client, probeState)) {
             clear();
             modelManager = client.getModelManager();
         }
         if (prepared != snapshot) {
+            clearGeometry();
             prepared = snapshot;
-            mesh.clear();
-            geometry = List.of();
             buildIndex = 0;
-            markers = mergeMarkers(snapshot.cells());
         }
         long deadline = System.nanoTime() + 2_000_000;
         int count = 0;
-        if (buildIndex == snapshot.cells().size()) return;
         while (buildIndex < snapshot.cells().size() && count++ < 2_048 && System.nanoTime() < deadline) {
             var cell = snapshot.cells().get(buildIndex++);
-            if (cell.kind() != PreviewChangeKind.REMOVED && cell.after() != null) mesh.add(new DrawCell(cell, model(client, cell.after())));
+            if (cell.kind() != PreviewChangeKind.REMOVED && cell.after() != null
+                    && cell.after().getRenderShape() == net.minecraft.world.level.block.RenderShape.MODEL) {
+                SectionKey key = new SectionKey(cell.position().getX() >> 4, cell.position().getY() >> 4, cell.position().getZ() >> 4);
+                var section = sections.computeIfAbsent(key, k -> new CommandPreviewGpuSection(k.x * 16, k.y * 16, k.z * 16));
+                if (building != section) {
+                    if (building != null) building.upload(client.gameRenderer.getMainCamera().position());
+                    building = section;
+                }
+                writeCell(section.builder(), cell, model(client, cell.after()), section.x, section.y, section.z, Math.round(options.opacity() * 255));
+            } else {
+                appendMarker(cell);
+            }
         }
-        // Publish a complete immutable batch once, not a growing series of partial copies.
-        if (buildIndex == snapshot.cells().size()) geometry = List.copyOf(mesh);
+        if (buildIndex == snapshot.cells().size()) {
+            if (building != null) { building.upload(client.gameRenderer.getMainCamera().position()); building = null; }
+            finishMarkerSection();
+        }
     }
 
     private List<Quad> model(Minecraft client, BlockState state) {
@@ -105,12 +137,9 @@ final class CommandPreviewRenderer {
         return new Quad(quad, tint, cull);
     }
 
-    private void draw(PoseStack.Pose pose, VertexConsumer consumer, Vec3 camera, double distanceSqr, int alpha, List<DrawCell> batch) {
-        for (DrawCell draw : batch) {
-            var cell = draw.cell;
-            double dx = cell.position().getX() - camera.x(), dy = cell.position().getY() - camera.y(), dz = cell.position().getZ() - camera.z();
-            if (dx * dx + dy * dy + dz * dz > distanceSqr) continue;
-            for (Quad q : draw.quads) {
+    private void writeCell(VertexConsumer consumer, CommandPreviewSnapshot.Cell cell, List<Quad> quads, int x, int y, int z, int alpha) {
+            int dx = cell.position().getX() - x, dy = cell.position().getY() - y, dz = cell.position().getZ() - z;
+            for (Quad q : quads) {
                 if (q.cull != null && (cell.faces() & (1 << q.cull.ordinal())) == 0) continue;
                 int rgb = mixTint(q.tint, cell.kind().color());
                 Direction normal = q.baked.direction();
@@ -118,16 +147,15 @@ final class CommandPreviewRenderer {
                     var position = q.baked.position(v);
                     long uv = q.baked.packedUV(v);
                     // Small symmetric expansion avoids coplanar flicker without changing chunk meshes.
-                    consumer.addVertex(pose, (float) dx + position.x() * 1.003f - 0.0015f,
+                    consumer.addVertex((float) dx + position.x() * 1.003f - 0.0015f,
                                     (float) dy + position.y() * 1.003f - 0.0015f, (float) dz + position.z() * 1.003f - 0.0015f)
                             .setColor(rgb >> 16 & 255, rgb >> 8 & 255, rgb & 255, alpha)
                             .setUv(net.minecraft.client.model.geom.builders.UVPair.unpackU(uv),
                                     net.minecraft.client.model.geom.builders.UVPair.unpackV(uv))
                             .setOverlay(net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY).setLight(0x00F000F0)
-                            .setNormal(pose, normal.getStepX(), normal.getStepY(), normal.getStepZ());
+                            .setNormal(normal.getStepX(), normal.getStepY(), normal.getStepZ());
                 }
             }
-        }
     }
 
     private static int mixTint(int tint, int accent) {
@@ -140,37 +168,63 @@ final class CommandPreviewRenderer {
     void renderMarkers(CommandPreviewSnapshot snapshot, PreviewOptions options) {
         Minecraft client = Minecraft.getInstance();
         if (client.level == null || prepared != snapshot || buildIndex != snapshot.cells().size()) return;
-        Vec3 camera = client.gameRenderer.getMainCamera().position();
-        double distanceSqr = (double) options.renderDistance() * options.renderDistance();
         for (Marker marker : markers) {
-            if (marker.box.getCenter().distanceToSqr(camera) > distanceSqr) continue;
+            if (cullFrustum != null && !cullFrustum.isVisible(marker.box)) continue;
+            if (client.level.getChunkSource().getChunk((int) marker.box.minX >> 4, (int) marker.box.minZ >> 4,
+                    net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) == null) continue;
             int fill = marker.fill ? Math.round(options.opacity() * 38) << 24 | marker.color : 0;
             Gizmos.cuboid(marker.box.inflate(0.002), GizmoStyle.strokeAndFill(0xD0000000 | marker.color, 1.0f, fill), true).setAlwaysOnTop();
         }
     }
 
-    // Merge adjacent X runs once, instead of submitting a box around every edited cell.
-    private static List<Marker> mergeMarkers(List<CommandPreviewSnapshot.Cell> cells) {
-        List<CommandPreviewSnapshot.Cell> sorted = cells.stream()
-                .filter(c -> c.kind() == PreviewChangeKind.REMOVED || c.after() == null
-                        || c.after().getRenderShape() != net.minecraft.world.level.block.RenderShape.MODEL)
-                .sorted(Comparator
-                .comparingInt((CommandPreviewSnapshot.Cell c) -> c.position().getY())
-                .thenComparingInt(c -> c.position().getZ()).thenComparingInt(c -> c.position().getX())).toList();
-        ArrayList<Marker> output = new ArrayList<>();
-        for (int i = 0; i < sorted.size();) {
-            var start = sorted.get(i++);
-            int endX = start.position().getX();
-            while (i < sorted.size()) {
-                var next = sorted.get(i);
-                if (next.kind() != start.kind() || next.position().getY() != start.position().getY()
-                        || next.position().getZ() != start.position().getZ() || next.position().getX() != endX + 1) break;
-                endX++; i++;
-            }
-            output.add(new Marker(new AABB(start.position().getX(), start.position().getY(), start.position().getZ(),
-                    endX + 1, start.position().getY() + 1, start.position().getZ() + 1), start.kind().color(),
-                    start.kind() == PreviewChangeKind.REMOVED || start.after() == null || start.after().getRenderShape() != net.minecraft.world.level.block.RenderShape.MODEL));
+    // Paletted snapshots are already section/local-index ordered; no global sort is needed.
+    private void appendMarker(CommandPreviewSnapshot.Cell cell) {
+        int x = cell.position().getX(), y = cell.position().getY(), z = cell.position().getZ();
+        int color = cell.kind().color();
+        SectionKey key = new SectionKey(x >> 4, y >> 4, z >> 4);
+        if (!key.equals(markerSection)) {
+            finishMarkerSection();
+            markerSection = key; markerStart = markers.size();
         }
-        return List.copyOf(output);
+        if (!markers.isEmpty()) {
+            Marker last = markers.getLast();
+            if (last.color == color && last.box.maxX == x && last.box.minY == y && last.box.minZ == z
+                    && ((int) last.box.minX >> 4) == (x >> 4)) {
+                markers.set(markers.size() - 1, new Marker(new AABB(last.box.minX, y, z, x + 1, y + 1, z + 1), color, true));
+                return;
+            }
+        }
+        markers.add(new Marker(new AABB(x, y, z, x + 1, y + 1, z + 1), color, true));
+    }
+
+    private void finishMarkerSection() {
+        if (markerSection == null) return;
+        var merged = mergeAxis(mergeAxis(markers.subList(markerStart, markers.size()), true), false);
+        markers.subList(markerStart, markers.size()).clear();
+        markers.addAll(merged);
+        markerSection = null;
+    }
+
+    // Exact section-local cuboid merging: never bridge a hole or merge across chunks.
+    private static List<Marker> mergeAxis(List<Marker> input, boolean alongZ) {
+        ArrayList<Marker> output = new ArrayList<>();
+        Map<MarkerSpan, Integer> previous = new HashMap<>();
+        for (Marker marker : input) {
+            AABB b = marker.box;
+            MarkerSpan key = new MarkerSpan(b.minX, b.maxX, alongZ ? b.minY : b.minZ, alongZ ? b.maxY : b.maxZ, marker.color);
+            Integer index = previous.get(key);
+            if (index != null) {
+                Marker last = output.get(index);
+                AABB a = last.box;
+                if (alongZ ? a.maxZ == b.minZ : a.maxY == b.minY) {
+                    output.set(index, new Marker(new AABB(a.minX, a.minY, a.minZ, a.maxX,
+                            alongZ ? a.maxY : b.maxY, alongZ ? b.maxZ : a.maxZ), marker.color, true));
+                    continue;
+                }
+            }
+            previous.put(key, output.size());
+            output.add(marker);
+        }
+        return output;
     }
 }

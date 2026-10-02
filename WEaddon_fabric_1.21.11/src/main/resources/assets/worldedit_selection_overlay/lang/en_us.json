@@ -273,7 +273,6 @@
   "preview.worldedit_selection_overlay.computing": "Preparing: %s / %s cells",
   "preview.worldedit_selection_overlay.counts": "Added: %s | Replaced: %s | Removed: %s",
   "preview.worldedit_selection_overlay.random": "Random sample; execution rolls a new layout.",
-  "preview.worldedit_selection_overlay.render_limit": "Display capped; counts cover the full calculation.",
   "preview.worldedit_selection_overlay.local_only": "Requires local WorldEdit in singleplayer.",
   "preview.worldedit_selection_overlay.selection": "Complete your WorldEdit selection first.",
   "preview.worldedit_selection_overlay.incomplete": "Complete the command; flags are not previewed.",
@@ -284,10 +283,10 @@
   "preview.worldedit_selection_overlay.session_state": "Inventory mode or world override is not previewed.",
   "preview.worldedit_selection_overlay.permission": "Missing WorldEdit permission.",
   "preview.worldedit_selection_overlay.height": "Selection exceeds the world's build height.",
-  "preview.worldedit_selection_overlay.unloaded": "Load every chunk in the selection first.",
-  "preview.worldedit_selection_overlay.too_large": "Selection exceeds the preview calculation limit.",
+  "preview.worldedit_selection_overlay.unloaded": "No loaded chunks inside the selection.",
   "preview.worldedit_selection_overlay.worldedit_limit": "Result exceeds your WorldEdit change limit.",
   "preview.worldedit_selection_overlay.outside_snapshot": "Operation reads outside the captured selection.",
   "preview.worldedit_selection_overlay.failed": "Preview unavailable; the world was not changed.",
-  "screen.worldedit_selection_overlay.settings.command_preview_label": "Command preview"
+  "screen.worldedit_selection_overlay.settings.command_preview_label": "Command preview",
+  "preview.worldedit_selection_overlay.loaded_scope": "Result inside the selection's loaded chunks."
 }

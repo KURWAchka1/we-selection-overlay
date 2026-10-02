@@ -44,6 +44,7 @@ public final class CommandPreviewController {
     }
 
     public void initialize(Path configDirectory) {
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING.register(client -> close());
         settings = configDirectory.resolve("command-preview.properties");
         if (Files.isRegularFile(settings)) {
             Properties values = new Properties();
@@ -96,6 +97,11 @@ public final class CommandPreviewController {
     }
 
     public void clearDraft() { edited(""); }
+    public void close() {
+        draft = "";
+        if (source != null) source.clear();
+        renderer.clear();
+    }
     public void tick(MinecraftClient client) {
         if (client.world != lastLevel) { lastLevel = client.world; clearDraft(); invalidate(); renderer.clear(); }
         if (!(client.currentScreen instanceof ChatScreen)) clearDraft();
@@ -103,6 +109,7 @@ public final class CommandPreviewController {
             while (toggleKey.wasPressed()) setEnabled(!options.enabled());
         }
         request(client);
+        if (!active()) renderer.clearGeometry();
     }
 
     public void renderBlocks(WorldRenderContext context) {
@@ -151,7 +158,8 @@ public final class CommandPreviewController {
         addHudLine(client, lines, heading, width, 0xFFB9E8D3);
         addHudLine(client, lines, summary, width, 0xFFF0F1F3);
         if (s.random()) addHudLine(client, lines, Text.translatable("preview.worldedit_selection_overlay.random"), width, 0xFFFFD275);
-        if (s.limited()) addHudLine(client, lines, Text.translatable("preview.worldedit_selection_overlay.render_limit"), width, 0xFFFFD275);
+        if (s.state() == CommandPreviewSnapshot.State.READY) addHudLine(client, lines,
+                Text.translatable("preview.worldedit_selection_overlay.loaded_scope"), width, 0xFFC4CAD0);
         if (options.statistics() && s.state() == CommandPreviewSnapshot.State.READY) {
             for (int i = 0; i < Math.min(3, s.statistics().transitions().size()); i++) {
                 var transition = s.statistics().transitions().get(i);

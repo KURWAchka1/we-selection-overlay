@@ -44,6 +44,7 @@ public final class CommandPreviewController {
     }
 
     public void initialize(Path configDirectory) {
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.GameShuttingDownEvent event) -> close());
         settings = configDirectory.resolve("command-preview.properties");
         if (Files.isRegularFile(settings)) {
             Properties values = new Properties();
@@ -96,6 +97,11 @@ public final class CommandPreviewController {
     }
 
     public void clearDraft() { edited(""); }
+    public void close() {
+        draft = "";
+        if (source != null) source.clear();
+        renderer.clear();
+    }
     public void tick(Minecraft client) {
         if (client.level != lastLevel) { lastLevel = client.level; clearDraft(); invalidate(); renderer.clear(); }
         if (!(client.screen instanceof ChatScreen)) clearDraft();
@@ -103,10 +109,11 @@ public final class CommandPreviewController {
             while (toggleKey.consumeClick()) setEnabled(!options.enabled());
         }
         request(client);
+        if (!active()) renderer.clearGeometry();
     }
 
-    public void renderBlocks(PoseStack context) {
-        if (active()) renderer.render(context, snapshot(), options);
+    public void renderBlocks(PoseStack context, net.minecraft.client.renderer.culling.Frustum frustum) {
+        if (active()) renderer.render(context, frustum, snapshot(), options);
     }
     public void renderMarkers() {
         if (active()) renderer.renderMarkers(snapshot(), options);
@@ -151,7 +158,8 @@ public final class CommandPreviewController {
         addHudLine(client, lines, heading, width, 0xFFB9E8D3);
         addHudLine(client, lines, summary, width, 0xFFF0F1F3);
         if (s.random()) addHudLine(client, lines, Component.translatable("preview.worldedit_selection_overlay.random"), width, 0xFFFFD275);
-        if (s.limited()) addHudLine(client, lines, Component.translatable("preview.worldedit_selection_overlay.render_limit"), width, 0xFFFFD275);
+        if (s.state() == CommandPreviewSnapshot.State.READY) addHudLine(client, lines,
+                Component.translatable("preview.worldedit_selection_overlay.loaded_scope"), width, 0xFFC4CAD0);
         if (options.statistics() && s.state() == CommandPreviewSnapshot.State.READY) {
             for (int i = 0; i < Math.min(3, s.statistics().transitions().size()); i++) {
                 var transition = s.statistics().transitions().get(i);

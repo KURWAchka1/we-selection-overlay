@@ -8,9 +8,9 @@ fixtures, screenshots, and logs are local data and are not committed.
 The root README build command completed for all six runtimes and both universal
 packagers. Packager tests checked metadata, version selection, Java bytecode
 boundaries, bundled license notices, and registration of the chat-preview mixin
-for every runtime. Each universal JAR is approximately 1.1 MiB; neither bundles
+for every runtime. Each universal JAR is approximately 1.2 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,150,016 bytes (Fabric) and 1,122,741 bytes
+The archived release outputs are 1,224,464 bytes (Fabric) and 1,196,772 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -40,9 +40,10 @@ temporary command priority without changing its preference or cached snapshot,
 Escape restoration, and normal WorldEdit execution on Enter. The NeoForge runs
 also exercise the real WorldEdit CUI handshake and native clipboard adapters.
 
-The three Fabric runs additionally perform 40 deterministic comparisons per
+The three Fabric runs additionally perform 80 deterministic comparisons per
 runtime against real WorldEdit EditSession results: eight drafts across cuboid,
-ellipsoid, cylinder, polygon, and convex regions. These include walls, faces,
+ellipsoid, cylinder, polygon, and convex regions, with full and clipped input
+coverage. These include walls, faces,
 outline, overlay, replace with an omitted mask, and an explicit block state.
 WorldEdit history is checked before/after preview, and rapid native chat edits
 must immediately discard obsolete geometry.
@@ -51,14 +52,14 @@ Their lifecycle tests cover global mask replacement, source block changes with
 an unchanged draft, selection changes without a CUI notification, F8 in chat,
 unloaded selections, scan/change limits, unsupported flags, invalid patterns,
 no-op changes, and removal markers. The shared simulation is the same domain
-implementation on NeoForge, but the full 40-case comparison/lifecycle matrix
+implementation on NeoForge, but the full 80-case comparison/lifecycle matrix
 has only been executed on Fabric; it is not claimed as six equivalent suites.
 
 Screenshot review and a separate pixel check verify actual diamond textures,
 not only a nonempty geometry buffer. All six set-preview screenshots pass
-the cyan surface test (more than 36,000 matching pixels in the fixed crop).
-The check also caught incorrect packed UV decoding and Minecraft's hurt-overlay
-UV before release; production now uses the native UV helpers and NO_OVERLAY.
+the cyan surface test (36,062 Fabric / 36,463 NeoForge pixels in the fixed crop).
+The texture check complements native-buffer assertions; a nonempty GPU buffer
+alone does not establish correct world projection or texture sampling.
 
 ```powershell
 .\tools\test-command-matrix.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25'
@@ -70,16 +71,32 @@ Optional `-Only fabric-26.2` selects a focused rerun. Logs are written to
 of the corresponding isolation world; fixture settings are reset before each
 launch to verify defaults. No player save or normal Minecraft config is used.
 
-### Latency and bounded-work regression
+### Complete results and scheduling regression
 
 After the scheduling optimization, all six production-artifact runs additionally
-check a 100-edit burst against a 64,000-cell selection, correct counts (excluding
-already-matching blocks), render caps, restoration to a small selection, and
+check a 100-edit burst against a 64,000-cell selection on Fabric or a
+110,592-cell selection on NeoForge, correct counts (excluding already-matching
+blocks), complete exposed surfaces, restoration to a small selection, and
 stable random snapshots after repeated CUI notifications. Model templates must
 survive ordinary edits, while a changed baked-model identity rebuilds geometry.
 The three NeoForge runs also perform an actual built-in resource reload; the
 Fabric tests inject a changed probe identity. A direct Fabric gametest reload
 hit a framework teardown/Phaser stall and is not claimed as a passing reload test.
+An intermittent Fabric 26.2 teardown stall was also observed after assertions;
+the final matrix rerun closed its worlds normally and exited successfully.
+
+Fabric additionally checks 274,625 affected cells / 24,578 exposed cells, a
+selection bounding box spanning two million blocks on X/Z clipped to 117 actual
+loaded chunks, and teleporting away/back to unload/reload the selection. Capture
+is clipped to loaded selection bounds (including read-only shape/overlay
+context); simulated writes and displayed results obey the original region.
+Unloaded geometry is released, and chunks are not forcibly loaded.
+Exact section-local marker merging reduces a solid 6x6x6 fluid fallback to one
+box without filling gaps. Palette tests cover uniform storage and 8/16/32-bit
+index promotion without losing cell values. In the uniform 274,625-cell case,
+index arrays occupy 4,096 bytes; this is not total heap or GPU memory usage.
+GPU vertex-buffer identities remain stable across unchanged frames, and old
+buffers are closed when a different draft replaces the result.
 
 Measured on this laptop (i5-13420H, Intel UHD, 1280x720, 2 GiB test JVM, 100 FPS
 cap). The small case alternates gold/diamond drafts eight times in a 6x6x6
@@ -87,29 +104,35 @@ selection. Measurements include scheduling and completion of native geometry,
 not only the domain calculation; the fixtures observe completion at tick/frame
 boundaries, so these are practical latency samples rather than microbenchmarks.
 
-| Loader | Minecraft | Small preview median | Fresh 64,000-cell result |
-| --- | --- | --- | --- |
-| Fabric | 1.21.11 | 50 ms | 1,204 ms |
-| Fabric | 26.1 | 50 ms | 2,552 ms |
-| Fabric | 26.2 | 50 ms | 2,299 ms |
-| NeoForge | 1.21.11 | 50 ms | 1,403 ms |
-| NeoForge | 26.1.2 | 50 ms | 1,399 ms |
-| NeoForge | 26.2 | 50 ms | 1,699 ms |
+| Loader | Minecraft | Small preview median | Cold input cells | Calculation ready |
+| --- | --- | --- | --- | --- |
+| Fabric | 1.21.11 | 50 ms | 64,000 | 903 ms |
+| Fabric | 26.1 | 49 ms | 64,000 | 1,559 ms |
+| Fabric | 26.2 | 49 ms | 64,000 | 1,595 ms |
+| NeoForge | 1.21.11 | 50 ms | 110,592 | 2,220 ms |
+| NeoForge | 26.1.2 | 50 ms | 110,592 | 2,114 ms |
+| NeoForge | 26.2 | 51 ms | 110,592 | 1,862 ms |
+
+Small timings include geometry completion. Cold timings measure calculation
+readiness; section geometry uploads then progress within their frame budget.
 
 Before the change, the same Fabric 26.2 small case took 503-705 ms, approximately
 600 ms median. The previous timer is removed for existing configurations too.
 Server work remains one shared 2 ms target per tick; no command-preview scan runs
 without an active command draft. Geometry has its own bounded preparation and
-the existing visual cap; large results are deliberately not promised instantly.
+no result-size or fixed-distance preview cap. Large cold results are not
+promised instantly: snapshot capture, simulation, verification, and uploads
+still take real work. Relevant loaded-chunk coverage changes currently rebuild
+the snapshot rather than selectively reusing source tiles.
 
 NeoForge frame sampling compares an idle weighted preview, the large calculation,
-and 30 ticks of the completed capped large preview:
+and 30 ticks of the completed full large preview:
 
 | Minecraft | Idle median | Calculating median | Large-preview median |
 | --- | --- | --- | --- |
-| 1.21.11 | 10.053 ms | 10.056 ms | 10.058 ms |
-| 26.1.2 | 10.025 ms | 10.022 ms | 9.988 ms |
-| 26.2 | 10.003 ms | 9.992 ms | 10.066 ms |
+| 1.21.11 | 10.029 ms | 10.035 ms | 10.026 ms |
+| 26.1.2 | 10.074 ms | 9.995 ms | 9.967 ms |
+| 26.2 | 10.039 ms | 10.018 ms | 10.023 ms |
 
 This is a capped local responsiveness check, not proof of zero rendering cost,
 unchanged uncapped FPS, or performance on every modpack. Individual external API
@@ -118,6 +141,10 @@ deadline. Raw samples appear in the command-matrix logs as `WESO ... LATENCY`,
 `LARGE`, and `FRAME` lines; profiling code belongs only to the test fixture JAR.
 
 ## In-world isolation regression
+
+This section records the preceding baseline verification. Isolation and UI
+behavior were not changed by the complete-command-preview work; these dedicated
+suites were not rerun for this change and are not new coverage claims.
 
 The packaged universal JAR, not the version-specific source module, was loaded for each run. The test fixture selects diamond and gold blocks inside stone, switches isolation eight times, and checks:
 
@@ -192,6 +219,7 @@ of every clipboard transform or WorldEdit extension. Unknown patterns, flags,
 and extension masks are deliberately rejected, not approximated.
 
 The UI timing measurements in UI_VALIDATION.md belong to the earlier UI profile;
-the separate command latency/frame checks are documented above. Bounded work and render caps
-are safeguards, not proof of zero FPS loss in every modpack. Automated assertions
+the separate command latency/frame checks are documented above. Scheduled work,
+palette storage, and cached section geometry reduce cost, but are not proof of
+zero FPS loss in every modpack. Automated assertions
 and screenshot inspection do not replace user visual acceptance.

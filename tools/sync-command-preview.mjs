@@ -16,7 +16,7 @@ const targets = [
 ];
 const files = ['client/preview/CommandPreviewSnapshot.java', 'client/preview/CommandPreviewSource.java',
   'client/preview/WorldEditCommandPreviewSource.java', 'client/preview/CommandPreviewController.java',
-  'client/preview/CommandPreviewRenderer.java', 'mixin/ChatCommandPreviewMixin.java'];
+  'client/preview/CommandPreviewRenderer.java', 'client/preview/CommandPreviewGpuSection.java', 'mixin/ChatCommandPreviewMixin.java'];
 const copies = new Map();
 for (const file of files) copies.set(file, await fs.readFile(path.join(root, canonical, java, file), 'utf8'));
 
@@ -49,7 +49,8 @@ function yarn(code) {
     ['net.minecraft.gizmos.Gizmos', 'net.minecraft.world.debug.gizmo.GizmoDrawing'],
     ['net.minecraft.util.RandomSource', 'net.minecraft.util.math.random.Random'],
     ['net.minecraft.world.phys.AABB', 'net.minecraft.util.math.Box'],
-    ['net.minecraft.world.phys.Vec3', 'net.minecraft.util.math.Vec3d']
+    ['net.minecraft.world.phys.Vec3', 'net.minecraft.util.math.Vec3d'],
+    ['net.minecraft.client.renderer.culling.Frustum', 'net.minecraft.client.render.Frustum']
   ];
   for (const [a, b] of mappings) code = code.replaceAll(a, b);
   for (const [a, b] of [['Minecraft', 'MinecraftClient'], ['KeyMapping', 'KeyBinding'], ['GuiGraphicsExtractor', 'DrawContext'],
@@ -76,13 +77,8 @@ function yarn(code) {
 }
 
 function legacyRenderer(code, isYarn) {
-  // Legacy engines submit directly to their native shared translucent buffer.
-  const start = code.indexOf('        context.submitNodeCollector().submitCustomGeometry');
-  const end = code.indexOf('\n    }', start);
-  const submit = isYarn
-    ? `        var consumer = context.consumers().getBuffer(RenderTypes.entityTranslucentEmissive(TextureAtlas.LOCATION_BLOCKS));\n        draw(context.matrices().peek(), consumer, camera, distanceSqr, alpha, batch);`
-    : `        var buffers = client.renderBuffers().bufferSource();\n        draw(context.last(), buffers.getBuffer(RenderTypes.entityTranslucentEmissive(TextureAtlas.LOCATION_BLOCKS)), camera, distanceSqr, alpha, batch);\n        buffers.endBatch(RenderTypes.entityTranslucentEmissive(TextureAtlas.LOCATION_BLOCKS));`;
-  code = code.slice(0, start) + submit + code.slice(end);
+  code = code.replace('context.levelState().cameraRenderState.cullFrustum', isYarn ? 'CommandPreviewFrustum.current()' : 'frustum')
+    .replaceAll('context.poseStack().last().pose()', isYarn ? 'context.matrices().peek().getPositionMatrix()' : 'context.last().pose()');
   code = code.replace('client.getModelManager().getBlockStateModelSet().get(state).collectParts(RandomSource.create(42), parts);',
     isYarn ? 'client.getBlockRenderManager().getModel(state).addParts(RandomSource.create(42), parts);'
       : 'client.getBlockRenderer().getBlockModel(state).collectParts(RandomSource.create(42), parts);');
@@ -97,7 +93,7 @@ function legacyRenderer(code, isYarn) {
     .replaceAll('BlockStateModelPart', 'BlockModelPart').replaceAll('resources.model.geometry.BakedQuad', 'renderer.block.model.BakedQuad')
     .replaceAll('renderer.rendertype.RenderTypes', 'renderer.rendertype.RenderTypes');
   code = code.replaceAll('client.gameRenderer.mainCamera()', isYarn ? 'client.gameRenderer.getCamera()' : 'client.gameRenderer.getMainCamera()')
-    .replaceAll('.position();', isYarn ? '.getCameraPos();' : '.position();')
+    .replaceAll('.getCamera().position()', isYarn ? '.getCamera().getCameraPos()' : '.getCamera().position()')
     .replaceAll('camera.x()', 'camera.x').replaceAll('camera.y()', 'camera.y').replaceAll('camera.z()', 'camera.z')
     .replace('GizmoStyle.strokeAndFill(0xD0000000 | marker.color, 1.0f, fill), true)', 'GizmoStyle.strokeAndFill(0xD0000000 | marker.color, 1.0f, fill))');
   if (isYarn) code = code.replaceAll('q.baked.direction()', 'q.baked.face()').replaceAll('q.baked.position(v)', 'q.baked.getPosition(v)')
@@ -112,25 +108,41 @@ for (const target of targets) {
     if (target.version !== '26.2') code = code.replaceAll('client.gui.screen()', 'client.screen');
     if (target.version === '26.1') code = code.replaceAll('client.gameRenderer.mainCamera()', 'client.gameRenderer.getMainCamera()');
     if (target.neo) {
+      if (file.endsWith('CommandPreviewController.java')) code = code.replace(
+        'net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.CLIENT_STOPPING.register(client -> close());',
+        'net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.GameShuttingDownEvent event) -> close());');
+      if (file.endsWith('WorldEditCommandPreviewSource.java')) code = code.replace(
+        /        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents.CHUNK_LOAD[\s\S]*?chunkChanged\(level, chunk.getPos\(\).x\(\), chunk.getPos\(\).z\(\), false\)\);/,
+        `        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.level.ChunkEvent.Load event) -> {\n            if (event.getLevel() instanceof net.minecraft.client.multiplayer.ClientLevel)\n                chunkChanged(event.getLevel(), event.getChunk().getPos().x, event.getChunk().getPos().z, true);\n        });\n        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.level.ChunkEvent.Unload event) -> {\n            if (event.getLevel() instanceof net.minecraft.client.multiplayer.ClientLevel)\n                chunkChanged(event.getLevel(), event.getChunk().getPos().x, event.getChunk().getPos().z, false);\n        });`);
       code = code.replaceAll('com.sk89q.worldedit.fabric.FabricAdapter', 'com.sk89q.worldedit.neoforge.NeoForgeAdapter').replaceAll('FabricAdapter', 'NeoForgeAdapter');
       if (target.version === '1.21.11') code = code.replaceAll('NeoForgeAdapter.get().fromNativePlayer(', 'NeoForgeAdapter.adaptPlayer(')
         .replaceAll('NeoForgeAdapter.get().toNativeBlockState(', 'NeoForgeAdapter.adapt(');
       code = code.replace('import net.fabricmc.loader.api.FabricLoader;', 'import net.neoforged.fml.ModList;')
         .replaceAll('FabricLoader.getInstance().isModLoaded(', 'ModList.get().isLoaded(');
       if (file.endsWith('Controller.java')) code = code.replace('import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;', 'import com.mojang.blaze3d.vertex.PoseStack;')
-        .replaceAll('LevelRenderContext context', 'PoseStack context');
+        .replaceAll('LevelRenderContext context', 'PoseStack context, net.minecraft.client.renderer.culling.Frustum frustum')
+        .replace('renderer.render(context,', 'renderer.render(context, frustum,');
       if (file.endsWith('Renderer.java')) {
-        code = code.replace('import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;', '')
-          .replaceAll('LevelRenderContext context', 'PoseStack context');
-        if (target.version.startsWith('26.')) {
-          code = code.replace('context.submitNodeCollector().submitCustomGeometry(context.poseStack(),', 'collector(client).submitCustomGeometry(context,')
-            .replace('        prepare(client, snapshot);', '        if (collector(client) == null) return;\n        prepare(client, snapshot);');
-          code = code.replace('    void clear() {', `    private java.lang.reflect.Field collectorField;\n    private boolean collectorResolved;\n    private net.minecraft.client.renderer.SubmitNodeCollector collector(Minecraft client) {\n        if (!collectorResolved) {\n            collectorResolved = true;\n            try { collectorField = net.minecraft.client.renderer.LevelRenderer.class.getDeclaredField("submitNodeStorage"); collectorField.setAccessible(true); }\n            catch (ReflectiveOperationException | RuntimeException ignored) { return null; }\n        }\n        if (collectorField == null) return null;\n        try { return (net.minecraft.client.renderer.SubmitNodeCollector) collectorField.get(client.levelRenderer); }\n        catch (IllegalAccessException ignored) { return null; }\n    }\n\n    void clear() {`);
-        }
+        code = code.replace('import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;', 'import com.mojang.blaze3d.vertex.PoseStack;')
+          .replaceAll('LevelRenderContext context', 'PoseStack context, net.minecraft.client.renderer.culling.Frustum frustum')
+          .replace(/^[ \t]*var frustum = context.levelState\(\).cameraRenderState.cullFrustum;\r?\n/m, '')
+          .replaceAll('context.poseStack().last().pose()', 'context.last().pose()');
       }
+    }
+    if (file.endsWith('GpuSection.java') && target.version !== '26.2') {
+      code = code.replaceAll('Optional.empty()', 'java.util.OptionalInt.empty()')
+        .replaceAll('getPrimitiveTopology()', 'getVertexFormatMode()').replaceAll('getVertexFormatBinding(0)', 'getVertexFormat()')
+        .replaceAll('client.gameRenderer.mainRenderTarget()', 'client.getMainRenderTarget()')
+        .replaceAll('pass.setVertexBuffer(0, vertices.slice())', 'pass.setVertexBuffer(0, vertices)')
+        .replaceAll('pass.drawIndexed(indexCount, 1, 0, 0, 0)', 'pass.drawIndexed(0, 0, indexCount, 1)')
+        .replace(/var textures = SETUP.prepareTextures\([\s\S]*?;/, 'var textures = SETUP.getTextures();')
+        .replace('for (var texture : textures) pass.bindTexture(texture.name(), texture.textureView(), texture.sampler());',
+          'for (var texture : textures.entrySet()) pass.bindTexture(texture.getKey(), texture.getValue().textureView(), texture.getValue().sampler());');
     }
     if ((target.version === 'yarn' || target.version === '1.21.11') && file.endsWith('Renderer.java')) code = legacyRenderer(code, target.version === 'yarn');
     if (target.version === '1.21.11') code = code.replaceAll('GuiGraphicsExtractor', 'GuiGraphics').replaceAll('extractRenderState', 'render').replaceAll('graphics.text(', 'graphics.drawString(');
+    if (target.version === '1.21.11' || target.version === 'yarn') code = code.replaceAll('getPos().x()', 'getPos().x').replaceAll('getPos().z()', 'getPos().z');
+    else if (target.neo) code = code.replaceAll('getPos().x,', 'getPos().x(),').replaceAll('getPos().z,', 'getPos().z(),');
     if (target.version === 'yarn') {
       code = code.replace('net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext', 'net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext').replaceAll('LevelRenderContext', 'WorldRenderContext');
       code = yarn(code).replaceAll('client.screen', 'client.currentScreen').replaceAll('SpriteAtlasTexture.LOCATION_BLOCKS', 'SpriteAtlasTexture.BLOCK_ATLAS_TEXTURE')
@@ -140,6 +152,30 @@ for (const target of targets) {
         .replaceAll('GizmoDrawing.cuboid(', 'GizmoDrawing.box(').replaceAll('DrawStyle.strokeAndFill(', 'DrawStyle.filledAndStroked(')
         .replaceAll('.setAlwaysOnTop()', '.ignoreOcclusion()').replaceAll('net.minecraft.world.level.block.RenderShape.MODEL', 'net.minecraft.block.BlockRenderType.MODEL')
         .replaceAll('getRenderShape()', 'getRenderType()');
+      code = code.replaceAll('Optional.empty()', 'java.util.OptionalInt.empty()')
+        .replaceAll('client.player.blockPosition()', 'client.player.getBlockPos()')
+        .replaceAll('client.options.getEffectiveRenderDistance()', 'client.options.getClampedViewDistance()')
+        .replaceAll('client.world.getChunkSource()', 'client.world.getChunkManager()')
+        .replaceAll('net.minecraft.world.level.chunk.status.ChunkStatus', 'net.minecraft.world.chunk.ChunkStatus')
+        .replaceAll('chunk.getPos()', 'chunk.getPos()');
+      if (file.endsWith('GpuSection.java')) {
+        for (const [a, b] of [
+          ['com.mojang.blaze3d.vertex.BufferBuilder', 'net.minecraft.client.render.BufferBuilder'],
+          ['com.mojang.blaze3d.vertex.ByteBufferBuilder', 'net.minecraft.client.util.BufferAllocator'],
+          ['com.mojang.blaze3d.vertex.MeshData', 'net.minecraft.client.render.BuiltBuffer'],
+          ['com.mojang.blaze3d.vertex.VertexSorting', 'com.mojang.blaze3d.systems.VertexSorter'],
+          ['net.minecraft.client.renderer.RenderPipelines', 'net.minecraft.client.gl.RenderPipelines'],
+          ['net.minecraft.client.renderer.rendertype.RenderSetup', 'net.minecraft.client.render.RenderSetup'],
+          ['ByteBufferBuilder', 'BufferAllocator'], ['MeshData', 'BuiltBuffer'], ['VertexSorting', 'VertexSorter'],
+          ['.withTexture(', '.texture('], ['.createRenderSetup()', '.build()'], ['builder.build()', 'builder.endNullable()'],
+          ['data.drawState()', 'data.getDrawParameters()'], ['data.vertexBuffer()', 'data.getBuffer()'],
+          ['data.indexBuffer()', 'data.getSortedBuffer()'], ['.buildSortedIndexBuffer(', '.sortAndStore('],
+          ['data.byteBuffer()', 'data.getBuffer()'], ['getVertexFormatMode()', 'getVertexFormatMode()'],
+          ['getDynamicUniforms().writeTransform(', 'getDynamicUniforms().write('], ['getMainRenderTarget()', 'getFramebuffer()'],
+          ['getColorTextureView()', 'getColorAttachmentView()'], ['getDepthTextureView()', 'getDepthAttachmentView()'],
+          ['SETUP.getTextures()', 'SETUP.resolveTextures()'], ['camera.x()', 'camera.x'], ['camera.y()', 'camera.y'], ['camera.z()', 'camera.z']
+        ]) code = code.replaceAll(a, b);
+      }
     }
     if (target.name !== canonical) { const out = path.join(root, target.name, java, file); await fs.mkdir(path.dirname(out), { recursive: true }); await fs.writeFile(out, code); }
   }
@@ -156,6 +192,8 @@ for (const target of targets) {
     let entry = await fs.readFile(entryPath, 'utf8');
     if (!entry.includes('RuntimeCuiBridge.initialize')) entry = entry.replace('        OVERLAY_CLIENT.initialize();',
       '        RuntimeCuiBridge.initialize(modEventBus);\n        OVERLAY_CLIENT.initialize();');
+    if (!entry.includes('OVERLAY_CLIENT::onRenderCommandPreview')) entry = entry.replace('        OVERLAY_CLIENT.initialize();',
+      '        OVERLAY_CLIENT.initialize();\n        NeoForge.EVENT_BUS.addListener(OVERLAY_CLIENT::onRenderCommandPreview);');
     await fs.writeFile(entryPath, entry);
   }
   const mainPath = path.join(root, target.name, java, 'client/WorldEditPointOverlayClient.java');
@@ -177,6 +215,23 @@ for (const target of targets) {
     if (target.neo) main = main.replace('        event.register(deselectKey);', '        event.register(deselectKey);\n        event.register(commandPreviewKey);');
   }
   main = main.replace('            commandPreviewController.invalidate();', '            commandPreviewController.selectionChanged();');
+  if (!main.includes('onRenderCommandPreview')) {
+    main = main.replace(/        commandPreviewController.renderBlocks\([^\n]*\);\r?\n/, '');
+    if (target.neo) {
+      const stage = 'AfterTranslucentBlocks';
+      main = main.replace('    public void onClientSystemMessage(', `    public void onRenderCommandPreview(RenderLevelStageEvent.${stage} event) {\n        commandPreviewController.renderBlocks(event.getPoseStack(), event.getFrustum());\n    }\n\n    public void onClientSystemMessage(`);
+    } else {
+      const events = target.version === 'yarn' ? 'WorldRenderEvents' : 'LevelRenderEvents';
+      const stage = target.version === 'yarn' ? 'END_MAIN' : 'AFTER_TRANSLUCENT_TERRAIN';
+      const context = target.version === 'yarn' ? 'WorldRenderContext' : 'LevelRenderContext';
+      main = main.replace(`${events}.${target.version === 'yarn' ? 'AFTER_ENTITIES' : 'COLLECT_SUBMITS'}.register(this::onRenderClipboardPreview);`,
+        `${events}.${target.version === 'yarn' ? 'AFTER_ENTITIES' : 'COLLECT_SUBMITS'}.register(this::onRenderClipboardPreview);\n        ${events}.${stage}.register(this::onRenderCommandPreview);`);
+      main = main.replace('    private void onRenderClipboardPreview(', `    private void onRenderCommandPreview(${context} context) {\n        commandPreviewController.renderBlocks(context);\n    }\n\n    private void onRenderClipboardPreview(`);
+    }
+  }
+  if (target.neo && target.version.startsWith('26.')) main = main.replace('event.getPoseStack(), event.getFrustum()', 'event.getPoseStack(), event.getLevelRenderState().cameraRenderState.cullFrustum');
+  if (target.neo && target.version === '1.21.11') main = main.replace('event.getPoseStack(), event.getFrustum()', 'event.getPoseStack(), org.marshal.weaddon_lightposition.client.preview.CommandPreviewFrustum.current()');
+  if (target.version === 'yarn') main = main.replace('WorldRenderEvents.AFTER_TRANSLUCENT.register(this::onRenderCommandPreview);', 'WorldRenderEvents.END_MAIN.register(this::onRenderCommandPreview);');
   main = main.replace(/(?<!if \(!commandPreviewController\.ownsPreviewChannel\(\)\) )clipboardPreviewController\.renderBlocks\(/g,
     'if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(')
     .replace(/(?<!if \(!commandPreviewController\.ownsPreviewChannel\(\)\) )clipboardPreviewController\.renderBounds\(\);/g,

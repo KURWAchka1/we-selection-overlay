@@ -83,6 +83,7 @@ See a ghost of the result while typing `//set`, `//replace`, `//walls`,
 `//faces` / `//outline`, or `//overlay`, before pressing Enter.
 
 * Textured changed blocks, removal markers, and compact change counts
+* Complete results within loaded selection chunks, without a block-count cap
 * Block states and percentage mixtures, with a stable random sample
 * Quick toggle in settings or with configurable `F8`
 * Clipboard preview pauses temporarily, then returns when chat closes

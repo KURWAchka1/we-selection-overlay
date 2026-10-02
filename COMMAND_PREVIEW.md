@@ -30,7 +30,7 @@ When a supported draft is present, clipboard rendering and background scanning
 pause; its enabled preference, clipboard, transforms, and cache are preserved.
 Closing chat/removing that draft restores normal clipboard behavior.
 
-## Safety and limits
+## Safety and Scheduling
 
 Only integrated singleplayer WorldEdit sessions are currently supported. Remote
 CUI still provides the existing selection overlay, but cannot expose the server's
@@ -45,8 +45,14 @@ is deliberately untouched.
 Unsupported flags, NBT, dynamic/script/expression patterns, complex masks,
 unknown extension masks, inventory mode, and world overrides fail visibly
 instead of displaying a misleading approximation. Permissions, build height,
-unloaded chunks, and the WorldEdit change limit are checked. The initial
-bounding-box cap is conservative even for sparse/non-cuboid selections.
+and the WorldEdit change limit are checked. Only the intersection of the
+selection and actual client-loaded chunks is calculated. An entirely unloaded
+selection has no result; a partly loaded selection previews its loaded part.
+The HUD identifies this scope. Loading/unloading relevant chunks invalidates
+the source. Chunks outside the selection do not restart its calculation.
+There is no scanned-cell, displayed-block or fixed-distance result cap.
+An enormous unloaded bounding box is intersected with loaded chunk columns
+before iteration, rather than traversed to discover that most cells are absent.
 
 At most one calculation slice runs per integrated-server tick, with a shared
 2 ms target checked between cells in batches of up to 1,024 steps. Capture,
@@ -58,11 +64,24 @@ the result or re-rolling a random sample. A slow external API call cannot be pre
 so this is a work budget, not a hard latency guarantee. Obsolete drafts cancel
 by generation token; stale results cannot be published into another world.
 Selection membership and captured blocks are incrementally revalidated.
+Captured states and results use section palettes/local indices instead of
+per-cell retained hash-map entries and change objects. Uniform sections need no
+per-cell index array; varied palettes use one, two or four bytes per index as
+needed without discarding states. Statistics reuse block
+state names. The original region defines walls/faces; chunk clipping does not
+introduce artificial selection edges. Overlay retains the complete selected
+vertical column plus the block above it in each loaded chunk.
 Native model templates survive draft changes, with a 256-state cache cap and
 baked-model identity checks after resource reloads. Geometry preparation has a
-separate 2 ms per-render-call target and publishes a complete immutable batch
-once, not partial batches that appear to rebuild. Render limits remain separate
-from statistics. The HUD explicitly reports truncated visual output.
+separate 2 ms per-render-call target. Textured vertices are built once per section
+and kept in persistent Blaze3D GPU buffers. Completed sections are uploaded
+incrementally; every section is included, with native frustum culling and no
+fixed preview radius. One render pass draws visible sections back-to-front.
+Camera movement may update transparent indices with a separate 1 ms target,
+but does not rebuild textured vertices. Model/resource changes and obsolete
+drafts dispose GPU geometry. The original chunk meshes are never replaced.
+Removal/fluid markers are merged incrementally inside the same preparation
+budget, not globally sorted in one frame; offscreen/unloaded markers are skipped.
 
 There is no universal instantaneous-result guarantee for cold/large selections:
 reading and verifying their blocks still costs real work. The implementation
@@ -75,15 +94,14 @@ Advanced options are saved separately beside the existing mod settings as
 | --- | --- | --- |
 | `enabled` | `true` | boolean |
 | `opacity` | `0.65` | 0.15-0.9 |
-| `maxCells` | `65536` | 256-262144 |
-| `maxRenderBlocks` | `2048` | 64-8192 |
-| `renderDistance` | `96` | 16-192 blocks |
 | `statistics` | `true` | boolean (transition details) |
 
 Manual property changes are loaded on the next game start. The on/off setting
-is saved immediately. The obsolete `debounceMillis` property is ignored even in
-existing configurations; other settings are retained. These limits are safeguards, not hardware-specific FPS
-promises.
+is saved immediately. Obsolete `debounceMillis`, `maxCells`, `maxRenderBlocks`
+and `renderDistance` values are ignored even in existing configurations;
+enabled, opacity and statistics settings are retained. Work budgets are not
+hardware-specific FPS promises. See [performance research](COMMAND_PREVIEW_PERFORMANCE_RESEARCH.md)
+for the inspected primary implementations and architecture decisions.
 
 ## Implementation references
 

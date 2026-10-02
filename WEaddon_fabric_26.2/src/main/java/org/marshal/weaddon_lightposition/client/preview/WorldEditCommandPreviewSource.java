@@ -42,7 +42,30 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
     private final AtomicLong epoch = new AtomicLong();
     private final AtomicBoolean queued = new AtomicBoolean();
     private final AtomicBoolean selectionDirty = new AtomicBoolean();
-    private record Request(long token, String draft, PreviewOptions options, UUID player, Object level, IntegratedServer server) { }
+    private record Request(long token, String draft, PreviewOptions options, UUID player, Object level, IntegratedServer server,
+                           List<Chunk> chunks) { }
+    private record Chunk(int x, int z) { }
+    private List<Chunk> loaded = List.of();
+    private final java.util.Set<Chunk> trackedChunks = new java.util.HashSet<>();
+    private Object trackedLevel;
+    private boolean chunksDirty = true;
+    private record Coverage(int minX, int minZ, int maxX, int maxZ) {
+        boolean contains(Chunk c) { return c.x >= minX && c.x <= maxX && c.z >= minZ && c.z <= maxZ; }
+    }
+    private volatile Coverage coverage;
+
+    public WorldEditCommandPreviewSource() {
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents.CHUNK_LOAD.register((level, chunk) ->
+                chunkChanged(level, chunk.getPos().x(), chunk.getPos().z(), true));
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents.CHUNK_UNLOAD.register((level, chunk) ->
+                chunkChanged(level, chunk.getPos().x(), chunk.getPos().z(), false));
+    }
+
+    private void chunkChanged(Object level, int x, int z, boolean present) {
+        if (trackedLevel != level) { trackedLevel = level; trackedChunks.clear(); }
+        Chunk chunk = new Chunk(x, z);
+        if (present ? trackedChunks.add(chunk) : trackedChunks.remove(chunk)) chunksDirty = true;
+    }
     private volatile Request requested;
     private volatile CommandPreviewSnapshot snapshot = CommandPreviewSnapshot.empty();
     // Only the integrated server thread owns these fields.
@@ -63,7 +86,18 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
             if (!draft.isEmpty()) snapshot = CommandPreviewSnapshot.status(CommandPreviewSnapshot.State.UNAVAILABLE, "local_only", "");
             return;
         }
-        requested = new Request(token, draft, options, client.player.getUUID(), client.level, server);
+        if (trackedLevel != client.level) {
+            trackedLevel = client.level; trackedChunks.clear(); trackedChunks.addAll(loadedChunks(client)); chunksDirty = true;
+        }
+        if (chunksDirty) {
+            chunksDirty = false;
+            List<Chunk> current = trackedChunks.stream().sorted(java.util.Comparator.comparingInt(Chunk::z).thenComparingInt(Chunk::x)).toList();
+            Coverage bounds = coverage;
+            boolean changed = bounds != null && !current.stream().filter(bounds::contains).toList().equals(loaded.stream().filter(bounds::contains).toList());
+            loaded = current;
+            if (!draft.isEmpty() && changed) { clear(); token = epoch.get(); }
+        }
+        requested = new Request(token, draft, options, client.player.getUUID(), client.level, server, loaded);
         if (!queued.compareAndSet(false, true)) return;
         server.execute(() -> {
             Request request = requested;
@@ -89,7 +123,11 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
                 workTick = server.getTickCount();
                 long deadline = System.nanoTime() + WORK_NANOS;
                 failed = false;
-                if (job == null) job = createJob(actor, session, request.draft, request.options);
+                if (job == null) {
+                    job = createJob(actor, session, request.draft, request.chunks);
+                    coverage = new Coverage(job.region.getMinimumPoint().x() >> 4, job.region.getMinimumPoint().z() >> 4,
+                            job.region.getMaximumPoint().x() >> 4, job.region.getMaximumPoint().z() >> 4);
+                }
                 if (job.published) {
                     if (selectionDirty.getAndSet(false) || server.getTickCount() % 10 == 0 || job.verifying != null)
                         verify(nativePlayer, actor, session, job, deadline);
@@ -137,7 +175,18 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
     @Override public void clear() { epoch.incrementAndGet(); snapshot = CommandPreviewSnapshot.empty(); }
     @Override public void selectionChanged() { selectionDirty.set(true); }
 
-    private static Job createJob(Player actor, LocalSession session, String draft, PreviewOptions options) throws WorldEditException {
+    private static List<Chunk> loadedChunks(Minecraft client) {
+        ArrayList<Chunk> chunks = new ArrayList<>();
+        int x = client.player.blockPosition().getX() >> 4, z = client.player.blockPosition().getZ() >> 4;
+        int radius = Math.max(2, client.options.getEffectiveRenderDistance()) + 3;
+        for (int cz = z - radius; cz <= z + radius; cz++) for (int cx = x - radius; cx <= x + radius; cx++) {
+            if (client.level.getChunkSource().getChunk(cx, cz, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) != null)
+                chunks.add(new Chunk(cx, cz));
+        }
+        return List.copyOf(chunks);
+    }
+
+    private static Job createJob(Player actor, LocalSession session, String draft, List<Chunk> chunks) throws WorldEditException {
         PreviewCommand command = PreviewCommand.parse(draft);
         if (session.hasWorldOverride() || session.isUsingInventory()) throw new IllegalArgumentException("session_state");
         String permission = "worldedit.region." + command.kind().name().toLowerCase(java.util.Locale.ROOT);
@@ -147,12 +196,16 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         if (command.kind() == PreviewCommand.Kind.OVERLAY) max = max.add(0, 1, 0);
         if (min.y() < actor.getWorld().getMinimumPoint().y() || max.y() > actor.getWorld().getMaximumPoint().y())
             throw new IllegalArgumentException("height");
-        long volume;
-        try {
-            volume = Math.multiplyExact(Math.multiplyExact((long) max.x() - min.x() + 1,
-                    (long) max.y() - min.y() + 1), (long) max.z() - min.z() + 1);
-        } catch (ArithmeticException ex) { throw new IllegalArgumentException("too_large"); }
-        if (volume <= 0 || volume > options.maxCells()) throw new IllegalArgumentException("too_large");
+        ArrayList<CuboidRegion> boxes = new ArrayList<>();
+        long volume = 0;
+        for (Chunk chunk : chunks) {
+            int minX = Math.max(min.x(), chunk.x * 16), maxX = Math.min(max.x(), chunk.x * 16 + 15);
+            int minZ = Math.max(min.z(), chunk.z * 16), maxZ = Math.min(max.z(), chunk.z * 16 + 15);
+            if (minX > maxX || minZ > maxZ) continue;
+            boxes.add(new CuboidRegion(BlockVector3.at(minX, min.y(), minZ), BlockVector3.at(maxX, max.y(), maxZ)));
+            volume += (long) (maxX - minX + 1) * (maxZ - minZ + 1) * (max.y() - min.y() + 1);
+        }
+        if (boxes.isEmpty()) throw new IllegalArgumentException("unloaded");
         PreviewExtent memory = new PreviewExtent(min, max);
         ParserContext parser = new ParserContext();
         parser.setActor(actor);
@@ -160,8 +213,10 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         parser.setWorld(actor.getWorld());
         parser.setRestricted(true);
         parser.setTryLegacy(false);
-        WorldEditPreviewProgram program = new WorldEditPreviewProgram(command, region, memory, parser, session.getMask());
-        return new Job(region, memory, new CuboidRegion(min, max).iterator(), volume, program,
+        WorldEditPreviewProgram program = new WorldEditPreviewProgram(command, region, memory, parser, session.getMask(),
+                () -> boxes.stream().flatMap(box -> java.util.stream.StreamSupport.stream(box.spliterator(), false)).iterator(),
+                () -> boxes.stream().flatMap(box -> java.util.stream.StreamSupport.stream(box.asFlatRegion().spliterator(), false)).iterator());
+        return new Job(region, memory, boxes.stream().flatMap(box -> java.util.stream.StreamSupport.stream(box.spliterator(), false)).iterator(), volume, program,
                 session.getMask(), session.getBlockChangeLimit(), permission);
     }
 
@@ -182,10 +237,9 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         int count = 0;
         while (job.output.hasNext() && count++ < WORK_STEPS && System.nanoTime() < deadline) {
             PreviewChange change = job.output.next();
-            job.statistics.accept(change.kind(), change.before().getAsString(), change.after().getAsString());
-            int faces = surfaceFaces(change, job.memory.changes());
+            job.statistics.accept(change.kind(), job.name(change.before()), job.name(change.after()));
+            int faces = surfaceFaces(change, job.memory);
             if (faces == 0) continue;
-            if (job.cells.size() >= options.maxRenderBlocks()) { job.limited = true; continue; }
             job.cells.add(new CommandPreviewSnapshot.Cell(new BlockPos(change.position().x(), change.position().y(), change.position().z()),
                     FabricAdapter.get().toNativeBlockState(change.after().toImmutableState()), change.kind(), faces));
         }
@@ -217,13 +271,13 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         if (!job.verifying.hasNext()) { job.verifying = null; job.validated = true; job.needsValidation = false; }
     }
 
-    private static int surfaceFaces(PreviewChange c, Map<BlockVector3, PreviewChange> changes) {
+    private static int surfaceFaces(PreviewChange c, PreviewExtent memory) {
         int mask = 0;
         for (Direction direction : DIRECTIONS) {
-            PreviewChange neighbor = changes.get(c.position().add(direction.getStepX(), direction.getStepY(), direction.getStepZ()));
+            BaseBlock neighbor = memory.changedBlock(c.position().add(direction.getStepX(), direction.getStepY(), direction.getStepZ()));
             boolean interior = neighbor != null && (c.kind() == PreviewChangeKind.REMOVED
-                    ? neighbor.kind() == PreviewChangeKind.REMOVED
-                    : c.after().getBlockType().getMaterial().isOpaque() && neighbor.after().getBlockType().getMaterial().isOpaque());
+                    ? neighbor.getBlockType().getMaterial().isAir()
+                    : c.after().getBlockType().getMaterial().isOpaque() && neighbor.getBlockType().getMaterial().isOpaque());
             if (!interior) mask |= 1 << direction.ordinal();
         }
         return mask;
@@ -260,6 +314,8 @@ public final class WorldEditCommandPreviewSource implements CommandPreviewSource
         final String permission;
         final ArrayList<CommandPreviewSnapshot.Cell> cells = new ArrayList<>();
         final PreviewStatistics.Accumulator statistics = new PreviewStatistics.Accumulator();
+        final Map<com.sk89q.worldedit.world.block.BlockState, String> names = new java.util.HashMap<>();
+        String name(BaseBlock block) { return names.computeIfAbsent(block.toImmutableState(), s -> s.getAsString()); }
         Iterator<PreviewChange> output;
         Iterator<Map.Entry<BlockVector3, BaseBlock>> verifying;
         long scanned;

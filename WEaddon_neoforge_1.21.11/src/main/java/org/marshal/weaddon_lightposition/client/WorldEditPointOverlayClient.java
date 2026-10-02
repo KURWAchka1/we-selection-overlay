@@ -191,9 +191,12 @@ public final class WorldEditPointOverlayClient {
     }
 
     public void onRenderAfterEntities(RenderLevelStageEvent.AfterEntities event) {
-        commandPreviewController.renderBlocks(event.getPoseStack());
         if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(event.getPoseStack());
         onRenderWorld();
+    }
+
+    public void onRenderCommandPreview(RenderLevelStageEvent.AfterTranslucentBlocks event) {
+        commandPreviewController.renderBlocks(event.getPoseStack(), org.marshal.weaddon_lightposition.client.preview.CommandPreviewFrustum.current());
     }
 
     public void onClientSystemMessage(ClientChatReceivedEvent.System event) {

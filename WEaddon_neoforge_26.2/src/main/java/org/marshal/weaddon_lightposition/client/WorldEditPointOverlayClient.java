@@ -190,9 +190,12 @@ public final class WorldEditPointOverlayClient {
     }
 
     public void onRenderAfterEntities(RenderLevelStageEvent.AfterOpaqueFeatures event) {
-        commandPreviewController.renderBlocks(event.getPoseStack());
         if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(event.getPoseStack());
         onRenderWorld();
+    }
+
+    public void onRenderCommandPreview(RenderLevelStageEvent.AfterTranslucentBlocks event) {
+        commandPreviewController.renderBlocks(event.getPoseStack(), event.getLevelRenderState().cameraRenderState.cullFrustum);
     }
 
     public void onClientSystemMessage(ClientChatReceivedEvent.System event) {

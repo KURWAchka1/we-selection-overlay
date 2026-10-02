@@ -176,6 +176,7 @@ public final class WorldEditPointOverlayClient {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> resetState());
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndClientTick);
         WorldRenderEvents.AFTER_ENTITIES.register(this::onRenderClipboardPreview);
+        WorldRenderEvents.END_MAIN.register(this::onRenderCommandPreview);
         WorldRenderEvents.BEFORE_DEBUG_RENDER.register(this::onRenderWorld);
         ClientReceiveMessageEvents.GAME.register(this::onReceiveGameMessage);
     }
@@ -293,8 +294,11 @@ public final class WorldEditPointOverlayClient {
         }
     }
 
-    private void onRenderClipboardPreview(WorldRenderContext context) {
+    private void onRenderCommandPreview(WorldRenderContext context) {
         commandPreviewController.renderBlocks(context);
+    }
+
+    private void onRenderClipboardPreview(WorldRenderContext context) {
         if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(context);
     }
 

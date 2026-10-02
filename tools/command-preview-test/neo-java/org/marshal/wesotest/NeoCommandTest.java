@@ -96,7 +96,7 @@ public final class NeoCommandTest {
             stage = 5; wait = 20;
         } else if (stage == 5) {
             check(copied == call(clipboardSource, "snapshot"), "Suppression discarded clipboard cache");
-            check(!((List<?>) field(field(controller, "renderer"), "mesh")).isEmpty(), "Command model buffer is empty");
+            check(!((java.util.Map<?, ?>) field(field(controller, "renderer"), "sections")).isEmpty(), "Command model buffer is empty");
             screenshot(client, "command-set-ghost.png");
             setup = client.getSingleplayerServer().submit(() -> {
                 var actor = NeoForgeAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst());
@@ -152,16 +152,16 @@ public final class NeoCommandTest {
             if (!setup.isDone()) return; setup.join(); stage = 14; wait = 20;
         } else if (stage == 14) {
             if (!ready(controller) || !built(controller)) return;
-            check(!((List<?>) field(field(controller, "renderer"), "geometry")).isEmpty(), "Reload lost model geometry");
+            check(!((java.util.Map<?, ?>) field(field(controller, "renderer"), "sections")).isEmpty(), "Reload lost model geometry");
             check(((java.util.Map<?, ?>) field(field(controller, "renderer"), "models")).size() <= 256, "Unbounded model cache");
             setup = client.getSingleplayerServer().submit(() -> {
                 var actor = NeoForgeAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst());
                 expectedLargeChanges = 0;
-                for (var point : new CuboidRegion(MIN, MIN.add(39, 39, 39))) {
+                for (var point : new CuboidRegion(MIN, MIN.add(47, 47, 47))) {
                     if (actor.getWorld().getBlock(point).getBlockType() != BlockTypes.DIAMOND_BLOCK) expectedLargeChanges++;
                 }
                 WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(),
-                        new CuboidRegionSelector(actor.getWorld(), MIN, MIN.add(39, 39, 39)));
+                        new CuboidRegionSelector(actor.getWorld(), MIN, MIN.add(47, 47, 47)));
             }); stage = 15;
         } else if (stage == 15) {
             if (!setup.isDone()) return; setup.join(); started = System.nanoTime();
@@ -170,13 +170,13 @@ public final class NeoCommandTest {
             check(controller.snapshot().cells().isEmpty(), "Burst retained obsolete geometry"); stage = 16;
         } else if (stage == 16) {
             if (!ready(controller)) return;
-            check(controller.snapshot().total() == 64_000 && controller.snapshot().statistics().affected() == expectedLargeChanges, "Large selection count: "
+            check(controller.snapshot().total() == 110_592 && controller.snapshot().statistics().affected() == expectedLargeChanges, "Large selection count: "
                     + controller.snapshot().statistics().affected() + " total=" + controller.snapshot().total()
                     + " draft=" + field(controller, "draft") + " input=" + chatInput((ChatScreen) client.gui.screen()).getValue());
-            check(controller.snapshot().limited(), "Large visual cap missing");
-            check(controller.snapshot().cells().size() <= controller.options().maxRenderBlocks(), "Large rendering cap exceeded");
+            check(!controller.snapshot().limited(), "Large visual output was truncated");
+            check(controller.snapshot().cells().size() >= 13_255, "Large surface is incomplete");
             check(controller.snapshot().cells().stream().allMatch(c -> c.after() == net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK.defaultBlockState()), "Stale burst result published");
-            System.out.println("WESO NEO COMMAND LARGE 64000 cells ready-ms=" + (System.nanoTime() - started) / 1_000_000);
+            System.out.println("WESO NEO COMMAND LARGE 110592 cells ready-ms=" + (System.nanoTime() - started) / 1_000_000);
             stage = 18; wait = 30;
         } else if (stage == 18) {
             check(built(controller), "Large geometry never completed");

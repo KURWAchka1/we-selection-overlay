@@ -25,6 +25,7 @@ public final class CommandGameTest implements FabricClientGameTest {
     private static final BlockVector3 MIN = BlockVector3.at(0, 66, 0), MAX = BlockVector3.at(5, 71, 5);
 
     @Override public void runTest(ClientGameTestContext context) {
+        checkPaletteIndices();
         check(PreviewDraft.recognizes("  //replace stone dirt"), "Routing with arguments");
         check(PreviewDraft.recognizes("//set\tstone"), "Routing with tab");
         check(!PreviewDraft.recognizes("//setbiome stone"), "Unknown command reserved channel");
@@ -81,7 +82,12 @@ public final class CommandGameTest implements FabricClientGameTest {
             });
             check(history.equals(onServer(world.getServer(), () -> history(server))), "Preview modified WorldEdit history");
             context.takeScreenshot("command-set-ghost");
+            Object section = context.computeOnClient(client -> ((java.util.Map<?, ?>) field(field(CommandPreviewController.instance(), "renderer"), "sections")).values().iterator().next());
+            Object vertices = context.computeOnClient(client -> field(section, "vertices"));
+            context.waitTicks(12);
+            context.runOnClient(client -> check(vertices == field(section, "vertices"), "Stable preview rewrites vertex buffers"));
             measureLatency(context);
+            context.runOnClient(client -> check(field(section, "vertices") == null, "Replacing a draft leaked its vertex buffer"));
             context.runOnClient(client -> {
                 var input = chatInput((ChatScreen) client.gui.screen());
                 for (String value : List.of("//set g", "//set gold", "//set gold_block", "//set diamond_block")) input.setValue(value);
@@ -90,6 +96,16 @@ public final class CommandGameTest implements FabricClientGameTest {
             ready(context);
             context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().cells().stream().allMatch(c -> c.kind() == PreviewChangeKind.REPLACED), "Rapid typing published an obsolete result"));
             checkModelCache(context);
+            draft(context, "//set water");
+            ready(context);
+            context.waitFor(client -> {
+                var controller = CommandPreviewController.instance();
+                Object renderer = field(controller, "renderer");
+                return field(renderer, "prepared") == controller.snapshot() && (int) field(renderer, "buildIndex") == controller.snapshot().cells().size();
+            });
+            context.runOnClient(client -> check(((List<?>) field(field(CommandPreviewController.instance(), "renderer"), "markers")).size() == 1,
+                    "Solid fluid volume was not compacted into one marker"));
+            context.takeScreenshot("command-fluid-marker");
             draft(context, "//replace stone 70%dirt,30%grass_block");
             ready(context);
             Object sample = context.computeOnClient(client -> CommandPreviewController.instance().snapshot());
@@ -130,7 +146,51 @@ public final class CommandGameTest implements FabricClientGameTest {
                 select(server, MIN, MIN.add(64, 64, 64)); return null;
             });
             draft(context, "//set gold_block");
-            context.waitFor(client -> CommandPreviewController.instance().snapshot().reason().equals("too_large"));
+            ready(context);
+            context.runOnClient(client -> {
+                var snapshot = CommandPreviewController.instance().snapshot();
+                check(snapshot.statistics().affected() == 274_625, "Former input cap still limits the result");
+                check(snapshot.cells().size() == 24_578, "Former visual cap or internal-face culling is incorrect");
+                Object memory = field(field(field(CommandPreviewController.instance(), "source"), "job"), "memory");
+                long bytes = 0;
+                for (Object stored : ((java.util.Map<?, ?>) field(memory, "sections")).values()) {
+                    for (String state : List.of("original", "after")) {
+                        Object indices = field(stored, state);
+                        if (indices == null) continue;
+                        for (String kind : List.of("bytes", "shorts", "ints")) {
+                            Object data = field(indices, kind);
+                            if (data != null) bytes += (long) java.lang.reflect.Array.getLength(data) * (kind.equals("bytes") ? 1 : kind.equals("shorts") ? 2 : 4);
+                        }
+                    }
+                }
+                System.out.println("WESO COMMAND STORAGE 274625 cells index-array-bytes=" + bytes);
+                check(bytes < 274_625L * 2, "Uniform palette storage regressed to dense per-cell arrays");
+            });
+            onServer(world.getServer(), () -> {
+                select(server, BlockVector3.at(-1_000_000, 66, -1_000_000), BlockVector3.at(1_000_000, 67, 1_000_000));
+                return null;
+            });
+            draft(context, "//set diamond_block");
+            ready(context);
+            context.runOnClient(client -> {
+                Object source = field(CommandPreviewController.instance(), "source");
+                int loaded = ((List<?>) field(source, "loaded")).size();
+                var snapshot = CommandPreviewController.instance().snapshot();
+                check(snapshot.total() == (long) loaded * 512, "Huge unloaded bounds were scanned or loaded chunks omitted");
+                check(snapshot.statistics().affected() == snapshot.total(), "Loaded intersection was truncated");
+                System.out.println("WESO COMMAND LOADED INTERSECTION chunks=" + loaded + " cells=" + snapshot.total());
+            });
+            onServer(world.getServer(), () -> { select(server, MIN, MAX); return null; });
+            draft(context, "//set diamond_block");
+            ready(context);
+            world.getServer().runCommand("tp @p 512 77 512");
+            context.waitFor(client -> CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.ERROR
+                    && CommandPreviewController.instance().snapshot().reason().equals("unloaded")
+                    && ((java.util.Map<?, ?>) field(field(CommandPreviewController.instance(), "renderer"), "sections")).isEmpty());
+            world.getServer().runCommand("tp @p 12 77 16 145 30");
+            context.waitFor(client -> CommandPreviewController.instance().snapshot().state() == CommandPreviewSnapshot.State.READY);
+            context.runOnClient(client -> check(CommandPreviewController.instance().snapshot().statistics().affected() == 216,
+                    "Reloading selection chunks did not restore the complete preview"));
             onServer(world.getServer(), () -> { select(server, MIN, MAX); return null; });
             draft(context, "//set gold_block");
             ready(context);
@@ -191,8 +251,30 @@ public final class CommandGameTest implements FabricClientGameTest {
                 check(player.getWorld().getBlock(MIN).getBlockType().id().equals("minecraft:diamond_block"), "Enter no longer executes normal WorldEdit command");
                 return null;
             });
-            System.out.println("WESO COMMAND PASS: 40 deterministic WorldEdit comparisons, zero preview writes/history, stable mixtures, clipboard coexistence, F8/cancellation, selection/source/mask invalidation, unloaded/limit/invalid drafts, unchanged Enter submission");
+            System.out.println("WESO COMMAND PASS: 80 full/clipped WorldEdit comparisons, complete loaded results beyond former caps, zero preview writes/history, stable mixtures, clipboard coexistence, F8/cancellation, selection/source/mask invalidation, unloaded/limit/invalid drafts, unchanged Enter submission");
         }
+    }
+
+    private static void checkPaletteIndices() {
+        try {
+            Class<?> type = java.util.Arrays.stream(PreviewExtent.class.getDeclaredClasses()).filter(c -> c.getSimpleName().equals("Indices")).findFirst().orElseThrow();
+            var constructor = type.getDeclaredConstructor(); constructor.setAccessible(true);
+            Object indices = constructor.newInstance();
+            var set = type.getDeclaredMethod("set", int.class, int.class); set.setAccessible(true);
+            var get = type.getDeclaredMethod("get", int.class); get.setAccessible(true);
+            var uniformConstructor = type.getDeclaredConstructor(int.class); uniformConstructor.setAccessible(true);
+            Object uniform = uniformConstructor.newInstance(65536);
+            set.invoke(uniform, 7, 65536);
+            for (String name : List.of("bytes", "shorts", "ints")) check(field(uniform, name) == null, "Uniform section allocated a per-cell array");
+            set.invoke(uniform, 7, 3);
+            for (int i = 0; i < 4096; i++) check((int) get.invoke(uniform, i) == (i == 7 ? 3 : 65536), "Uniform expansion corrupted cell data");
+            for (int i = 0; i < 4096; i++) set.invoke(indices, i, i % 253);
+            for (int id : new int[] {255, 256, 65535, 65536}) {
+                set.invoke(indices, 0, id);
+                check((int) get.invoke(indices, 0) == id, "Palette index promotion truncated an id");
+                for (int i = 1; i < 4096; i++) check((int) get.invoke(indices, i) == i % 253, "Palette promotion corrupted another cell");
+            }
+        } catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
     }
 
     private static void comparePrograms(MinecraftServer server) throws Exception {
@@ -217,6 +299,12 @@ public final class CommandGameTest implements FabricClientGameTest {
             WorldEditPreviewProgram program = new WorldEditPreviewProgram(command, region, memory, parser, null);
             int passes = 0;
             while (!program.complete()) { program.advance(7, System.nanoTime() + 5_000_000); check(++passes < 1000, "Provider never completed"); }
+            var clip = new CuboidRegion(min, BlockVector3.at(Math.min(min.x() + 1, max.x()), max.y(), max.z()));
+            PreviewExtent partial = new PreviewExtent(min, max);
+            for (var entry : memory.original().entrySet()) if (clip.contains(entry.getKey())) partial.capture(entry.getKey(), entry.getValue());
+            WorldEditPreviewProgram clipped = new WorldEditPreviewProgram(command, region, partial, parser, null,
+                    clip::iterator, () -> clip.asFlatRegion().iterator());
+            while (!clipped.complete()) clipped.advance(7, System.nanoTime() + 5_000_000);
             for (var p : memory.original().entrySet()) check(world.getFullBlock(p.getKey()).equals(p.getValue()), "Domain simulation wrote world");
             try (var actual = WorldEdit.getInstance().newEditSessionBuilder().world(world).actor(actor).maxBlocks(-1).build()) {
                 ParserContext official = new ParserContext(); official.setActor(actor); official.setWorld(world); official.setExtent(actual); official.setRestricted(true);
@@ -230,6 +318,7 @@ public final class CommandGameTest implements FabricClientGameTest {
                 }
             }
             for (BlockVector3 p : new CuboidRegion(min, max)) check(world.getFullBlock(p).equals(memory.getFullBlock(p)), "Result differs from WorldEdit: " + region.getClass().getSimpleName() + " " + draft + " at " + p);
+            for (BlockVector3 p : clip) check(world.getFullBlock(p).equals(partial.getFullBlock(p)), "Loaded intersection differs from WorldEdit: " + region.getClass().getSimpleName() + " " + draft + " at " + p);
         }
         try (var reset = WorldEdit.getInstance().newEditSessionBuilder().world(world).maxBlocks(-1).build()) {
             reset.setBlocks(new CuboidRegion(MIN, MAX), com.sk89q.worldedit.world.block.BlockTypes.STONE.getDefaultState());
@@ -295,11 +384,11 @@ public final class CommandGameTest implements FabricClientGameTest {
             catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }
         });
         context.waitFor(client -> field(renderer, "probeModel") != null && field(renderer, "probeModel") != invalidProbe
-                && !((List<?>) field(renderer, "geometry")).isEmpty());
+                && !((java.util.Map<?, ?>) field(renderer, "sections")).isEmpty());
         context.runOnClient(client -> {
             var models = (java.util.Map<?, ?>) field(renderer, "models");
             check(models.size() <= 256, "Baked-model cache is unbounded");
-            check(!((List<?>) field(renderer, "geometry")).isEmpty(), "Model identity change discarded the preview permanently");
+            check(!((java.util.Map<?, ?>) field(renderer, "sections")).isEmpty(), "Model identity change discarded the preview permanently");
         });
     }
     private static void stressLargeSelection(ClientGameTestContext context,
@@ -317,8 +406,8 @@ public final class CommandGameTest implements FabricClientGameTest {
         context.runOnClient(client -> {
             var snapshot = CommandPreviewController.instance().snapshot();
             check(snapshot.statistics().affected() == 64_000, "Large selection count is incomplete");
-            check(snapshot.limited(), "Large rendering cap was not applied");
-            check(snapshot.cells().size() <= CommandPreviewController.instance().options().maxRenderBlocks(), "Visual limit exceeded");
+            check(!snapshot.limited(), "Large preview was truncated");
+            check(snapshot.cells().size() == 9_128, "Complete 40-cube surface missing");
             check(snapshot.cells().stream().allMatch(c -> call(c, "after") == net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK.defaultBlockState()), "Stale large result published");
         });
         System.out.println("WESO COMMAND LARGE 64000 cells ready-ms=" + (System.nanoTime() - start) / 1_000_000);

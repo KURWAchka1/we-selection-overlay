@@ -26,13 +26,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public final class WorldEditPreviewProgram {
-    private record Context(Region region, PreviewExtent extent, RegionFunction replace, Mask filter) { }
+    private record Context(Region region, PreviewExtent extent, RegionFunction replace, Mask filter,
+                           Supplier<Iterator<BlockVector3>> candidates, Supplier<Iterator<BlockVector2>> columns) { }
     private static final Map<PreviewCommand.Kind, Function<Context, PreviewProvider>> PROVIDERS = new EnumMap<>(PreviewCommand.Kind.class);
     static {
-        PROVIDERS.put(PreviewCommand.Kind.SET, c -> visit(c.region, c.replace));
-        PROVIDERS.put(PreviewCommand.Kind.REPLACE, c -> visit(c.region,
+        PROVIDERS.put(PreviewCommand.Kind.SET, c -> visit(c, c.replace));
+        PROVIDERS.put(PreviewCommand.Kind.REPLACE, c -> visit(c,
                 p -> c.filter.test(p) && c.replace.apply(p)));
         PROVIDERS.put(PreviewCommand.Kind.WALLS, c -> boundary(c, false));
         PROVIDERS.put(PreviewCommand.Kind.FACES, c -> boundary(c, true));
@@ -45,6 +47,14 @@ public final class WorldEditPreviewProgram {
 
     public WorldEditPreviewProgram(PreviewCommand command, Region region, PreviewExtent extent,
                                    ParserContext parser, Mask globalMask) throws WorldEditException {
+        this(command, region, extent, parser, globalMask, region::iterator,
+                () -> Regions.asFlatRegion(region).asFlatRegion().iterator());
+    }
+
+    public WorldEditPreviewProgram(PreviewCommand command, Region region, PreviewExtent extent,
+                                   ParserContext parser, Mask globalMask,
+                                   Supplier<Iterator<BlockVector3>> candidates,
+                                   Supplier<Iterator<BlockVector2>> columns) throws WorldEditException {
         validatePattern(command.pattern());
         parser.setExtent(extent);
         Pattern pattern = WorldEdit.getInstance().getPatternFactory().parseFromInput(command.pattern(), parser);
@@ -60,7 +70,7 @@ public final class WorldEditPreviewProgram {
             filter = WorldEdit.getInstance().getMaskFactory().parseFromInput(command.mask(), parser);
             filter = copyMask(filter, extent);
         }
-        provider = PROVIDERS.get(command.kind()).apply(new Context(region, extent, maskedReplace, filter));
+        provider = PROVIDERS.get(command.kind()).apply(new Context(region, extent, maskedReplace, filter, candidates, columns));
     }
 
     public boolean random() { return random; }
@@ -76,17 +86,25 @@ public final class WorldEditPreviewProgram {
 
     // Match EditSession's BlockReplace/RegionShape semantics, with a resumable iterator.
     // WorldEdit 7.4 RegionVisitor.resume ignores RunContext and traverses the entire region.
-    private static PreviewProvider visit(Region region, RegionFunction function) {
-        Iterator<BlockVector3> iterator = region.iterator();
+    private static PreviewProvider visit(Context c, RegionFunction function) {
+        Iterator<BlockVector3> iterator = c.candidates.get();
         return new PreviewProvider() {
             @Override public boolean hasNext() { return iterator.hasNext(); }
-            @Override public void advance() throws WorldEditException { function.apply(iterator.next()); }
+            @Override public void advance() throws WorldEditException {
+                BlockVector3 p = iterator.next();
+                if (c.region.contains(p)) function.apply(p);
+            }
         };
     }
 
     private static PreviewProvider boundary(Context c, boolean faces) {
-        if (c.region instanceof CuboidRegion cuboid) return visit(faces ? cuboid.getFaces() : cuboid.getWalls(), c.replace);
-        return visit(c.region, p -> {
+        if (c.region instanceof CuboidRegion) return visit(c, p -> {
+            BlockVector3 min = c.region.getMinimumPoint(), max = c.region.getMaximumPoint();
+            boolean edge = p.x() == min.x() || p.x() == max.x() || p.z() == min.z() || p.z() == max.z();
+            if (faces) edge |= p.y() == min.y() || p.y() == max.y();
+            return edge && c.replace.apply(p);
+        });
+        return visit(c, p -> {
             boolean edge = !c.region.contains(p.add(1, 0, 0)) || !c.region.contains(p.add(-1, 0, 0))
                     || !c.region.contains(p.add(0, 0, 1)) || !c.region.contains(p.add(0, 0, -1));
             if (faces) edge |= !c.region.contains(p.add(0, 1, 0)) || !c.region.contains(p.add(0, -1, 0));
@@ -102,7 +120,8 @@ public final class WorldEditPreviewProgram {
     // LayerVisitor/GroundFunction semantics: skip underground columns, then the first
     // non-air surface within minY..maxY. The block above maxY is intentionally included.
     private static PreviewProvider overlay(Context c) {
-        Iterator<BlockVector2> columns = Regions.asFlatRegion(c.region).asFlatRegion().iterator();
+        Iterator<BlockVector2> columns = c.columns.get();
+        var footprint = Regions.asFlatRegion(c.region);
         int minY = c.region.getMinimumPoint().y(), maxY = c.region.getMaximumPoint().y();
         Mask ground = new ExistingBlockMask(c.extent);
         return new PreviewProvider() {
@@ -112,6 +131,7 @@ public final class WorldEditPreviewProgram {
             @Override public void advance() throws WorldEditException {
                 if (column == null) {
                     BlockVector2 next = columns.next();
+                    if (!footprint.contains(next.toBlockVector3(minY))) return;
                     if (ground.test(next.toBlockVector3(maxY + 1))) return;
                     column = next;
                     y = maxY;

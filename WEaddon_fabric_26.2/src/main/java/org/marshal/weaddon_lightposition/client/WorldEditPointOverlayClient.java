@@ -176,6 +176,7 @@ public final class WorldEditPointOverlayClient {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> resetState());
         ClientTickEvents.END_CLIENT_TICK.register(this::onEndClientTick);
         LevelRenderEvents.COLLECT_SUBMITS.register(this::onRenderClipboardPreview);
+        LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN.register(this::onRenderCommandPreview);
         LevelRenderEvents.BEFORE_GIZMOS.register(this::onRenderWorld);
         ClientReceiveMessageEvents.GAME.register(this::onReceiveGameMessage);
     }
@@ -287,9 +288,12 @@ public final class WorldEditPointOverlayClient {
         }
     }
 
+    private void onRenderCommandPreview(LevelRenderContext context) {
+        commandPreviewController.renderBlocks(context);
+    }
+
     private void onRenderClipboardPreview(LevelRenderContext context) {
         if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(context);
-        commandPreviewController.renderBlocks(context);
     }
 
     private void onCuiPacket(CUIPacket payload, CUIPacketHandler.PacketContext context) {
