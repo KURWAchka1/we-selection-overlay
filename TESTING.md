@@ -268,3 +268,29 @@ the separate command latency/frame checks are documented above. Scheduled work,
 palette storage, and cached section geometry reduce cost, but are not proof of
 zero FPS loss in every modpack. Automated assertions
 and screenshot inspection do not replace user visual acceptance.
+
+## Manual Launcher Verification
+
+The interactive `Test-Mod.cmd` / `tools/manual-test.ps1` launcher was verified
+on Windows PowerShell 5.1 on 2026-10-07. This is developer tooling, not a change
+to the mod's simulation/rendering code or a rerun of the in-world suites above.
+
+- Unit checks passed for all six plans, invalid menu input/Q, property values
+  containing `=`, mixed mod versions, JDK major validation, harmless native stderr,
+  failed build exit codes, and environment/working-directory restoration.
+- All six `-Offline -PrepareOnly` targets completed native and packager builds,
+  resolved their mod dependencies, and validated `runManualTestClient`'s task
+  graph. Default packager builds were restored after NeoForge version overrides.
+- Real manual launches passed on Fabric 1.21.11/Java 21 and NeoForge 26.2/Java 25.
+  The loader logs identify overlay 1.8.0 and WorldEdit 7.4.2/7.4.5; graphics,
+  resource atlases and sound initialized, and closing each test window exited
+  successfully. No world was entered or edited in these startup checks.
+- A second launcher was rejected while the first client was running. The CMD
+  wrapper's argument forwarding and `-PlanOnly` exit were also checked.
+
+Other four manual clients have preparation coverage in this change, not new
+interactive startup coverage. Normal worlds/profiles and automated fixtures
+were not reused. Fabric's local test identity produced expected Realms/auth
+warnings. `-Offline` governs Gradle, not all Minecraft/NeoForm network requests.
+Logs are under `build/manual-test/logs/` and each target's `logs/latest.log`.
+See [manual test instructions](tools/MANUAL_TEST.md) for usage and overrides.

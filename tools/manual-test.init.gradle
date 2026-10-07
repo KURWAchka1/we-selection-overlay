@@ -1,0 +1,57 @@
+// Manual clients load the release JAR, never source-set mods or destructive fixtures.
+allprojects {
+    afterEvaluate {
+        def loader = providers.gradleProperty('weso_manual_loader').get()
+        def family = providers.gradleProperty('weso_manual_family').get()
+        if (!(loader in ['fabric', 'neoforge']) || !(family in ['1.21.11', '26.1', '26.2'])) {
+            throw new GradleException('Invalid manual-test target')
+        }
+        def runDirectory = file("../build/manual-test/${loader}-${family}")
+        def packager = file("../WEaddon_${loader}_universal_1.21.11-26.2")
+        def artifact = new File(packager, "build/libs/worldedit_selection_overlay-${mod_version}-${loader}-1.21.11-26.2.jar")
+        def worldeditVersion = family == '1.21.11' ? '7.4.2' : (family == '26.1' ? '7.4.3' : '7.4.5')
+        repositories.maven { url = 'https://api.modrinth.com/maven' }
+
+        def preparation = tasks.register('prepareManualTest') {
+            inputs.file(artifact)
+            doLast {
+                if (!artifact.isFile()) {
+                    throw new GradleException('Build the universal release JAR before launching')
+                }
+                logger.lifecycle("Manual test artifact: ${artifact}")
+                logger.lifecycle("Manual test game directory: ${runDirectory}")
+            }
+        }
+        if (loader == 'fabric') {
+            def modsConfig = configurations.create('manualProductionMods')
+            dependencies.add(modsConfig.name, "net.fabricmc.fabric-api:fabric-api:${fabric_version}")
+            dependencies.add(modsConfig.name, "maven.modrinth:worldedit:${worldeditVersion}")
+            preparation.configure {
+                doLast { modsConfig.resolve() }
+            }
+            def taskType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')
+            tasks.register('runManualTestClient', taskType) {
+                dependsOn(preparation)
+                mods.setFrom(modsConfig, artifact)
+                runDir = runDirectory
+                javaLauncher = javaToolchains.launcherFor {
+                    languageVersion = JavaLanguageVersion.of(family == '1.21.11' ? 21 : 25)
+                }
+                jvmArgs.addAll('-Xmx2G', '-Dfabric.debug.disableModShuffle=true')
+                programArgs.addAll('--width', '1280', '--height', '720')
+            }
+        } else {
+            dependencies.add('localRuntime', "maven.modrinth:worldedit:${worldeditVersion}")
+            preparation.configure {
+                doLast { configurations.localRuntime.resolve() }
+            }
+            neoForge.runs.create('manualTestClient') {
+                client()
+                gameDirectory = runDirectory
+                programArguments.addAll('--width', '1280', '--height', '720')
+                jvmArguments.add('-Xmx2G')
+            }
+            tasks.named('runManualTestClient') { dependsOn(preparation) }
+        }
+    }
+}

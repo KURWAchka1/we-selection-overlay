@@ -41,6 +41,19 @@ Install JDK 21 and JDK 25. Then run from this repository root:
 
 The script builds all six runtimes and both universal packagers, including their unit tests. Release artifacts are written under each packager's `libs/1.8.0/` and are intentionally ignored by Git. Run the in-game test harnesses described in `TESTING.md` before publishing a release.
 
+## Try the current local mod
+
+Double-click **`Test-Mod.cmd`**, then choose Fabric or NeoForge and a Minecraft
+version. It detects JDK 21/25, builds the selected loader's three runtimes and
+universal JAR, runs its packaging tests, and launches that JAR with compatible
+WorldEdit. Initial setup may download dependencies. Each target has its own
+persistent test directory under `build/manual-test/`; normal launcher profiles,
+player worlds and automated fixture worlds are not used.
+
+Create a disposable Creative world with cheats enabled. See
+[manual test instructions](tools/MANUAL_TEST.md) for commands, logs, Java overrides
+and preparation without opening a game window.
+
 ## Documentation
 
 - [User-facing description](WEaddon_lightposition/MOD_DESCRIPTION.md)
