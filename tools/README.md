@@ -2,7 +2,10 @@
 
 For interactive game testing, use the root `Test-Mod.cmd` or
 `manual-test.ps1`. See [manual test instructions](MANUAL_TEST.md). This builds
-and loads the current universal JAR without the automated world-editing fixtures.
+and loads the current universal JAR, creates/reopens an independent flat test
+world and grants the test player Creative/operator rights. `manual-world/`
+contains its test-only bootstrap helper; it is never included in release JARs.
+Normal manual runs do not execute the automated world-editing fixtures.
 
 The checked-in assets are ready to build. Normal release builds do not need
 Node, sharp, Python, fontTools, or network access to regenerate UI resources.

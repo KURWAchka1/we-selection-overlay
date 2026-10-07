@@ -4,8 +4,9 @@
 
 1. Install JDK 21 and JDK 25. Both are needed to build a universal loader JAR.
 2. Double-click `Test-Mod.cmd` in the repository root.
-3. Choose Fabric or NeoForge, then a Minecraft target. Create a disposable
-   Creative world with cheats enabled for WorldEdit commands.
+3. Choose Fabric or NeoForge (or both), then an exact Minecraft version.
+   The test world is created and opened automatically: flat terrain, Creative,
+   peaceful difficulty, commands enabled and operator permissions.
 
 The launcher builds current local sources, including uncommitted changes. It
 does not download a published overlay release, switch Git branches, overwrite
@@ -14,16 +15,29 @@ Incremental Gradle builds reuse unchanged outputs, but their inputs are still
 checked on every launch. The selected loader's three native runtimes and its
 universal packager must share `mod_version`; mismatches stop the launch.
 
-| Target | Fabric Game | NeoForge Game | Java | WorldEdit |
-| --- | --- | --- | --- | --- |
-| 1.21.11 | 1.21.11 | 1.21.11 | 21 | 7.4.2 |
-| 26.1.x | 26.1 | 26.1.2 | 25 | 7.4.3 |
-| 26.2 | 26.2 | 26.2 | 25 | 7.4.5 |
+Normal invocation builds and then opens Minecraft automatically. `BUILD
+SUCCESSFUL` messages for the individual modules do not mean the launcher has
+finished. Only `-PrepareOnly` builds without opening the game; `-PlanOnly`
+prints the plan without building. The console prints the selected mode.
+The game launch task always runs, including repeated launches with unchanged
+sources. Compilation and dependency preparation still use Gradle's caches.
 
-These are the configured, previously tested targets, not a menu of every game
-patch. Loader/Fabric API versions come from the corresponding module's
-`gradle.properties`; there is no automatic upgrade to untested dependencies.
-WorldEdit uses the same production distributions as the command test matrix.
+| Minecraft | Java | Fabric WorldEdit | NeoForge WorldEdit |
+| --- | --- | --- | --- |
+| 1.21.11 | 21 | 7.4.2 | 7.4.2 |
+| 26.1 | 25 | 7.4.3 | Not installed: compatibility-only test |
+| 26.1.1 | 25 | 7.4.3 | Not installed: compatibility-only test |
+| 26.1.2 | 25 | 7.4.3 | 7.4.3 |
+| 26.2 | 25 | 7.4.5 | 7.4.5 |
+
+These are exact game versions, not interchangeable menu labels. The version
+catalog is `manual-test-versions.json`; defaults come from the native modules'
+`gradle.properties`. Dependencies are pinned, not automatically upgraded.
+The official WorldEdit 7.4.3 JAR requires Minecraft 26.1.2+ on NeoForge, despite
+its broader distribution-page labels. Early NeoForge profiles therefore test
+addon startup only; local WorldEdit previews cannot be tested there. The launcher
+does not remove dependency restrictions. Earlier 1.21.x games are not supported.
+Selecting both loaders or all versions launches clients sequentially, never together.
 
 Fabric uses Loom's [production run task](https://docs.fabricmc.net/develop/loom/production-run-tasks).
 NeoForge uses the project's existing packaged-JAR runtime classpath and the
@@ -48,12 +62,25 @@ preview starts disabled. Do not use a valued world to test editing commands.
 
 ## Files And Performance
 
-Each loader/version family has a separate persistent directory:
-`build/manual-test/fabric-1.21.11/`, `fabric-26.1/`, `fabric-26.2/`,
-`neoforge-1.21.11/`, `neoforge-26.1/`, or `neoforge-26.2/`.
-Worlds and settings stay there between launches; nothing is migrated between
-game versions. The launcher is single-instance to avoid overlapping builds and
-opening the same save twice.
+Each exact loader/version has its own persistent directory:
+`build/manual-test/instances/<loader>-<version>/`. Its automatic save is
+`saves/weso-test-world/`. For example, Fabric 26.1 and Fabric 26.1.1 never share
+a world; Fabric and NeoForge also use independent saves. Later launches reopen
+the same save and keep edits, inventory, position and game settings. The test
+player's Creative mode and full operator permissions are restored each launch.
+
+The small test-only helper uses Minecraft's native create/open flows, including
+save locking, recovery and version checks. Existing paths are opened, never
+replaced or silently regenerated. Cancelling a recovery dialog does not cause
+an automatic retry loop. Returning to the title screen after playing stays there.
+The helper becomes idle once setup finishes; it has no rendering or world scans.
+It is not included in the overlay's release JAR.
+
+Older `build/manual-test/<loader>-<family>/` directories remain untouched. New
+instance directories deliberately avoid their saves, because the old NeoForge
+`26.1` directory actually contained a 26.1.2 game. No world is downgraded or
+migrated automatically. The launcher is single-instance to avoid overlapping
+builds and opening the same save twice.
 
 Game `latest.log` and crash reports are inside that target directory. Combined
 build/launch logs are timestamped under `build/manual-test/logs/`. The console
@@ -74,8 +101,11 @@ From the repository root:
 # Same interactive launcher without the double-click wrapper.
 .\tools\manual-test.ps1
 
-# Choose a target directly. For the 26.1.x family use -Version 26.1.
-.\tools\manual-test.ps1 -Loader neoforge -Version 26.1
+# Choose the exact version directly, with compatible local WorldEdit.
+.\tools\manual-test.ps1 -Loader neoforge -Version 26.1.2
+
+# Sequentially test every listed version on both loaders.
+.\tools\manual-test.ps1 -Loader all -Version all
 
 # Inspect the target/build plan; do not build, download, write settings or launch.
 .\tools\manual-test.ps1 -Loader fabric -Version 26.2 -PlanOnly
@@ -91,6 +121,10 @@ From the repository root:
 
 # Script unit checks, without launching Minecraft.
 powershell.exe -NoProfile -File .\tools\test-manual-launcher.ps1
+
+# Automated bootstrap/save checks. Uses separate verification worlds, then exits.
+# Run twice to verify reopening, saved blocks and restored Creative/operator rights.
+.\tools\manual-test.ps1 -Loader all -Version all -VerifyWorld
 ```
 
 JDK discovery checks `WESO_JAVA_21` / `WESO_JAVA_25`, `JAVA_HOME`, the Java on
@@ -106,3 +140,9 @@ Realms/authentication warnings; they do not prevent singleplayer testing.
 If PowerShell's execution policy prevents running the `.ps1`, use `Test-Mod.cmd`.
 The wrapper changes the policy only for its child PowerShell process, not the
 computer or user policy. Managed-machine policies may still prevent execution.
+
+`-VerifyWorld` never uses manual instance saves. It creates disposable worlds
+under `build/manual-test/verification/`, checks permissions, leaves a probe block,
+switches the test player to Survival, removes its explicit operator entry and
+closes normally. A second run must recover the same block and restore Creative
+and operator rights. Do not move valued saves into these verification directories.

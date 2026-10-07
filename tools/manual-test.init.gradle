@@ -3,16 +3,135 @@ allprojects {
     afterEvaluate {
         def loader = providers.gradleProperty('weso_manual_loader').get()
         def family = providers.gradleProperty('weso_manual_family').get()
+        def minecraft = providers.gradleProperty('weso_manual_minecraft').get()
+        def worldeditVersion = providers.gradleProperty('weso_manual_worldedit').get()
         if (!(loader in ['fabric', 'neoforge']) || !(family in ['1.21.11', '26.1', '26.2'])) {
             throw new GradleException('Invalid manual-test target')
         }
-        def runDirectory = file("../build/manual-test/${loader}-${family}")
+        if (!(minecraft in ['1.21.11', '26.1', '26.1.1', '26.1.2', '26.2']) ||
+                (minecraft == '1.21.11' ? family != '1.21.11' : !minecraft.startsWith(family))) {
+            throw new GradleException('Minecraft does not match the manual runtime family')
+        }
+        def verification = providers.gradleProperty('weso_manual_verify').orElse('false').get() == 'true'
+        def runDirectory = file("../build/manual-test/${verification ? 'verification' : 'instances'}/${loader}-${minecraft}")
         def packager = file("../WEaddon_${loader}_universal_1.21.11-26.2")
         def artifact = new File(packager, "build/libs/worldedit_selection_overlay-${mod_version}-${loader}-1.21.11-26.2.jar")
-        def worldeditVersion = family == '1.21.11' ? '7.4.2' : (family == '26.1' ? '7.4.3' : '7.4.5')
         repositories.maven { url = 'https://api.modrinth.com/maven' }
 
+        def helperRoot = file('../tools/manual-world')
+        def generatedSources = layout.buildDirectory.dir('manual-world/sources')
+        def generatedResources = layout.buildDirectory.dir('manual-world/resources')
+        def settings = family == '1.21.11' ?
+                'new LevelSettings("WESO Test World", GameType.CREATIVE, false, Difficulty.PEACEFUL, true, new net.minecraft.world.level.gamerules.GameRules(WorldDataConfiguration.DEFAULT.enabledFeatures()), WorldDataConfiguration.DEFAULT)' :
+                'new LevelSettings("WESO Test World", GameType.CREATIVE, new LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, false), true, WorldDataConfiguration.DEFAULT)'
+        def sourceGeneration = tasks.register('generateManualWorldSources', Sync) {
+            from(new File(helperRoot, 'common'))
+            from(new File(helperRoot, loader))
+            if (loader == 'fabric' && family == '1.21.11') {
+                from(new File(helperRoot, 'yarn'))
+            } else {
+                from(new File(helperRoot, 'mojang')) {
+                    rename { it.replace('.template', '') }
+                    filter(org.apache.tools.ant.filters.ReplaceTokens, tokens: [
+                            SCREEN: family == '26.2' ? 'client.gui.screen()' : 'client.screen',
+                            OVERLAY: family == '26.2' ? 'client.gui.overlay()' : 'client.getOverlay()',
+                            SET_SCREEN: family == '26.2' ? 'client.gui.setScreen' : 'client.setScreen',
+                            LEVEL_SETTINGS: settings])
+                }
+            }
+            into(generatedSources)
+            inputs.property('loader', loader)
+            inputs.property('family', family)
+        }
+        def resourceGeneration = tasks.register('generateManualWorldResources') {
+            inputs.property('loader', loader)
+            inputs.property('minecraft', minecraft)
+            outputs.dir(generatedResources)
+            doLast {
+                def directory = generatedResources.get().asFile
+                directory.mkdirs()
+                if (loader == 'fabric') {
+                    new File(directory, 'fabric.mod.json').text = groovy.json.JsonOutput.toJson([
+                            schemaVersion: 1, id: 'weso_manual_world', version: '1.0.0',
+                            name: 'WESO Manual Test World', environment: 'client', license: 'GPL-3.0-only',
+                            entrypoints: [client: ['org.marshal.wesomanual.FabricManualWorld']],
+                            depends: [fabricloader: '>=0.18.4', minecraft: minecraft, 'fabric-lifecycle-events-v1': '*']])
+                } else {
+                    new File(directory, 'META-INF').mkdirs()
+                    new File(directory, 'META-INF/neoforge.mods.toml').text = """
+modLoader="javafml"
+loaderVersion="[1,)"
+license="GPL-3.0-only"
+[[mods]]
+modId="weso_manual_world"
+version="1.0.0"
+displayName="WESO Manual Test World"
+[[dependencies.weso_manual_world]]
+modId="minecraft"
+type="required"
+versionRange="[${minecraft}]"
+side="CLIENT"
+"""
+                }
+            }
+        }
+        def helperSources = sourceSets.create('manualWorld') {
+            java.setSrcDirs([generatedSources])
+            resources.setSrcDirs([generatedResources])
+            compileClasspath += sourceSets.main.compileClasspath
+        }
+        tasks.named('compileManualWorldJava') {
+            dependsOn(sourceGeneration)
+            options.release = family == '1.21.11' ? 21 : 25
+        }
+        tasks.named('processManualWorldResources') { dependsOn(resourceGeneration) }
+        if (loader == 'neoforge') { neoForge.addModdingDependenciesTo(helperSources) }
+        def helperJar = tasks.register('manualWorldJar', Jar) {
+            from(helperSources.output)
+            archiveFileName = "weso-manual-world-${loader}-${minecraft}.jar"
+            destinationDirectory = layout.buildDirectory.dir('manual-world/jars')
+            preserveFileTimestamps = false
+            reproducibleFileOrder = true
+        }
+        def runtimeHelper = helperJar
+        if (loader == 'fabric' && family == '1.21.11') {
+            def remapType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.RemapJarTask')
+            runtimeHelper = tasks.register('remapManualWorldJar', remapType) {
+                inputFile = helperJar.flatMap { it.archiveFile }
+                archiveFileName = "weso-manual-world-${loader}-${minecraft}-runtime.jar"
+                destinationDirectory = layout.buildDirectory.dir('manual-world/jars')
+                addNestedDependencies = false
+            }
+        }
+        def helperTests = sourceSets.create('manualWorldTest') {
+            java.setSrcDirs([new File(helperRoot, 'tests')])
+            resources.setSrcDirs([])
+            compileClasspath += helperSources.output + helperSources.compileClasspath
+            runtimeClasspath += helperSources.output + helperSources.compileClasspath
+        }
+        tasks.named('compileManualWorldTestJava') { options.release = family == '1.21.11' ? 21 : 25 }
+        def bootstrapTest = tasks.register('testManualWorldBootstrap', JavaExec) {
+            dependsOn(tasks.named(helperTests.classesTaskName))
+            classpath = helperTests.runtimeClasspath
+            mainClass = 'org.marshal.wesomanual.ManualWorldBootstrapTest'
+            def fixtures = layout.buildDirectory.dir('manual-world/unit-fixtures')
+            args(fixtures.get().asFile.absolutePath)
+            javaLauncher = javaToolchains.launcherFor {
+                languageVersion = JavaLanguageVersion.of(family == '1.21.11' ? 21 : 25)
+            }
+            doFirst {
+                def target = fixtures.get().asFile.canonicalFile.toPath()
+                def allowed = layout.buildDirectory.get().asFile.canonicalFile.toPath()
+                if (target == allowed || !target.startsWith(allowed)) {
+                    throw new GradleException('Unsafe manual-world unit fixture cleanup path')
+                }
+                project.delete(target.toFile())
+            }
+        }
+        def identity = UUID.nameUUIDFromBytes('OfflinePlayer:WESOTester'.getBytes('UTF-8')).toString()
+
         def preparation = tasks.register('prepareManualTest') {
+            dependsOn(runtimeHelper, bootstrapTest)
             inputs.file(artifact)
             doLast {
                 if (!artifact.isFile()) {
@@ -20,38 +139,50 @@ allprojects {
                 }
                 logger.lifecycle("Manual test artifact: ${artifact}")
                 logger.lifecycle("Manual test game directory: ${runDirectory}")
+                logger.lifecycle("Manual test Minecraft: ${minecraft}; WorldEdit: ${worldeditVersion}")
             }
         }
         if (loader == 'fabric') {
             def modsConfig = configurations.create('manualProductionMods')
             dependencies.add(modsConfig.name, "net.fabricmc.fabric-api:fabric-api:${fabric_version}")
-            dependencies.add(modsConfig.name, "maven.modrinth:worldedit:${worldeditVersion}")
+            if (worldeditVersion != 'none') {
+                dependencies.add(modsConfig.name, "maven.modrinth:worldedit:${worldeditVersion}")
+            }
             preparation.configure {
                 doLast { modsConfig.resolve() }
             }
             def taskType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')
             tasks.register('runManualTestClient', taskType) {
                 dependsOn(preparation)
-                mods.setFrom(modsConfig, artifact)
+                mods.setFrom(modsConfig, artifact, runtimeHelper)
                 runDir = runDirectory
                 javaLauncher = javaToolchains.launcherFor {
                     languageVersion = JavaLanguageVersion.of(family == '1.21.11' ? 21 : 25)
                 }
-                jvmArgs.addAll('-Xmx2G', '-Dfabric.debug.disableModShuffle=true')
-                programArgs.addAll('--width', '1280', '--height', '720')
+                jvmArgs.addAll('-Xmx2G', '-Dfabric.debug.disableModShuffle=true', "-Dweso.manual.verify=${verification}".toString())
+                programArgs.addAll('--width', '1280', '--height', '720', '--username', 'WESOTester', '--uuid', identity)
             }
         } else {
-            dependencies.add('localRuntime', "maven.modrinth:worldedit:${worldeditVersion}")
+            dependencies.add('localRuntime', files(runtimeHelper))
+            if (worldeditVersion != 'none') {
+                dependencies.add('localRuntime', "maven.modrinth:worldedit:${worldeditVersion}")
+            }
             preparation.configure {
                 doLast { configurations.localRuntime.resolve() }
             }
             neoForge.runs.create('manualTestClient') {
                 client()
                 gameDirectory = runDirectory
-                programArguments.addAll('--width', '1280', '--height', '720')
+                programArguments.addAll('--width', '1280', '--height', '720', '--username', 'WESOTester', '--uuid', identity)
                 jvmArguments.add('-Xmx2G')
+                jvmArguments.add("-Dweso.manual.verify=${verification}".toString())
             }
             tasks.named('runManualTestClient') { dependsOn(preparation) }
+        }
+        tasks.named('runManualTestClient') {
+            // Starting a client is an action, not a reusable build output.
+            doNotTrackState('Every manual launch must start Minecraft, even with unchanged inputs.')
+            doFirst { logger.lifecycle("Starting Minecraft client (${loader}, runtime ${family})") }
         }
     }
 }

@@ -1,0 +1,96 @@
+package org.marshal.wesomanual;
+
+import java.nio.file.Path;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.AccessibilityOnboardingScreen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.LevelSettings;
+import net.minecraft.world.level.WorldDataConfiguration;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.level.storage.LevelResource;
+
+public final class ManualWorldHost implements ManualWorldBootstrap.Host {
+    private Minecraft client;
+
+    public boolean readyToOpen() {
+        if (client == null) client = Minecraft.getInstance();
+        if (client == null) return false;
+        if (@OVERLAY@ != null) return false;
+        if (@SCREEN@ instanceof AccessibilityOnboardingScreen screen) {
+            screen.onClose();
+            return false;
+        }
+        return @SCREEN@ instanceof TitleScreen;
+    }
+
+    public boolean hasPlayer() {
+        return client.player != null && client.level != null && client.getSingleplayerServer() != null;
+    }
+
+    public Path worldPath(String id) {
+        return client.getLevelSource().getLevelPath(id);
+    }
+
+    public void createWorld(String id) {
+        var settings = @LEVEL_SETTINGS@;
+        client.createWorldOpenFlows().createFreshLevel(id, settings, new WorldOptions(0L, false, false),
+                registries -> registries.lookupOrThrow(Registries.WORLD_PRESET)
+                        .getOrThrow(WorldPresets.FLAT).value().createWorldDimensions(), @SCREEN@);
+    }
+
+    public void openWorld(String id) {
+        var parent = @SCREEN@;
+        client.createWorldOpenFlows().openWorld(id, () -> @SET_SCREEN@(parent));
+    }
+
+    public CompletableFuture<ManualWorldBootstrap.Ready> configurePlayer(Path expectedWorld) {
+        var server = client.getSingleplayerServer();
+        var id = client.player.getUUID();
+        return server.submit(() -> {
+            if (!server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().equals(expectedWorld)) {
+                throw new IllegalStateException("Refusing to configure an unrelated world");
+            }
+            var player = server.getPlayerList().getPlayer(id);
+            if (player == null) throw new IllegalStateException("Test player has not joined the server");
+            var identity = new NameAndId(player.getGameProfile());
+            server.setDefaultGameType(GameType.CREATIVE);
+            player.setGameMode(GameType.CREATIVE);
+            server.getPlayerList().op(identity, Optional.of(LevelBasedPermissionSet.OWNER), Optional.empty());
+            return new ManualWorldBootstrap.Ready(player.gameMode.getGameModeForPlayer() == GameType.CREATIVE,
+                    server.getPlayerList().isOp(identity)
+                            && server.getProfilePermissions(identity).level() == LevelBasedPermissionSet.OWNER.level());
+        });
+    }
+
+    public CompletableFuture<?> verifySave(boolean reopening) {
+        var server = client.getSingleplayerServer();
+        var id = client.player.getUUID();
+        return server.submit(() -> {
+            var pos = new BlockPos(16, -60, 16);
+            if (reopening) {
+                if (!server.overworld().getBlockState(pos).is(Blocks.DIAMOND_BLOCK)) {
+                    throw new IllegalStateException("Saved probe block was not preserved");
+                }
+            } else {
+                server.overworld().setBlockAndUpdate(pos, Blocks.DIAMOND_BLOCK.defaultBlockState());
+            }
+            var player = server.getPlayerList().getPlayer(id);
+            player.setGameMode(GameType.SURVIVAL);
+            server.getPlayerList().deop(new NameAndId(player.getGameProfile()));
+        });
+    }
+
+    public void stopClient() {
+        client.stop();
+    }
+}

@@ -288,9 +288,57 @@ to the mod's simulation/rendering code or a rerun of the in-world suites above.
 - A second launcher was rejected while the first client was running. The CMD
   wrapper's argument forwarding and `-PlanOnly` exit were also checked.
 
-Other four manual clients have preparation coverage in this change, not new
-interactive startup coverage. Normal worlds/profiles and automated fixtures
-were not reused. Fabric's local test identity produced expected Realms/auth
+The initial six-target checks above preceded automatic world setup and exact
+patch-version profiles. Normal worlds/profiles and automated fixtures were not
+reused. Fabric's local test identity produced expected Realms/auth
 warnings. `-Offline` governs Gradle, not all Minecraft/NeoForm network requests.
 Logs are under `build/manual-test/logs/` and each target's `logs/latest.log`.
 See [manual test instructions](tools/MANUAL_TEST.md) for usage and overrides.
+
+### Automatic World Setup
+
+On 2026-10-07, the expanded launcher passed actual first-create and subsequent
+reopen checks on all ten exact targets, using the packaged overlay 1.8.0 JARs:
+
+| Minecraft | Fabric | NeoForge | Local WorldEdit |
+| --- | --- | --- | --- |
+| 1.21.11 | Create/reopen passed | Create/reopen passed | Both loaders, 7.4.2 |
+| 26.1 | Create/reopen passed | Create/reopen passed | Fabric only, 7.4.3 |
+| 26.1.1 | Create/reopen passed | Create/reopen passed | Fabric only, 7.4.3 |
+| 26.1.2 | Create/reopen passed | Create/reopen passed | Both loaders, 7.4.3 |
+| 26.2 | Create/reopen passed | Create/reopen passed | Both loaders, 7.4.5 |
+
+WorldEdit 7.4.3's actual NeoForge metadata requires Minecraft 26.1.2 or newer.
+The two earlier NeoForge profiles deliberately run without local WorldEdit;
+these checks do not claim local command/clipboard support for those profiles.
+
+`-Loader all -Version all -VerifyWorld -Offline` created separate disposable
+flat worlds under `build/manual-test/verification/<loader>-<exact-version>/`.
+Each client asserted Creative and operator permission level 4, saved a diamond
+probe block, switched its player to Survival and removed the explicit operator
+entry, then exited normally. The repeat matrix opened the existing save,
+verified the unchanged block and restored Creative/full operator permissions.
+Success was checked in each actual game log against its exact save path, not
+against unit-test messages in the combined Gradle output. All ten repeat runs
+saved their chunks and exited successfully.
+
+Normal interactive launch was additionally checked on Fabric 1.21.11 and
+NeoForge 26.2: the game remained open after automatic entry, `ops.json` contained
+level 4, no verification probe was written, and closing each test window saved
+the world successfully.
+Normal worlds use `build/manual-test/instances/<loader>-<exact-version>/`; neither
+verification worlds nor the launcher's older directories are reused or replaced.
+
+The bootstrap unit suite covers single creation, asynchronous setup without
+restarts, preservation of existing/malformed save paths, cancellation without
+retry loops, idle normal mode and separate verification shutdown. Launcher tests
+cover ten exact profiles, batch plans, isolated paths and rejection of an
+unrelated unit-test success marker. Both loader launch tasks are explicitly
+untracked so Gradle cannot skip a subsequent game launch as up-to-date.
+
+World setup uses native Minecraft creation/opening and integrated-server APIs
+through a test-only helper. It does not edit save NBT or bypass version/recovery
+checks. The helper is excluded from normal release builds; the Fabric/NeoForge
+release JAR SHA-256 values remained unchanged throughout this tooling update.
+This verifies launcher/bootstrap behavior, not a new full rendering/UI/command
+matrix for every patch version.

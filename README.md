@@ -7,12 +7,18 @@ Client-side selection visualization and inspection for WorldEdit. The current re
 | Minecraft | Java | Fabric | NeoForge |
 | --- | --- | --- | --- |
 | 1.21.11 | 21 | Supported | Supported |
-| 26.1.x | 25 | Supported | Supported |
+| 26.1 / 26.1.1 | 25 | Supported | Compatibility-only checks; no compatible local WorldEdit |
+| 26.1.2 | 25 | Supported | Supported |
 | 26.2 | 25 | Supported | Supported |
 
 There is **one universal JAR per loader**, not one JAR that loads on both Fabric and NeoForge. Each loader's JAR contains the three supported Minecraft runtimes and selects the matching runtime at launch. This does **not** imply support for every 1.21.x or 26.x version.
 
 The mod can launch without WorldEdit; WorldEdit-dependent features need a compatible WorldEdit installation or CUI data from a server. Clipboard and command-result previews require an integrated/local WorldEdit session. Previews and isolation never modify world blocks or undo history. Typing a supported command temporarily takes priority over clipboard rendering without changing its preference or cache.
+
+On NeoForge, the published WorldEdit 7.4.3 JAR requires **26.1.2 or newer**.
+NeoForge 26.1/26.1.1 startup checks without WorldEdit are not proof of local
+WorldEdit feature compatibility. The test launcher's exact-version matrix and
+these restrictions are documented in `tools/MANUAL_TEST.md`.
 
 ## Source layout
 
@@ -44,13 +50,15 @@ The script builds all six runtimes and both universal packagers, including their
 ## Try the current local mod
 
 Double-click **`Test-Mod.cmd`**, then choose Fabric or NeoForge and a Minecraft
-version. It detects JDK 21/25, builds the selected loader's three runtimes and
+version (or select both loaders/all versions for sequential runs). It detects JDK 21/25, builds the selected loader's three runtimes and
 universal JAR, runs its packaging tests, and launches that JAR with compatible
-WorldEdit. Initial setup may download dependencies. Each target has its own
-persistent test directory under `build/manual-test/`; normal launcher profiles,
+WorldEdit where an official compatible distribution exists. Initial setup may download dependencies. Each exact target has its own
+persistent test directory under `build/manual-test/instances/`; normal launcher profiles,
 player worlds and automated fixture worlds are not used.
 
-Create a disposable Creative world with cheats enabled. See
+The flat test world is created on first launch and reopened on later launches.
+The test player starts in Creative with commands and full operator permissions.
+See
 [manual test instructions](tools/MANUAL_TEST.md) for commands, logs, Java overrides
 and preparation without opening a game window.
 

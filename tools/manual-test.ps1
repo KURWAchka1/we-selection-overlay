@@ -1,12 +1,13 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('fabric', 'neoforge')][string]$Loader,
-    [ValidateSet('1.21.11', '26.1', '26.2')][string]$Version,
+    [ValidateSet('fabric', 'neoforge', 'all')][string]$Loader,
+    [ValidateSet('1.21.11', '26.1', '26.1.1', '26.1.2', '26.2', 'all')][string]$Version,
     [string]$Java21,
     [string]$Java25,
     [switch]$Offline,
     [switch]$PlanOnly,
-    [switch]$PrepareOnly
+    [switch]$PrepareOnly,
+    [switch]$VerifyWorld
 )
 
 function Read-WesoProperties([string]$Path) {
@@ -21,6 +22,8 @@ function Read-WesoProperties([string]$Path) {
 }
 
 function Get-WesoTargets([string]$Root) {
+    $catalog = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manual-test-versions.json') -Raw | ConvertFrom-Json
+    if ($catalog.schemaVersion -ne 1) { throw 'Unknown manual-test catalog format.' }
     $families = @(
         @{ Family = '1.21.11'; Fabric = 'WEaddon_fabric_1.21.11'; Neo = 'WEaddon_neoforge_1.21.11'; Java = 21 },
         @{ Family = '26.1'; Fabric = 'WEaddon_lightposition'; Neo = 'WEaddon_neoforge_26.1'; Java = 25 },
@@ -34,29 +37,30 @@ function Get-WesoTargets([string]$Root) {
         if (!$releaseVersion -or $packageProperties.mod_version -ne $releaseVersion) {
             throw 'Universal packagers must have the same mod_version.'
         }
-        foreach ($family in $families) {
+        foreach ($profile in $catalog.versions) {
+            $family = $families | Where-Object Family -eq $profile.family
+            if (!$family) { throw "Unknown runtime family: $($profile.family)" }
             $nativeModule = if ($loaderName -eq 'fabric') { $family.Fabric } else { $family.Neo }
             $properties = Read-WesoProperties (Join-Path $Root "$nativeModule/gradle.properties")
             if ($properties.mod_version -ne $releaseVersion) {
                 throw "Version mismatch in ${nativeModule}: expected $releaseVersion."
             }
-            $minecraft = $properties.minecraft_version
-            if ($loaderName -eq 'neoforge' -and $family.Family -ne '1.21.11') {
-                $parts = $properties.neo_version.Split('.')
-                $minecraft = if ($parts[2] -eq '0') { $parts[0..1] -join '.' } else { $parts[0..2] -join '.' }
-            }
+            $neoVersion = if ($profile.neoVersion) { $profile.neoVersion } else { $properties.neo_version }
+            $worldedit = if ($loaderName -eq 'neoforge' -and $profile.neoWithoutWorldEdit) { 'none' } else { $profile.worldedit }
             [pscustomobject]@{
-                Name = "$loaderName-$($family.Family)"
+                Name = "$loaderName-$($profile.minecraft)"
                 Loader = $loaderName
                 Family = $family.Family
-                Minecraft = $minecraft
+                Minecraft = $profile.minecraft
                 Java = $family.Java
                 NativeModule = $nativeModule
                 Module = $(if ($loaderName -eq 'fabric') { $nativeModule } else { $packager })
                 Packager = $packager
-                NeoVersion = $properties.neo_version
+                NeoVersion = $neoVersion
+                FabricApi = $(if ($profile.fabricApi) { $profile.fabricApi } else { $properties.fabric_version })
+                WorldEdit = $worldedit
                 ModVersion = $releaseVersion
-                LoaderVersion = $(if ($loaderName -eq 'fabric') { $properties.loader_version } else { $properties.neo_version })
+                LoaderVersion = $(if ($loaderName -eq 'fabric') { $properties.loader_version } else { $neoVersion })
                 BuildModules = @($families | ForEach-Object {
                     if ($loaderName -eq 'fabric') { $_.Fabric } else { $_.Neo }
                 }) + @($packager)
@@ -115,13 +119,31 @@ function Find-WesoJdk([int]$Major, [string]$ExplicitPath) {
     throw "JDK $Major not found. Install it or pass -Java$Major 'C:\path\to\jdk-$Major'."
 }
 
-function Get-WesoLaunchArguments($Target) {
+function Get-WesoLaunchArguments($Target, [bool]$Verification = $false) {
     $arguments = @('-I', '../tools/manual-test.init.gradle', "-Pweso_manual_loader=$($Target.Loader)",
-        "-Pweso_manual_family=$($Target.Family)")
+        "-Pweso_manual_family=$($Target.Family)", "-Pweso_manual_minecraft=$($Target.Minecraft)",
+        "-Pweso_manual_worldedit=$($Target.WorldEdit)")
     if ($Target.Loader -eq 'neoforge') {
         $arguments += @("-Pneo_version=$($Target.NeoVersion)", "-Psmoke_java_version=$($Target.Java)")
+    } else {
+        $arguments += @("-Pminecraft_version=$($Target.Minecraft)", "-Pfabric_version=$($Target.FabricApi)")
     }
+    if ($Verification) { $arguments += '-Pweso_manual_verify=true' }
     return $arguments
+}
+
+function Get-WesoGameDirectory([string]$Root, $Target, [bool]$Verification) {
+    $group = if ($Verification) { 'verification' } else { 'instances' }
+    return Join-Path $Root "build/manual-test/$group/$($Target.Name)"
+}
+
+function Assert-WesoWorldVerification([string]$GameDirectory) {
+    $gameLog = Join-Path $GameDirectory 'logs/latest.log'
+    $world = [IO.Path]::GetFullPath((Join-Path $GameDirectory 'saves/weso-test-world'))
+    if (!(Test-Path -LiteralPath $gameLog) -or
+            !(Select-String -LiteralPath $gameLog -SimpleMatch "MANUAL WORLD VERIFY PASS: $world")) {
+        throw "Automatic world verification failed. Game log: $gameLog"
+    }
 }
 
 function Invoke-WesoGradle([string]$Directory, [string]$Jdk, [string[]]$Arguments, [string]$Log) {
@@ -135,6 +157,7 @@ function Invoke-WesoGradle([string]$Directory, [string]$Jdk, [string[]]$Argument
         # Windows PowerShell treats native stderr as errors even for harmless JVM warnings.
         $ErrorActionPreference = 'Continue'
         & .\gradlew.bat @Arguments --no-daemon --console=plain --no-configuration-cache 2>&1 |
+            ForEach-Object { $_.ToString() } |
             Tee-Object -FilePath $Log -Append
         $exitCode = $LASTEXITCODE
         $ErrorActionPreference = 'Stop'
@@ -152,33 +175,38 @@ function Start-WesoManualTest {
     $root = Split-Path -Parent $PSScriptRoot
     $targets = @(Get-WesoTargets $root)
     Write-Host "WorldEdit Selection Overlay $($targets[0].ModVersion) - manual test"
+    $mode = if ($PlanOnly) { 'Plan only (no build or game)' } elseif ($PrepareOnly) {
+        'Prepare only (build, no game)'
+    } elseif ($VerifyWorld) { 'Automatic world verification (separate disposable worlds)' }
+    else { 'Build and launch Minecraft' }
+    Write-Host "Mode: $mode"
     if (!$Loader) {
-        $choice = Select-WesoOption 'Loader' @('Fabric', 'NeoForge')
+        $choice = Select-WesoOption 'Loader' @('Fabric', 'NeoForge', 'Both loaders (sequential)')
         if ($choice -lt 0) { return }
-        $Loader = @('fabric', 'neoforge')[$choice]
+        $Loader = @('fabric', 'neoforge', 'all')[$choice]
     }
-    $available = @($targets | Where-Object Loader -eq $Loader)
+    $available = @($targets | Where-Object { $Loader -eq 'all' -or $_.Loader -eq $Loader })
     if (!$Version) {
-        $labels = @($available | ForEach-Object {
+        $versions = @($available | Sort-Object { [version]$_.Minecraft } | Select-Object -Property Minecraft,Java -Unique)
+        $labels = @($versions | ForEach-Object {
             $label = "Minecraft $($_.Minecraft) / Java $($_.Java)"
-            if ($_.Family -eq '26.1') { $label += ' (26.1.x runtime)' }
+            if ($Loader -ne 'fabric' -and $_.Minecraft -in @('26.1', '26.1.1')) { $label += ' (NeoForge: no local WorldEdit)' }
             $label
-        })
+        }) + @('All versions (sequential)')
         $choice = Select-WesoOption 'Minecraft version' $labels
         if ($choice -lt 0) { return }
-        $Version = $available[$choice].Family
+        $Version = if ($choice -eq $versions.Count) { 'all' } else { $versions[$choice].Minecraft }
     }
-    $target = $available | Where-Object Family -eq $Version
-    $run = Join-Path $root "build/manual-test/$($target.Name)"
-    $launchArguments = @(Get-WesoLaunchArguments $target)
-    if ($Offline) { $launchArguments += '--offline' }
-    $artifact = Join-Path $root "$($target.Packager)/build/libs/worldedit_selection_overlay-$($target.ModVersion)-$Loader-1.21.11-26.2.jar"
-    Write-Host "`nTarget: $($target.Name), Minecraft $($target.Minecraft), loader $($target.LoaderVersion)"
-    Write-Host "Game directory: $run"
-    Write-Host "Release JAR: $artifact"
-    Write-Host "Build modules: $($target.BuildModules -join ', ')"
+    $selected = @($available | Where-Object { $Version -eq 'all' -or $_.Minecraft -eq $Version })
+    if (!$selected.Count) { throw 'No matching manual-test targets.' }
+    Write-Host "Targets: $($selected.Name -join ', ')"
     if ($PlanOnly) {
-        Write-Host "Launch: $($launchArguments -join ' ') runManualTestClient"
+        foreach ($target in $selected) {
+            Write-Host "`n$($target.Name): loader $($target.LoaderVersion), WorldEdit $($target.WorldEdit)"
+            Write-Host "Build modules: $($target.BuildModules -join ', ')"
+            Write-Host "Game directory: $(Get-WesoGameDirectory $root $target $VerifyWorld)"
+            Write-Host "Launch: $((Get-WesoLaunchArguments $target $VerifyWorld) -join ' ') runManualTestClient"
+        }
         return
     }
     $jdks = @{ 21 = Find-WesoJdk 21 $Java21; 25 = Find-WesoJdk 25 $Java25 }
@@ -186,40 +214,57 @@ function Start-WesoManualTest {
     Write-Host "Java 25: $($jdks[25])"
     $logs = Join-Path $root 'build/manual-test/logs'
     New-Item -ItemType Directory -Force -Path $logs | Out-Null
-    $log = Join-Path $logs "$($target.Name)-$(Get-Date -Format 'yyyyMMdd-HHmmss-fff').log"
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'
     $lock = $null
     try {
         try {
             $lock = [IO.File]::Open((Join-Path $logs 'launcher.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
         } catch { throw 'Another manual test is already running. Close it before starting a new one.' }
-        foreach ($module in $target.BuildModules) {
+        foreach ($module in ($selected.BuildModules | Select-Object -Unique)) {
             $directory = Join-Path $root $module
             $properties = Read-WesoProperties (Join-Path $directory 'gradle.properties')
-            $major = if ($module -eq $target.Packager -or $properties.minecraft_version -eq '1.21.11') { 21 } else { 25 }
+            $major = if ($module -like '*_universal_*' -or $properties.minecraft_version -eq '1.21.11') { 21 } else { 25 }
             $buildArguments = @('build')
             if ($Offline) { $buildArguments += '--offline' }
             Write-Host "`nBuilding $module"
-            Invoke-WesoGradle $directory $jdks[$major] $buildArguments $log
+            Invoke-WesoGradle $directory $jdks[$major] $buildArguments (Join-Path $logs "build-$stamp.log")
         }
-        if (!(Test-Path -LiteralPath $artifact)) { throw "Release artifact missing: $artifact" }
-        Write-Host "`nBuilt JAR SHA256: $((Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash)"
-        $launchModule = Join-Path $root $target.Module
-        if ($PrepareOnly) {
-            Invoke-WesoGradle $launchModule $jdks[$target.Java] ($launchArguments + @('prepareManualTest')) $log
-            Invoke-WesoGradle $launchModule $jdks[$target.Java] ($launchArguments + @('runManualTestClient', '--dry-run')) $log
-            Write-Host "`nPrepared successfully. No game was launched. Log: $log"
-            return
+        foreach ($target in $selected) {
+            $run = Get-WesoGameDirectory $root $target $VerifyWorld
+            $launchArguments = @(Get-WesoLaunchArguments $target $VerifyWorld)
+            if ($Offline) { $launchArguments += '--offline' }
+            $artifact = Join-Path $root "$($target.Packager)/build/libs/worldedit_selection_overlay-$($target.ModVersion)-$($target.Loader)-1.21.11-26.2.jar"
+            $log = Join-Path $logs "$($target.Name)-$stamp.log"
+            Write-Host "`nTarget: $($target.Name), loader $($target.LoaderVersion), WorldEdit $($target.WorldEdit)"
+            if ($target.WorldEdit -eq 'none') {
+                Write-Warning 'Official WorldEdit 7.4.3 requires NeoForge MC 26.1.2+. This is an addon compatibility test without local WorldEdit.'
+            }
+            if (!(Test-Path -LiteralPath $artifact)) { throw "Release artifact missing: $artifact" }
+            Write-Host "Built JAR SHA256: $((Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash)"
+            $launchModule = Join-Path $root $target.Module
+            if ($PrepareOnly) {
+                Invoke-WesoGradle $launchModule $jdks[$target.Java] ($launchArguments + @('prepareManualTest')) $log
+                Invoke-WesoGradle $launchModule $jdks[$target.Java] ($launchArguments + @('runManualTestClient', '--dry-run')) $log
+                Write-Host "Prepared successfully: $($target.Name). Log: $log"
+                continue
+            }
+            New-Item -ItemType Directory -Force -Path $run | Out-Null
+            $options = Join-Path $run 'options.txt'
+            if (!(Test-Path -LiteralPath $options)) {
+                [IO.File]::WriteAllLines($options, @('maxFps:100', 'guiScale:2', 'renderDistance:8', 'simulationDistance:8'))
+            }
+            Write-Host 'Starting Minecraft. The persistent test world opens automatically in Creative with operator permissions.'
+            Write-Host 'Close the game normally to continue to the next selected target.'
+            Write-Host 'O: settings / B: selection blocks / F8: command preview toggle.'
+            Write-Host "Game logs: $(Join-Path $run 'logs/latest.log')"
+            Write-Host "Launcher log: $log"
+            Invoke-WesoGradle $launchModule $jdks[$target.Java] ($launchArguments + @('runManualTestClient')) $log
+            if ($VerifyWorld) {
+                Assert-WesoWorldVerification $run
+                Write-Host "WORLD VERIFICATION PASS: $($target.Name)"
+            }
         }
-        New-Item -ItemType Directory -Force -Path $run | Out-Null
-        $options = Join-Path $run 'options.txt'
-        if (!(Test-Path -LiteralPath $options)) {
-            [IO.File]::WriteAllLines($options, @('maxFps:100', 'guiScale:2', 'renderDistance:8', 'simulationDistance:8'))
-        }
-        Write-Host "`nStarting Minecraft. Create a disposable Creative world with cheats enabled."
-        Write-Host 'O: settings / B: selection blocks / F8: command preview toggle.'
-        Write-Host "Game logs: $(Join-Path $run 'logs/latest.log')"
-        Write-Host "Launcher log: $log"
-        Invoke-WesoGradle $launchModule $jdks[$target.Java] ($launchArguments + @('runManualTestClient')) $log
+        Write-Host "`nCompleted $($selected.Count) target(s). Logs: $logs"
     } finally {
         if ($lock) { $lock.Dispose() }
     }
