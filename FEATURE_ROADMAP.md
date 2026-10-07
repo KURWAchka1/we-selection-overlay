@@ -29,6 +29,8 @@ not a replacement for the features below. Preserve existing settings and feature
 2. **Interactive Selection Editing** - pending. Six cuboid face handles,
    configurable normal/fast steps, dimensions/volume HUD, and actual WorldEdit
    selection synchronization. Leave an extension point for polygon/convex vertices.
+   Proposed interaction, visual and transaction contract (not implemented):
+   [SELECTION_EDITING_DESIGN.md](SELECTION_EDITING_DESIGN.md).
 3. **Advanced Clipboard Placement** - pending. Position, rotate, flip, reset,
    axis lock, grid snap, numeric offsets, origin/pivot, compact HUD, and explicit
    protected paste confirmation. Keep WorldEdit transforms as the source of truth.
