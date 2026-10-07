@@ -27,6 +27,7 @@ public final class NeoCommandTest {
     private static final BlockVector3 MIN = BlockVector3.at(0, 66, 0), MAX = BlockVector3.at(5, 71, 5);
     private int ticks, stage, wait;
     private CompletableFuture<?> setup;
+    private CompletableFuture<?> selectionChecks;
     private Object overlay, clipboardSource, copied, random;
     private int latencyIndex;
     private long started;
@@ -113,6 +114,26 @@ public final class NeoCommandTest {
             clipboardSource = field(field(overlay, "clipboardPreviewController"), "source");
             client.gui.setScreen(null); stage = 3; wait = 40;
         } else if (stage == 3) {
+            if (selectionChecks == null) {
+                selectionChecks = CompletableFuture.runAsync(() -> SelectionEditingChecks.run(client, overlay, clipboardSource,
+                        name -> client.submit(() -> screenshot(client, name + ".png")).join()));
+                return;
+            }
+            if (!selectionChecks.isDone()) return;
+            selectionChecks.join();
+            if (setup != null) {
+                setup = client.getSingleplayerServer().submit(() -> {
+                    var actor = NeoForgeAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst());
+                    var session = WorldEdit.getInstance().getSessionManager().get(actor);
+                    session.setRegionSelector(actor.getWorld(), new CuboidRegionSelector(actor.getWorld(), MIN, MAX));
+                    session.dispatchCUISelection(actor);
+                    var server = client.getSingleplayerServer();
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "tp @p 12 77 16 145 30");
+                });
+                wait = 10; stage = 39; return;
+            }
+        } else if (stage == 39) {
+            if (!setup.isDone()) return; setup.join();
             copied = call(clipboardSource, "snapshot");
             check(!((List<?>) call(copied, "blocks")).isEmpty(), "Clipboard failed on NeoForge with WorldEdit");
             screenshot(client, "clipboard-before-command.png");

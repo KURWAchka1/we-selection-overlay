@@ -26,10 +26,11 @@ not a replacement for the features below. Preserve existing settings and feature
    keep the displayed sample stable for an unchanged draft, and label it as a
    sample. Vanilla WorldEdit re-rolls on execution, so per-cell equality must
    not be promised. Never silently seed or alter WorldEdit's actual command.
-2. **Interactive Selection Editing** - pending. Six cuboid face handles,
+2. **Interactive Selection Editing** - initial cuboid scope implemented and
+   six-runtime tested in 1.8.0 (2026-10-07). Six cuboid face handles,
    configurable normal/fast steps, dimensions/volume HUD, and actual WorldEdit
    selection synchronization. Leave an extension point for polygon/convex vertices.
-   Proposed interaction, visual and transaction contract (not implemented):
+   Opt-in, unassigned hold key, draft/commit/cancel mechanics and tested scope:
    [SELECTION_EDITING_DESIGN.md](SELECTION_EDITING_DESIGN.md).
 3. **Advanced Clipboard Placement** - pending. Position, rotate, flip, reset,
    axis lock, grid snap, numeric offsets, origin/pivot, compact HUD, and explicit

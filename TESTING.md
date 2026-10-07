@@ -1,16 +1,17 @@
 # Verification
 
-Current source verification: 1.8.0, 2026-10-03. The test worlds, generated
+Current source verification: 1.8.0, 2026-10-07. The test worlds, generated
 fixtures, screenshots, and logs are local data and are not committed.
 
 ## Release build
 
 The root README build command completed for all six runtimes and both universal
 packagers. Packager tests checked metadata, version selection, Java bytecode
-boundaries, bundled license notices, and registration of the chat-preview mixin
-for every runtime. Each universal JAR is approximately 1.2 MiB; neither bundles
+boundaries, bundled license notices, and registration of the chat-preview and
+selection-editing mixins for every runtime. Each universal JAR is approximately
+1.4 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,287,867 bytes (Fabric) and 1,259,956 bytes
+The archived release outputs are 1,425,394 bytes (Fabric) and 1,397,248 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -71,7 +72,7 @@ not only a nonempty geometry buffer. All six set-preview screenshots pass
 the cyan surface test; its color predicate excludes blue sky, not only neutral
 stone. Partial replacement, flora, line and curve screenshots are also inspected.
 The fixed crop contains 34,099 diamond-texture pixels on each Fabric runtime,
-33,561 on NeoForge 1.21.11 and 24,981 on NeoForge 26.x.
+24,978 on NeoForge 1.21.11 and 24,981 on NeoForge 26.x in the final fixture.
 The texture check complements native-buffer assertions; a nonempty GPU buffer
 alone does not establish correct world projection or texture sampling.
 
@@ -94,8 +95,10 @@ blocks), complete exposed surfaces, restoration to a small selection, and
 stable random snapshots after repeated CUI notifications. Model templates must
 survive ordinary edits, while a changed baked-model identity rebuilds geometry.
 The three NeoForge runs also perform an actual built-in resource reload; the
-Fabric tests inject a changed probe identity. A direct Fabric gametest reload
-hit a framework teardown/Phaser stall and is not claimed as a passing reload test.
+Fabric tests inject a changed probe identity. A direct Fabric command-geometry
+reload hit a framework teardown/Phaser stall and is not claimed as a passing
+command-geometry reload assertion. Editor locale reloads below exercise the
+actual assets/settings, not that active-preview geometry assertion.
 An intermittent Fabric 26.2 teardown stall was also observed after assertions;
 the final matrix rerun closed its worlds normally and exited successfully.
 
@@ -118,6 +121,9 @@ cap). The small case alternates gold/diamond drafts eight times in a 6x6x6
 selection. Measurements include scheduling and completion of native geometry,
 not only the domain calculation; the fixtures observe completion at tick/frame
 boundaries, so these are practical latency samples rather than microbenchmarks.
+The timing tables record the earlier command-scheduling baseline, before
+interactive editing. Later functional reruns are not a new controlled editor
+performance benchmark.
 
 | Loader | Minecraft | Small preview median | Cold input cells | Calculation ready |
 | --- | --- | --- | --- | --- |
@@ -184,12 +190,60 @@ validation compares states; dynamic NBT-only data is outside supported syntax.
 Dependent providers still rebuild for meaningful source-state changes rather
 than using the set/replace repair path. No larger tick budget is used.
 
+## Interactive selection editing
+
+The command/editing matrix loads the production universal JARs on the same six
+WorldEdit-enabled targets listed above. Each runtime checks all six cuboid faces
+through native mouse-wheel input, then checks native handle dragging and release
+commit. The server's region stays unchanged during drafting. Fast contraction
+stops at one block, preserves ExtendingCuboidRegionSelector, and a native
+transaction retains the identity of reversed primary/secondary corners.
+
+Native Escape cancels without opening the pause menu. Releasing the editing key
+during a drag restores the captured cursor without applying the draft or leaking
+an attack. Opening chat cancels. Replacing the selector with an identical-looking
+one rejects the obsolete transaction instead of overwriting it. Isolation's
+selected material IDs and the clipboard geometry-list identity/preference survive
+an acknowledged resize. The fixture compares 1,000 full block states and the
+WorldEdit session history before/after the sequence; selection editing must
+change neither. Those observations cover the fixture area, not every block in
+the save; the production transaction never creates an EditSession.
+An additional client fixture replaces the stored world identity while a pending
+context exists and asserts that pending/origin/draft references are cleared.
+It checks the source's weak cache as well; it is not a real network-disconnect
+or garbage-collection benchmark.
+
+Both languages and requested GUI scales 2x/3x/4x are captured for the compact
+editing settings, with every widget checked against its panel bounds. Screenshots
+include the thin draft/old contours, six handles, and the small dimensions HUD.
+The existing command regressions run alongside these checks, including large
+grass replacement and incremental chunk arrival; no command-engine changes were
+needed for editing. Tests and temporary configs are confined to disposable worlds.
+
+The shared domain suite passes 20 cases covering face signs, inside/outside rays,
+axis dragging from either camera side, end-on rejection, world boundaries,
+minimum size, integer overflow, large volume, and configuration defaults/clamps.
+Both packagers also assert the editing classes and explicit active-mixin registry
+for each relocated runtime, including the 1.21.11 FOV accessor.
+
+The 26.2 Fabric layout fixture passes without installed WorldEdit as well; the
+editing toggle is unavailable and ordinary menus still work. Editing is off and
+its hold key is unassigned in fresh configs. Only complete native cuboid/extending
+selections in the integrated local WorldEdit server are supported at this stage.
+
+No new uncapped FPS benchmark is claimed for editing. Its geometry and hit tests
+are fixed-size work, independent of selection volume; it does not scan blocks.
+Live focus loss, disconnect during a pending commit, third-person camera changes,
+custom mouse/controller bindings, modpacks, and remote-server editing still need
+separate manual review. Remote CUI selection display is not remote editing.
+
 ## In-world isolation regression
 
 This suite was rerun because command source suppression reuses the isolation
 visibility hooks. With no command draft, the ordinary isolation and no-WorldEdit
 startup paths must retain their established behavior. The broader responsive UI
-fixture below remains an earlier baseline, not a new UI coverage claim.
+fixture has a fresh layout-only pass; the six-runtime isolation rendering suite
+below remains an earlier baseline, not a new isolation coverage claim.
 
 The packaged universal JAR, not the version-specific source module, was loaded for each run. The test fixture selects diamond and gold blocks inside stone, switches isolation eight times, and checks:
 

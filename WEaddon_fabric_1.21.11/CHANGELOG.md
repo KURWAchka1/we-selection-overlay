@@ -4,6 +4,14 @@
 
 ### Added
 
+- Optional in-world cuboid editing: six face handles, wheel nudging and
+  snapped handle dragging, with a compact dimensions/volume HUD.
+- Configurable hold key, normal step and fast step. Editing starts disabled
+  with no assigned hold key; the fast modifier defaults to Left Shift.
+- One authoritative selection adjustment on release, Escape/interruption
+  cancellation and stale-selection protection through WorldEdit's public API.
+- Standard and extending cuboids retain their selector type and ordered corners.
+  Local drafts do not write blocks, scan the selection or add undo entries.
 - Live in-world command preview while typing `//set`, `//replace`, `//walls`,
   `//faces` / `//outline`, `//overlay`, `//center` / `//middle`, `//naturalize`,
   `//hollow`, `//line`, `//curve`, and `//flora` in normal chat.
@@ -26,6 +34,8 @@
 
 - Clipboard preview is retained, off by default, and temporarily yields to a
   command draft without losing its setting, transforms, or cached clipboard.
+- Selection editing temporarily pauses clipboard rendering and the regular grid;
+  confirmed resizes preserve the chosen isolation block types.
 - One universal Fabric JAR and one universal NeoForge JAR support Minecraft
   1.21.11, 26.1.x, and 26.2.
 
@@ -37,6 +47,8 @@
 Command-result preview requires integrated singleplayer WorldEdit. Remote
 server CUI continues to support selection visualization, not command simulation.
 Preview never edits the world or history; Enter executes the unchanged command.
+Interactive editing also requires integrated WorldEdit and currently supports
+complete cuboid/extending-cuboid selections only.
 
 ## 1.7.1
 

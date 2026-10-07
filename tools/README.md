@@ -12,6 +12,11 @@ Node, sharp, Python, fontTools, or network access to regenerate UI resources.
 
 - `sync-ui.mjs`: ports the canonical Fabric 26.2 UI helpers and compact settings
   to the other five runtimes, accounting for each Minecraft API.
+- `sync-selection-editing.mjs`: maps the canonical face-editing/input/HUD adapter
+  to the other five runtimes and shares its translations/domain source set.
+  `--restore-format` restores JSON whitespace from HEAD without changing values.
+- `test-command-matrix.ps1`: checks both command preview and selection editing
+  against the production universal JARs, including native input and EN/RU menus.
 - `polish-ui.mjs`: synchronizes targeted palette/inspector adjustments and
   translations while preserving each JSON key's existing formatting.
 - `build-ui-assets.mjs`: regenerates the SDF tile and licensed icon/font assets.

@@ -18,6 +18,7 @@ public final class OverlaySettingsScreen extends UiScreen {
     private ButtonWidget renderModeButton, diagonalModeButton, trackingModeButton, doneButton;
     private ButtonWidget colorEditorButton, themeButton;
     private ButtonWidget commandPreviewButton;
+    private ButtonWidget selectionEditButton, selectionEditOptionsButton;
     private boolean menuOpen;
     private int scroll;
     private int contentHeight;
@@ -53,6 +54,12 @@ public final class OverlaySettingsScreen extends UiScreen {
         commandPreviewButton = row("command_preview", () -> overlayClient.commandPreviewController()
                 .setEnabled(!overlayClient.commandPreviewController().options().enabled()),
                 () -> overlayClient.commandPreviewController().options().enabled());
+        var editing = org.marshal.weaddon_lightposition.client.selection.SelectionEditController.instance();
+        selectionEditButton = row("selection_edit", () -> editing.configure(!editing.options().enabled(), editing.options().step(), editing.options().fastStep()),
+                () -> editing.options().enabled());
+        selectionEditOptionsButton = command(() -> key("selection_edit_options"), () -> {
+            if (client != null) client.setScreen(new SelectionEditSettingsScreen(this));
+        });
         rulerButton = row("ruler", () -> {
             overlayClient.setRulerEnabled(!overlayClient.rulerEnabled());
             layoutControls();
@@ -119,6 +126,8 @@ public final class OverlaySettingsScreen extends UiScreen {
     private static Text state(boolean value) { return key("value." + (value ? "on" : "off")); }
 
     private void syncLabels() {
+        selectionEditButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.selection_edit",
+                state(org.marshal.weaddon_lightposition.client.selection.SelectionEditController.instance().options().enabled())));
         overlayButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.overlay", state(overlayClient.overlayEnabled())));
         gridButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.grid", state(overlayClient.selectionGridEnabled())));
         commandPreviewButton.setMessage(Text.translatable("screen.worldedit_selection_overlay.settings.command_preview",
@@ -143,6 +152,8 @@ public final class OverlaySettingsScreen extends UiScreen {
         if (overlayClient.overlayEnabled()) { position(gridButton, x + 16, y, w - 16, 22); y += 25; }
         position(clipboardPreviewButton, x, y, w, 24); y += 27;
         position(commandPreviewButton, x, y, w, 24); y += 27;
+        position(selectionEditButton, x, y, w, 24); y += 27;
+        position(selectionEditOptionsButton, x + 16, y, w - 16, 22); y += 25;
         position(rulerButton, x, y, w, 24); y += 27;
         axisXButton.visible = axisYButton.visible = axisZButton.visible = false;
         if (overlayClient.rulerEnabled()) {
@@ -160,6 +171,7 @@ public final class OverlaySettingsScreen extends UiScreen {
         if (scroll > maxScroll) { scroll = maxScroll; layoutControls(); return; }
         for (ButtonWidget button : content) button.active = !menuOpen;
         clipboardPreviewButton.active = !menuOpen && overlayClient.clipboardPreviewAvailable();
+        selectionEditButton.active = !menuOpen && org.marshal.weaddon_lightposition.client.selection.SelectionEditController.instance().available();
         syncLabels();
     }
 
@@ -179,6 +191,7 @@ public final class OverlaySettingsScreen extends UiScreen {
     public void tick() {
         super.tick();
         if (clipboardPreviewButton != null) clipboardPreviewButton.active = !menuOpen && overlayClient.clipboardPreviewAvailable();
+        if (selectionEditButton != null) selectionEditButton.active = !menuOpen && org.marshal.weaddon_lightposition.client.selection.SelectionEditController.instance().available();
     }
 
     @Override

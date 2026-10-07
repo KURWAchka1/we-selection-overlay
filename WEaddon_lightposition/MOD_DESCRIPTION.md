@@ -109,6 +109,20 @@ Customize how the overlay looks directly in-game:
 
 ***
 
+## Edit Selection Bounds
+
+Hold a configurable key to resize cuboid faces with the mouse wheel or drag
+their handles. A small HUD shows dimensions, volume, and the face offset.
+
+* Configurable normal/fast steps and snapped dragging
+* Release to apply; Escape cancels an unfinished edit
+* Disabled by default, with no assigned hold key
+
+Requires integrated singleplayer WorldEdit and a complete cuboid or extending
+cuboid. Changes selection bounds only, not world blocks.
+
+***
+
 ![Selection Blocks Screen](https://media.forgecdn.net/attachments/1592/63/2026-03-21_18-56-04-png.png)
 
 ## Inspect Before You Edit
@@ -163,6 +177,7 @@ Everything is visual only. Hidden blocks still exist, still collide, and are nev
 * Optional internal selection grid toggle
 * Textured WorldEdit clipboard preview, off by default
 * Live command-result preview while typing in singleplayer
+* Optional in-world cuboid resizing with face handles
 * Full-screen palette editor with live preview
 * Custom colors, transparency, thickness, and presets
 * Adaptive performance for large selections
@@ -197,6 +212,8 @@ Works with everything WorldEdit sends via CUI.
 | `B` | Open block inspection screen |
 | `N` | Run WorldEdit `//deselect` |
 | `F8` | Toggle command-result preview |
+| Unassigned | Hold to edit cuboid bounds |
+| Left Shift | Fast selection-editing step |
 
 All keybinds are configurable.
 

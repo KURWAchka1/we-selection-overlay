@@ -19,6 +19,27 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class UniversalArtifactTest {
     @Test
+    void selectionEditingHooksAreActiveInEveryRuntime() throws Exception {
+        try (var jar = artifact()) {
+            var counts = new java.util.HashMap<String, Integer>();
+            try (var input = jar.getInputStream(jar.getEntry("org/marshal/weaddon_lightposition/universal/mixin/UniversalMixinPlugin.class"))) {
+                new org.objectweb.asm.ClassReader(input).accept(new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                    @Override public org.objectweb.asm.MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                        return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                            @Override public void visitLdcInsn(Object value) { if (value instanceof String text) counts.merge(text, 1, Integer::sum); }
+                        };
+                    }
+                }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+            }
+            for (String hook : List.of("SelectionEditMouseMixin", "SelectionEditKeyboardMixin", "SelectionEditMovementMixin", "SelectionEditPlayerMixin")) {
+                assertEquals(3, counts.getOrDefault(hook, 0), hook);
+                for (var target : RuntimeTarget.values()) assertNotNull(jar.getEntry("org/marshal/weaddon_universal_mixins/" + target.id() + "/" + hook + ".class"));
+            }
+            assertEquals(1, counts.getOrDefault("SelectionEditFovAccessor", 0));
+            for (var target : RuntimeTarget.values()) assertNotNull(jar.getEntry("org/marshal/weaddon_lightposition/runtime/" + target.id() + "/client/selection/SelectionEditController.class"));
+        }
+    }
+    @Test
     void commandMixinIsRegisteredForEveryRuntime() throws Exception {
         try (var jar = artifact()) {
             var registered = new java.util.concurrent.atomic.AtomicInteger();

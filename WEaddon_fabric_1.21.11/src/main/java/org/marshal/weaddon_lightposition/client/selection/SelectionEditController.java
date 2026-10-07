@@ -1,0 +1,243 @@
+package org.marshal.weaddon_lightposition.client.selection;
+
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.text.Text;
+import org.lwjgl.glfw.GLFW;
+import org.marshal.weaddon_lightposition.client.overlay.SelectionRegion;
+import org.marshal.weaddon_lightposition.selection.CuboidDraft;
+import org.marshal.weaddon_lightposition.selection.CuboidDraft.Face;
+import org.marshal.weaddon_lightposition.selection.CuboidDraft.Point;
+import org.marshal.weaddon_lightposition.selection.SelectionEditOptions;
+import org.marshal.weaddon_lightposition.selection.SelectionEditSnapshot;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Properties;
+
+public final class SelectionEditController {
+    private static final SelectionEditController INSTANCE = new SelectionEditController();
+    private final SelectionEditRenderer renderer = new SelectionEditRenderer();
+    private SelectionEditOptions options = SelectionEditOptions.defaults();
+    private SelectionEditSource source;
+    private KeyBinding editKey, fastKey;
+    private Path settings;
+    private SelectionEditSnapshot origin;
+    private CuboidDraft draft, acknowledged;
+    private Face target, locked;
+    private SelectionEditRenderer.View dragView;
+    private double dragStart, scrollRemainder;
+    private boolean active, dragging, pending, reading, latch;
+    private int blockedButtons, ticks, epoch, ackTicks, commitSerial;
+    private Object level, player;
+    private long appeared;
+    private int dragWidth, dragHeight;
+    private Object dragCamera;
+    private String reason = "";
+
+    private SelectionEditController() { }
+    public static SelectionEditController instance() { return INSTANCE; }
+    public SelectionEditOptions options() { return options; }
+    public boolean available() { return source != null && MinecraftClient.getInstance().getServer() != null; }
+    public boolean active() {
+        if (!active && !pending) return false;
+        MinecraftClient client = MinecraftClient.getInstance();
+        return client.world == level && client.player == player && client.currentScreen == null && client.isWindowFocused();
+    }
+    public boolean dragging() { return dragging; }
+    public boolean pending() { return pending; }
+    public CuboidDraft draft() { return draft; }
+    public Face target() { return locked != null ? locked : target; }
+    public String reason() { return reason; }
+    public void keys(KeyBinding edit, KeyBinding fast) { editKey = edit; fastKey = fast; }
+    public Text bindingName(boolean fast) { return (fast ? fastKey : editKey).getBoundKeyLocalizedText(); }
+    public void bind(boolean fast, net.minecraft.client.input.KeyInput event) {
+        (fast ? fastKey : editKey).setBoundKey(event == null ? net.minecraft.client.util.InputUtil.UNKNOWN_KEY : net.minecraft.client.util.InputUtil.fromKeyCode(event));
+        KeyBinding.updateKeysByCode();
+        MinecraftClient.getInstance().options.write();
+    }
+
+    public void initialize(Path directory) {
+        net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.attachElementBefore(
+                net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.CHAT,
+                net.minecraft.util.Identifier.of("worldedit_selection_overlay", "selection_edit"), (graphics, delta) -> renderHud(graphics));
+        settings = directory.resolve("selection-editing.properties");
+        if (Files.isRegularFile(settings)) {
+            Properties p = new Properties();
+            try (var input = Files.newInputStream(settings)) { p.load(input); options = SelectionEditOptions.load(p); }
+            catch (java.io.IOException ex) { log().warn("Could not load selection editing settings.", ex); }
+        }
+        if (!FabricLoader.getInstance().isModLoaded("worldedit")) return;
+        try { source = (SelectionEditSource) Class.forName("org.marshal.weaddon_lightposition.client.selection.WorldEditSelectionEditSource").getDeclaredConstructor().newInstance(); }
+        catch (ReflectiveOperationException | LinkageError ex) { log().warn("Local selection editing is unavailable.", ex); }
+    }
+    private static org.slf4j.Logger log() { return org.slf4j.LoggerFactory.getLogger("worldedit_selection_overlay/selection-edit"); }
+    public void configure(boolean enabled, int step, int fast) {
+        SelectionEditOptions next = new SelectionEditOptions(enabled, step, fast);
+        if (options.equals(next)) return;
+        options = next;
+        if (!enabled) cancel();
+        if (settings == null) return;
+        try {
+            Files.createDirectories(settings.getParent());
+            try (var output = Files.newOutputStream(settings)) { options.properties().store(output, "WorldEdit selection editing"); }
+        } catch (java.io.IOException ex) { log().warn("Could not save selection editing settings.", ex); }
+    }
+
+    public void tick(MinecraftClient client) {
+        ticks++;
+        boolean held = editKey != null && editKey.isPressed();
+        if (!held) latch = false;
+        if (client.world != level || client.player != player) {
+            pending = false; ++commitSerial; cancel();
+            level = client.world; player = client.player; acknowledged = null;
+        }
+        if (acknowledged != null && --ackTicks <= 0) acknowledged = null;
+        boolean valid = options.enabled() && source != null && client.player != null && client.world != null
+                && client.getServer() != null && client.currentScreen == null && client.isWindowFocused();
+        if (!valid) { if (active) cancel(); return; }
+        if (dragging && (client.getWindow().getWidth() != dragWidth || client.getWindow().getHeight() != dragHeight
+                || client.options.getPerspective() != dragCamera)) { cancel(); return; }
+        if (active && !held) {
+            if (dragging) cancel(); else submit();
+            return;
+        }
+        if (!held || latch || pending) return;
+        if (!active) {
+            active = true; appeared = System.nanoTime(); reason = ""; origin = null; draft = null; locked = target = null;
+            scrollRemainder = 0; clearConstruction(client); read(client);
+        } else if (!reading && ticks % 4 == 0) read(client);
+        if (dragging) client.player.setVelocity(net.minecraft.util.math.Vec3d.ZERO);
+    }
+
+    private void read(MinecraftClient client) {
+        if (reading) return;
+        reading = true;
+        int generation = epoch;
+        source.read(client, value -> {
+            if (generation != epoch) return;
+            reading = false;
+            if (!active || pending) return;
+            if (!value.ready()) { reason = value.reason(); if (origin != null) cancel(); return; }
+            if (origin != null && origin != value) { reason = "stale"; cancel(); return; }
+            if (origin == null) { origin = value; draft = value.bounds(); }
+        });
+    }
+
+    public boolean scroll(double amount) {
+        if (!active()) return false;
+        if (!active || pending || dragging || draft == null || target() == null || !Double.isFinite(amount)) return true;
+        scrollRemainder += amount;
+        long notches = (long) scrollRemainder;
+        scrollRemainder -= notches;
+        if (notches == 0) return true;
+        if (locked == null) locked = target;
+        int step = fastKey != null && fastKey.isPressed() ? options.fastStep() : options.step();
+        if (notches > 0 ? !origin.expand() : !origin.contract()) return true;
+        draft = draft.resize(locked, Math.clamp(notches, -1000L, 1000L) * step, origin.minY(), origin.maxY());
+        return true;
+    }
+
+    public boolean button(int button, int action) {
+        if (active && !active()) cancel();
+        if (button < 0 || button > 7) return active();
+        int bit = 1 << button;
+        boolean blocked = (blockedButtons & bit) != 0;
+        if (action == GLFW.GLFW_RELEASE) {
+            blockedButtons &= ~bit;
+            if (button == 0 && dragging) { dragging = false; restoreCursor(); submit(); return true; }
+            // Releases of buttons held before editing must still clear vanilla's mouse flags.
+            return blocked;
+        }
+        if (blocked || active()) {
+            blockedButtons |= bit;
+            if (button == 0 && active && !pending && !dragging && locked == null && draft != null && target != null) beginDrag();
+            return true;
+        }
+        return false;
+    }
+
+    private void beginDrag() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        SelectionEditRenderer.View view = renderer.view(client);
+        Face handle = renderer.handleHit(draft, view);
+        if (handle == null || handle != target) return;
+        double start = CuboidDraft.axisParameter(view.eye(), view.forward(), draft.center(handle), handle);
+        if (!Double.isFinite(start)) return;
+        locked = handle; dragView = view; dragStart = start; dragging = true;
+        dragWidth = client.getWindow().getWidth(); dragHeight = client.getWindow().getHeight();
+        dragCamera = client.options.getPerspective();
+        client.mouse.unlockCursor();
+    }
+    public void move(double x, double y) {
+        if (!dragging || draft == null || !active()) return;
+        MinecraftClient client = MinecraftClient.getInstance();
+        Point ray = dragView.ray(x / client.getWindow().getWidth(), y / client.getWindow().getHeight());
+        double parameter = CuboidDraft.axisParameter(dragView.eye(), ray, origin.bounds().center(locked), locked);
+        if (!Double.isFinite(parameter)) return;
+        int step = fastKey != null && fastKey.isPressed() ? options.fastStep() : options.step();
+        long offset = Math.round((parameter - dragStart) / step) * step * locked.sign;
+        if (offset > 0 ? !origin.expand() : !origin.contract()) return;
+        draft = origin.bounds().resize(locked, offset, origin.minY(), origin.maxY());
+    }
+
+    private void submit() {
+        if (!active || pending) return;
+        if (origin == null || locked == null || draft.equals(origin.bounds())) { cancel(); return; }
+        active = false; pending = true; latch = true; reading = false; ++epoch;
+        CuboidDraft committed = draft;
+        Object submittedLevel = level;
+        int submittedSerial = ++commitSerial;
+        source.commit(MinecraftClient.getInstance(), origin, committed, locked, value -> {
+            if (submittedSerial != commitSerial || level != submittedLevel) return;
+            pending = false;
+            if (value.ready() && value.bounds().equals(committed)) { acknowledged = committed; ackTicks = 40; }
+            else {
+                acknowledged = null;
+                reason = value.reason();
+                MinecraftClient.getInstance().inGameHud.setOverlayMessage(Text.translatable("selection_edit.worldedit_selection_overlay." + reason), false);
+            }
+            draft = null; origin = null; locked = target = null;
+        });
+    }
+    public void cancel() {
+        boolean wasDragging = dragging;
+        dragging = false; active = false; reading = false; latch = true; ++epoch;
+        if (!pending) { origin = null; draft = null; locked = target = null; }
+        if (wasDragging) restoreCursor();
+    }
+    private static void restoreCursor() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.currentScreen == null && client.isWindowFocused()) client.mouse.lockCursor();
+        clearConstruction(client);
+    }
+    private static void clearConstruction(MinecraftClient client) {
+        for (KeyBinding key : new KeyBinding[]{client.options.attackKey, client.options.useKey, client.options.pickItemKey}) {
+            key.setPressed(false); while (key.wasPressed()) { }
+        }
+    }
+
+    /** Freeze only the old isolation mask while the authoritative CUI sequence is incomplete. */
+    public boolean acknowledgeIsolation(SelectionRegion region) {
+        if (acknowledged == null || region == null) return false;
+        var bounds = region.boundsForAnalysis();
+        if (bounds == null) return false;
+        if (bounds.minX() != acknowledged.minX() || bounds.minY() != acknowledged.minY() || bounds.minZ() != acknowledged.minZ()
+                || bounds.maxX() != acknowledged.maxX() || bounds.maxY() != acknowledged.maxY() || bounds.maxZ() != acknowledged.maxZ()) return false;
+        acknowledged = null; return true;
+    }
+    public boolean waitingForCui() { return pending || acknowledged != null; }
+    public void renderWorld() {
+        if (!active() || draft == null) return;
+        MinecraftClient client = MinecraftClient.getInstance();
+        SelectionEditRenderer.View view = dragging ? dragView : renderer.view(client);
+        if (!dragging && locked == null) {
+            Face handle = renderer.handleHit(draft, view);
+            target = handle != null ? handle : draft.intersect(view.eye(), view.forward());
+        }
+        renderer.world(origin.bounds(), draft, target(), view, appeared, pending);
+    }
+    public void renderHud(net.minecraft.client.gui.DrawContext graphics) {
+        if (active()) renderer.hud(graphics, draft, target(), origin, reason, pending, appeared);
+    }
+}

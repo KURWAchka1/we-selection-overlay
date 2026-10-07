@@ -14,6 +14,7 @@ base {
 
 sourceSets {
     main.java.srcDir('../shared/command-preview/src/main/java')
+    main.java.srcDir('../shared/selection-editing/src/main/java')
     universalSmoke {
         java.setSrcDirs([])
         resources.setSrcDirs([])

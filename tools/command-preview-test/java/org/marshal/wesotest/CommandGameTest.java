@@ -62,8 +62,8 @@ public final class CommandGameTest implements FabricClientGameTest {
             });
             Object copiedSource = context.computeOnClient(client -> field(field(overlay, "clipboardPreviewController"), "source"));
             context.waitFor(client -> !((List<?>) call(call(copiedSource, "snapshot"), "blocks")).isEmpty());
-            Object copied = context.computeOnClient(client -> call(copiedSource, "snapshot"));
             context.runOnClient(client -> { CommandPreviewController.instance().setEnabled(true); client.gui.setScreen(new ChatScreen("//set diamond_block", false)); });
+            Object copied = context.computeOnClient(client -> call(copiedSource, "snapshot"));
             ready(context);
             context.runOnClient(client -> {
                 var controller = CommandPreviewController.instance();
@@ -314,6 +314,14 @@ public final class CommandGameTest implements FabricClientGameTest {
                 return null;
             });
             System.out.println("WESO COMMAND PASS: expanded full/clipped WorldEdit comparisons, center/naturalize/hollow/line/curve, partial-model source hiding/restoration, legacy IDs/data/mixtures, flora, complete loaded results beyond former caps, zero preview writes/history, clipboard coexistence, F8/cancellation, unchanged Enter submission");
+            // Keep command streaming fixtures independent of the editing camera/locale matrix.
+            context.runOnClient(client -> call(overlay, "setClipboardPreviewEnabled", true));
+            context.waitFor(client -> !((List<?>) call(call(copiedSource, "snapshot"), "blocks")).isEmpty());
+            SelectionEditingChecks.run(context.computeOnClient(client -> client), overlay, copiedSource, context::takeScreenshot, new SelectionEditingChecks.Dispatch() {
+                public <T> T client(Callable<T> task) { return context.computeOnClient(client -> { try { return task.call(); } catch (Exception ex) { throw new AssertionError(ex); } }); }
+                public <T> T server(Callable<T> task) { return onServer(world.getServer(), task); }
+                public void pause(long millis) { context.waitTicks(Math.max(1, (int) (millis / 50))); }
+            });
         }
     }
 

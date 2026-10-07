@@ -4,8 +4,7 @@
   "package": "org.marshal.weaddon_lightposition.mixin",
   "plugin": "org.marshal.weaddon_lightposition.mixin.WorldEditSelectionOverlayMixinPlugin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [
-  ],
+  "mixins": [],
   "client": [
     "ChatCommandPreviewMixin",
     "CommandPreviewFrustumMixin",
@@ -23,7 +22,12 @@
     "sodium.SodiumBlockRenderContextMixin",
     "sodium.SodiumBlockRendererMixin",
     "sodium.SodiumFluidRendererMixin",
-    "sodium.SodiumMutableQuadViewImplMixin"
+    "sodium.SodiumMutableQuadViewImplMixin",
+    "SelectionEditMouseMixin",
+    "SelectionEditKeyboardMixin",
+    "SelectionEditMovementMixin",
+    "SelectionEditFovAccessor",
+    "SelectionEditPlayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

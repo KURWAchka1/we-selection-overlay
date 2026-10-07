@@ -12,6 +12,7 @@ import java.util.Set;
 
 public final class UniversalMixinPlugin implements IMixinConfigPlugin {
     private static final List<String> MC_1_21_11 = List.of(
+            "SelectionEditMouseMixin", "SelectionEditKeyboardMixin", "SelectionEditMovementMixin", "SelectionEditPlayerMixin", "SelectionEditFovAccessor",
             "ChatCommandPreviewMixin",
             "CommandPreviewFrustumMixin",
             "BlockEntityRenderManagerMixin",
@@ -25,6 +26,7 @@ public final class UniversalMixinPlugin implements IMixinConfigPlugin {
             "WorldRendererMixin"
     );
     private static final List<String> MC_26_1 = List.of(
+            "SelectionEditMouseMixin", "SelectionEditKeyboardMixin", "SelectionEditMovementMixin", "SelectionEditPlayerMixin",
             "ChatCommandPreviewMixin",
             "BlockEntityRenderManagerMixin",
             "BlockModelRendererBrightnessCacheMixin",
@@ -37,6 +39,7 @@ public final class UniversalMixinPlugin implements IMixinConfigPlugin {
             "WorldRendererMixin"
     );
     private static final List<String> MC_26_2 = List.of(
+            "SelectionEditMouseMixin", "SelectionEditKeyboardMixin", "SelectionEditMovementMixin", "SelectionEditPlayerMixin",
             "ChatCommandPreviewMixin",
             "BlockEntityRenderManagerMixin",
             "BlockModelRendererBrightnessCacheMixin",

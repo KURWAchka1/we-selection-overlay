@@ -1,6 +1,6 @@
 # WorldEdit Selection Overlay
 
-Client-side selection visualization and inspection for WorldEdit. The current release line is **1.8.0**, adding live command-result preview in integrated singleplayer WorldEdit sessions.
+Client-side selection visualization and inspection for WorldEdit. The current development version is **1.8.0**, adding live command-result preview and optional in-world cuboid editing in integrated singleplayer WorldEdit sessions.
 
 ## Supported release targets
 
@@ -33,6 +33,7 @@ these restrictions are documented in `tools/MANUAL_TEST.md`.
 | `WEaddon_fabric_universal_1.21.11-26.2` | Fabric bootstrap, version selection, packaging, tests |
 | `WEaddon_neoforge_universal_1.21.11-26.2` | NeoForge bootstrap, version selection, packaging, tests |
 | `shared/command-preview` | Memory-only command engine shared by all six runtimes |
+| `shared/selection-editing` | Pure cuboid drafting and server-thread WorldEdit selection transactions |
 | `shared/neoforge-cui` | Shared-protocol bridge and private fallback registration |
 
 The packagers keep incompatible Minecraft classes in separate relocated runtime packages. Runtime detection loads only the matching package. Fabric bundles version-scoped CUI protocol metadata. NeoForge uses the installed shared protocol or a privately relocated, version-matched fallback to avoid split-package conflicts. See the packager READMEs and `TESTING.md` for details and test coverage.
@@ -69,6 +70,7 @@ and preparation without opening a game window.
 - [1.8.0 release notes](changelog-1.8.0.md)
 - [Command preview behavior and limits](COMMAND_PREVIEW.md)
 - [Feature roadmap](FEATURE_ROADMAP.md)
+- [Selection editing interaction, implementation, and verification](SELECTION_EDITING_DESIGN.md)
 - [UI redesign research and implementation contract](UI_REDESIGN_RESEARCH.md)
 - [UI screenshots, tests, and performance measurements](UI_VALIDATION.md)
 - [Fabric packaging and tests](WEaddon_fabric_universal_1.21.11-26.2/README.md)

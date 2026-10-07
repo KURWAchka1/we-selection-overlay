@@ -142,3 +142,4 @@ publishing {
 }
 
 sourceSets.main.java.srcDir('../shared/command-preview/src/main/java')
+sourceSets.main.java.srcDir('../shared/selection-editing/src/main/java')

@@ -24,7 +24,7 @@ try {
         if ($Only.Count -gt 0 -and $target.Name -notin $Only) { continue }
         $module = Join-Path $root $target.Module
         $run = if ($target.Family) { "run-command-test-$($target.Family)" } else { 'run-command-test' }
-        foreach ($name in @('client.properties', 'command-preview.properties')) {
+        foreach ($name in @('client.properties', 'command-preview.properties', 'selection-editing.properties')) {
             $config = [IO.Path]::GetFullPath((Join-Path $module "$run/config/worldedit_selection_overlay/$name"))
             if (!$config.StartsWith([IO.Path]::GetFullPath($module) + [IO.Path]::DirectorySeparatorChar)) { throw 'Fixture config escaped the module' }
             if (Test-Path -LiteralPath $config) { Remove-Item -LiteralPath $config -Force }

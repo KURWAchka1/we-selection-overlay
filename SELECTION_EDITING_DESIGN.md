@@ -1,8 +1,9 @@
 # Interactive selection editing
 
-Status: proposed design, 2026-10-07. Not implemented or visually validated.
-Milestone 2 of [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md). This document records
-the proposed interaction contract; it does not authorize new release claims.
+Status: implemented and six-runtime tested for the 1.8.0 development line,
+2026-10-07. Milestone 2 of
+[FEATURE_ROADMAP.md](FEATURE_ROADMAP.md). See TESTING.md for verified coverage
+and remaining integration checks.
 
 ## Goal and scope
 
@@ -22,9 +23,10 @@ plugin, custom editing protocol or automatic chat-command fallback.
 Use a temporary hold-to-edit key, not a sticky mode that can be forgotten.
 The feature is opt-in; start with an unassigned native keybind to avoid taking
 another mod's shortcut. Expose its availability/settings in the compact O menu.
-The exact default binding is open for user review.
+The hold key remains unassigned by default. Left Shift is the configurable
+fast modifier; default steps are 1 and 8 blocks.
 
-| State/action | Proposed behavior |
+| State/action | Behavior |
 | --- | --- |
 | Key not held | No handles, extra HUD, server polling or mouse interception. |
 | Hold edit key | Read an authoritative selection snapshot, then show handles and a small dimensions HUD. Normal movement/look remain available until a drag begins. |
@@ -110,9 +112,9 @@ integer draft bounds. WorldEdit remains the source of truth.
    world write is needed. Cancellation applies before submission; a submitted
    commit is not presented as an operation that Escape can silently roll back.
 
-Method signatures and native adapter/thread APIs still need confirmation against
-the actual installed WorldEdit 7.4.2/7.4.3/7.4.5 binaries at implementation time.
-Latest upstream source is a design reference, not proof of all version bindings.
+The signatures were checked against the installed WorldEdit 7.4.2/7.4.3/7.4.5
+binaries. Native Minecraft mouse, keyboard, movement, projection and HUD APIs
+were checked for each version; real packaged-runtime tests exercise these hooks.
 
 ## Coexistence with current features
 
@@ -187,5 +189,26 @@ Do not add release notes or mark the milestone complete based only on compilatio
 - [Official CuboidRegion source](https://github.com/EngineHub/WorldEdit/blob/version/7.4.x/worldedit-core/src/main/java/com/sk89q/worldedit/regions/CuboidRegion.java):
   ordered corners, one-axis operations and height clamping.
 
-All mechanics above are our proposed design. References establish API behavior
-and precedents, not benchmark results or approval of this particular UX.
+## Implementation notes
+
+- Shared drafting, inclusive coordinates, hit testing and transaction code live
+  in `shared/selection-editing`; the canonical native adapter is Fabric 26.2.
+  `tools/sync-selection-editing.mjs` maps it to the other five native runtimes.
+- Settings use a separate `selection-editing.properties` file. Existing overlay,
+  palette, grid, ruler and clipboard preferences are not migrated or overwritten.
+- Face reads are coalesced at most once per four active client ticks. Draft
+  updates touch only immutable bounds. A commit is server-thread owned and
+  revalidates session, selector identity, ordered corners, world and permissions.
+  The source's weak snapshot cache cannot keep a closed world alive; changed
+  player/world identity clears pending draft references and invalidates callbacks.
+- Input hooks are active only in the explicit mode. Dragging captures the camera
+  projection, stops movement and releases the cursor. Resize/camera-mode changes
+  also cancel the draft. Minecraft's early-return first mouse event is handled.
+- Both universal packagers register the hooks explicitly. Artifact tests check
+  those registration lists, not merely the presence of mixin class files.
+- The native gizmo renderer submits fixed-size geometry without a framebuffer
+  or block scan. It uses short opacity appearance transitions and Reduced Motion.
+  This is a constant-work design, not a claim of zero FPS cost in every modpack.
+
+References establish API behavior and interaction precedents, not performance
+results or visual acceptance of this particular UI.

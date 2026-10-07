@@ -108,6 +108,8 @@ public final class WorldEditPointOverlayClient {
     private KeyMapping openBlockListKey;
     private KeyMapping deselectKey;
     private KeyMapping commandPreviewKey;
+    private KeyMapping selectionEditKey, selectionEditFastKey;
+    private final org.marshal.weaddon_lightposition.client.selection.SelectionEditController selectionEditController = org.marshal.weaddon_lightposition.client.selection.SelectionEditController.instance();
     private Path settingsFile;
     private boolean overlayEnabled = true;
     private boolean selectionGridEnabled = true;
@@ -141,6 +143,7 @@ public final class WorldEditPointOverlayClient {
     public void initialize() {
         initSettings();
         commandPreviewController.initialize(settingsFile.getParent());
+        selectionEditController.initialize(settingsFile.getParent());
         clipboardPreviewController.initialize();
         clipboardPreviewController.setEnabled(clipboardPreviewEnabled);
         BlockIsolationController.setSelectedBlockIds(isolatedBlockIds);
@@ -170,6 +173,9 @@ public final class WorldEditPointOverlayClient {
                 KEY_CATEGORY
         ));
         commandPreviewController.setToggleKey(commandPreviewKey);
+        selectionEditKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.worldedit_selection_overlay.selection_edit", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, KEY_CATEGORY));
+        selectionEditFastKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.worldedit_selection_overlay.selection_edit_fast", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_LEFT_SHIFT, KEY_CATEGORY));
+        selectionEditController.keys(selectionEditKey, selectionEditFastKey);
 
         CUIPacketHandler.instance().registerClientboundHandler(this::onCuiPacket);
         ClientPlayConnectionEvents.JOIN.register(this::onJoin);
@@ -191,12 +197,13 @@ public final class WorldEditPointOverlayClient {
     }
 
     private void onEndClientTick(Minecraft client) {
+        selectionEditController.tick(client);
         commandPreviewController.tick(client);
         handleOpenSettingsKey(client);
         handleOpenBlockListKey(client);
         handleDeselectKey(client);
         clipboardPreviewController.setEnabled(clipboardPreviewEnabled);
-        if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.tick(client);
+        if (!commandPreviewController.ownsPreviewChannel() && !selectionEditController.active()) clipboardPreviewController.tick(client);
 
         if (client.level != lastWorld) {
             lastWorld = client.level;
@@ -230,14 +237,22 @@ public final class WorldEditPointOverlayClient {
         }
 
         SelectionRegion region = selectionManager.primaryRegionForAnalysis();
-        clearIsolatedBlocksIfSelectionChanged(client, region);
-        BlockIsolationController.updateRegion(client, region, false);
+        boolean editedSelection = selectionEditController.acknowledgeIsolation(region);
+        if (editedSelection) updateIsolatedBlocksRegionSnapshot(region);
+        if (!selectionEditController.waitingForCui()) {
+            clearIsolatedBlocksIfSelectionChanged(client, region);
+            BlockIsolationController.updateRegion(client, region, false);
+        }
     }
 
     private void onRenderWorld(LevelRenderContext context) {
+        Minecraft editClient = Minecraft.getInstance();
+        if (selectionEditController.active() && editClient.level != null && editClient.player != null) {
+            try (Gizmos.TemporaryCollection editScope = editClient.levelRenderer.collectPerFrameRenderThreadGizmos()) { selectionEditController.renderWorld(); }
+        }
         boolean isolationActive = BlockIsolationController.active();
         boolean showSelectionOutline = isolationActive || overlayEnabled;
-        boolean showDiagonals = !isolationActive && overlayEnabled && selectionGridEnabled && diagonalMode != DiagonalMode.NONE;
+        boolean showDiagonals = !selectionEditController.active() && !isolationActive && overlayEnabled && selectionGridEnabled && diagonalMode != DiagonalMode.NONE;
 
         Minecraft client = Minecraft.getInstance();
         if (client.player == null || client.level == null || client.gameRenderer == null) {
@@ -245,7 +260,7 @@ public final class WorldEditPointOverlayClient {
         }
 
         try (Gizmos.TemporaryCollection ignored = client.levelRenderer.collectPerFrameRenderThreadGizmos()) {
-            if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBounds();
+            if (!commandPreviewController.ownsPreviewChannel() && !selectionEditController.active()) clipboardPreviewController.renderBounds();
             commandPreviewController.renderMarkers();
         }
 
@@ -265,9 +280,9 @@ public final class WorldEditPointOverlayClient {
             Vec3 cameraRight = cameraRightVector(cameraForward, camera.yRot());
             Vec3 cameraUp = cameraUpVector(cameraForward, cameraRight);
             for (SelectionRegion region : regions) {
-                if (isolationActive || (overlayEnabled && !selectionGridEnabled)) {
+                if (!selectionEditController.active() && (isolationActive || (overlayEnabled && !selectionGridEnabled))) {
                     region.renderOutline();
-                } else if (overlayEnabled) {
+                } else if (!selectionEditController.active() && overlayEnabled) {
                     region.render(renderMode);
                 }
                 if (rulerEnabled) {
@@ -293,7 +308,7 @@ public final class WorldEditPointOverlayClient {
     }
 
     private void onRenderClipboardPreview(LevelRenderContext context) {
-        if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(context);
+        if (!commandPreviewController.ownsPreviewChannel() && !selectionEditController.active()) clipboardPreviewController.renderBlocks(context);
     }
 
     private void onCuiPacket(CUIPacket payload, CUIPacketHandler.PacketContext context) {
@@ -613,6 +628,7 @@ public final class WorldEditPointOverlayClient {
     }
 
     private void resetState() {
+        selectionEditController.cancel();
         commandPreviewController.clearDraft();
         commandPreviewController.invalidate();
         delayedHeloTicks = 0;

@@ -4,8 +4,7 @@
   "package": "org.marshal.weaddon_lightposition.mixin",
   "plugin": "org.marshal.weaddon_lightposition.mixin.WorldEditSelectionOverlayMixinPlugin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [
-  ],
+  "mixins": [],
   "client": [
     "ChatCommandPreviewMixin",
     "CommandPreviewFrustumMixin",
@@ -17,7 +16,12 @@
     "ChunkRendererRegionMixin",
     "ClientWorldBrightnessMixin",
     "FluidRendererRenderStateMixin",
-    "WorldRendererMixin"
+    "WorldRendererMixin",
+    "SelectionEditMouseMixin",
+    "SelectionEditKeyboardMixin",
+    "SelectionEditMovementMixin",
+    "SelectionEditFovAccessor",
+    "SelectionEditPlayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

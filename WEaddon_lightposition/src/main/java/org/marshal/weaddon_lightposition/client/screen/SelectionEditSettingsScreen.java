@@ -1,0 +1,64 @@
+package org.marshal.weaddon_lightposition.client.screen;
+
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
+import org.marshal.weaddon_lightposition.client.selection.SelectionEditController;
+
+public final class SelectionEditSettingsScreen extends UiScreen {
+    private final Screen parent;
+    private final SelectionEditController editing = SelectionEditController.instance();
+    private int capture;
+    private Button editBinding, fastBinding;
+    public SelectionEditSettingsScreen(Screen parent) { super(key("title")); this.parent = parent; }
+    private static Component key(String name, Object... args) { return Component.translatable("selection_edit.worldedit_selection_overlay." + name, args); }
+
+    @Override protected void init() {
+        int x = (width - panelWidth()) / 2 + 12, y = panelY() + 35, w = panelWidth() - 24;
+        editBinding = addRenderableWidget(UiButton.styled(binding(false), button -> { capture = 1; refresh(); }).quiet().bounds(x, y, w, 22).build());
+        fastBinding = addRenderableWidget(UiButton.styled(binding(true), button -> { capture = 2; refresh(); }).quiet().bounds(x, y + 27, w, 22).build());
+        addRenderableWidget(new StepSlider(x, y + 54, w, false));
+        addRenderableWidget(new StepSlider(x, y + 81, w, true));
+        addRenderableWidget(UiButton.styled(Component.translatable("screen.worldedit_selection_overlay.settings.done"), button -> onClose())
+                .bounds(x, y + 110, w, 22).build());
+    }
+    private Component binding(boolean fast) { return key(fast ? "fast_binding" : "binding", capture == (fast ? 2 : 1) ? key("binding_wait") : editing.bindingName(fast)); }
+    private void refresh() { editBinding.setMessage(binding(false)); fastBinding.setMessage(binding(true)); }
+    @Override public boolean keyPressed(KeyEvent event) {
+        if (capture != 0) {
+            if (event.key() != GLFW.GLFW_KEY_ESCAPE) editing.bind(capture == 2, event.key() == GLFW.GLFW_KEY_BACKSPACE ? null : event);
+            capture = 0; refresh(); return true;
+        }
+        return super.keyPressed(event);
+    }
+    @Override protected void drawScreen(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        UiStyle style = UiStyle.current();
+        UiChrome.fill(graphics, 0, 0, width, height, 0x38000000);
+        UiChrome.panel(graphics, (width - panelWidth()) / 2, panelY(), panelWidth(), panelHeight(), style);
+        UiChrome.text(graphics, font, title, (width - panelWidth()) / 2 + 20, panelY() + 13, style.text, false);
+        renderWidgets(graphics, mouseX, mouseY, delta);
+    }
+    @Override public void onClose() { closeAnimated(() -> { if (minecraft != null) minecraft.setScreen(parent); }); }
+    @Override public boolean isPauseScreen() { return false; }
+    private int panelWidth() { return Math.min(286, Math.max(150, width - 16)); }
+    private int panelHeight() { return Math.min(182, height - 8); }
+    private int panelY() { return Math.max(4, (height - panelHeight()) / 2); }
+    private final class StepSlider extends AbstractSliderButton {
+        private final boolean fast;
+        StepSlider(int x, int y, int width, boolean fast) {
+            super(x, y, width, 24, Component.empty(), ((fast ? editing.options().fastStep() : editing.options().step()) - 1.0) / (fast ? 511 : 63));
+            this.fast = fast; updateMessage();
+        }
+        private int step() { return 1 + (int) Math.round(value * (fast ? 511 : 63)); }
+        @Override protected void updateMessage() { setMessage(key(fast ? "fast_step" : "step", step())); }
+        @Override protected void applyValue() { editing.configure(editing.options().enabled(), fast ? editing.options().step() : step(), fast ? step() : editing.options().fastStep()); }
+        @Override public void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+            UiChrome.text(graphics, font, getMessage(), getX() + 8, getY() + 1, UiStyle.current().text, false);
+            UiChrome.slider(graphics, getX() + 8, getY() + 10, getWidth() - 16, (float) value, UiStyle.current().accent, active);
+        }
+    }
+}

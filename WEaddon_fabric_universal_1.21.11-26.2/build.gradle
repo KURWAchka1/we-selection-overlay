@@ -184,4 +184,10 @@ tasks.named('test') {
     systemProperty 'runtime.inputs', [app1211, app261, app262].collect { it.absolutePath }.join(File.pathSeparator)
 }
 
+sourceSets.test {
+    java.srcDir('../shared/selection-editing/src/main/java')
+    java.srcDir('../shared/selection-editing/src/test/java')
+    java.exclude('org/marshal/weaddon_lightposition/selection/worldedit/**')
+}
+
 tasks.named('archiveVersionArtifact') { dependsOn(tasks.named('test')) }
