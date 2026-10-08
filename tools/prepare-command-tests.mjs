@@ -62,15 +62,21 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('getWindow().handle()', 'getWindow().getHandle()').replaceAll('getScreenWidth()', 'getWidth()').replaceAll('getScreenHeight()', 'getHeight()')
     .replaceAll('.setDown(', '.setPressed(').replaceAll('.isDown()', '.isPressed()').replaceAll('isMouseGrabbed()', 'isCursorLocked()')
     .replaceAll('client.options.keyAttack', 'client.options.attackKey')
+    .replaceAll('client.options.keyShift', 'client.options.sneakKey').replaceAll('.input.keyPresses.shift()', '.input.playerInput.sneak()')
     .replaceAll('net.minecraft.client.gui.screens.ChatScreen', 'net.minecraft.client.gui.screen.ChatScreen')
     .replaceAll('net.minecraft.client.gui.screens.Screen', 'net.minecraft.client.gui.screen.Screen')
     .replaceAll('net.minecraft.client.gui.components.AbstractWidget', 'net.minecraft.client.gui.widget.ClickableWidget')
+    .replaceAll('net.minecraft.client.gui.screens.options.controls.KeyBindsScreen', 'net.minecraft.client.gui.screen.option.KeybindsScreen')
+    .replaceAll('net.minecraft.client.gui.components.AbstractSelectionList', 'net.minecraft.client.gui.widget.EntryListWidget')
+    .replaceAll('client.font.width(', 'client.textRenderer.getWidth(').replaceAll('net.minecraft.network.chat.Component.translatable(', 'net.minecraft.text.Text.translatable(')
     .replaceAll('client.options.guiScale().set(', 'client.options.getGuiScale().setValue(').replaceAll('client.resizeGui()', 'client.onResolutionChanged()')
     .replaceAll('client.gui.getChat().clearMessages(', 'client.inGameHud.getChatHud().clear(')
     .replaceAll('getLanguageManager().setSelected(', 'getLanguageManager().setLanguage(').replaceAll('client.reloadResourcePacks()', 'client.reloadResources()')
     .replaceAll('getGuiScaledWidth()', 'getScaledWidth()')
     // Production Yarn uses intermediary names; reflection strings are not remapped by Loom.
     .replaceAll('"onScroll"', '"method_1598"').replaceAll('"onButton"', '"method_1601"').replaceAll('"onMove"', '"method_1600"').replaceAll('"keyPress"', '"method_1466"')
+    .replaceAll('"getRowTop"', '"method_25337"')
+    .replaceAll('"setScrollAmount"', '"method_44382"')
     .replace('server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),', 'server.getCommandManager().parseAndExecute(server.getCommandSource(),');
   await fs.writeFile(path.join(dir, 'SelectionEditingChecks.java'), edit);
 }

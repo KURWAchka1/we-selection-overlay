@@ -1,6 +1,6 @@
 {
-  "key.worldedit_selection_overlay.selection_edit": "Редактировать выделение (удерживать)",
-  "key.worldedit_selection_overlay.selection_edit_fast": "Редактирование выделения: быстрый шаг",
+  "key.worldedit_selection_overlay.selection_edit": "Грани выделения",
+  "key.worldedit_selection_overlay.selection_edit_fast": "Быстрый шаг",
   "screen.worldedit_selection_overlay.settings.selection_edit": "Редактирование выделения: %s",
   "screen.worldedit_selection_overlay.settings.selection_edit_label": "Редактирование выделения",
   "screen.worldedit_selection_overlay.settings.selection_edit_options": "Управление выделением...",

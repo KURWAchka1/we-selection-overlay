@@ -40,23 +40,42 @@ public final class SelectionEditTransaction {
     }
 
     public static SelectionEditSnapshot commit(Player actor, SelectionEditSnapshot original, CuboidDraft draft, CuboidDraft.Face face) {
+        return commitAxes(actor, original, draft, new CuboidDraft.Face[]{face});
+    }
+
+    public static SelectionEditSnapshot commitCorner(Player actor, SelectionEditSnapshot original, CuboidDraft draft, CuboidDraft.Corner corner) {
+        return commitAxes(actor, original, draft, new CuboidDraft.Face[]{corner.face(0), corner.face(1), corner.face(2)});
+    }
+
+    private static SelectionEditSnapshot commitAxes(Player actor, SelectionEditSnapshot original, CuboidDraft draft, CuboidDraft.Face[] faces) {
         SelectionEditSnapshot current = read(actor);
         if (!same(original, current)) return SelectionEditSnapshot.unavailable("stale");
-        long delta = ((long) draft.boundary(face) - original.bounds().boundary(face)) * face.sign;
-        if (delta == 0) return current;
-        if (delta > 0 ? !current.expand() : !current.contract()) return SelectionEditSnapshot.unavailable("permission");
-        if (!original.bounds().resize(face, delta, current.minY(), current.maxY()).equals(draft)) return SelectionEditSnapshot.unavailable("invalid");
+        CuboidDraft validated = original.bounds();
+        for (CuboidDraft.Face face : faces) {
+            long delta = ((long) draft.boundary(face) - original.bounds().boundary(face)) * face.sign;
+            if (delta != 0 && (delta > 0 ? !current.expand() : !current.contract())) return SelectionEditSnapshot.unavailable("permission");
+            validated = validated.resize(face, delta, current.minY(), current.maxY());
+        }
+        if (!validated.equals(draft)) return SelectionEditSnapshot.unavailable("invalid");
+        if (draft.equals(original.bounds())) return current;
         Origin origin = (Origin) current.token();
         try {
             CuboidRegion actual = (CuboidRegion) origin.selector.getRegion();
             CuboidRegion checked = actual.clone();
-            apply(checked, face, delta);
+            applyAxes(checked, original.bounds(), draft, faces);
             if (!bounds(checked).equals(draft)) return SelectionEditSnapshot.unavailable("invalid");
-            apply(actual, face, delta);
+            applyAxes(actual, original.bounds(), draft, faces);
             origin.selector.learnChanges();
             origin.selector.explainRegionAdjust(actor, origin.session);
             return read(actor);
         } catch (IncompleteRegionException ex) { return SelectionEditSnapshot.unavailable("stale"); }
+    }
+
+    private static void applyAxes(CuboidRegion region, CuboidDraft original, CuboidDraft draft, CuboidDraft.Face[] faces) {
+        for (CuboidDraft.Face face : faces) {
+            long delta = ((long) draft.boundary(face) - original.boundary(face)) * face.sign;
+            if (delta != 0) apply(region, face, delta);
+        }
     }
 
     private static void apply(CuboidRegion region, CuboidDraft.Face face, long delta) {

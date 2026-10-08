@@ -15,6 +15,29 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class UniversalArtifactTest {
     @Test
+    void editingHudIsRegisteredOncePerRuntime() throws Exception {
+        try (var jar = new JarFile(System.getProperty("universal.jar"))) {
+            for (String id : List.of("mc1_21_11", "mc26_1", "mc26_2")) {
+                var registered = new java.util.concurrent.atomic.AtomicInteger();
+                var entry = jar.getEntry("org/marshal/weaddon_lightposition/runtime/" + id + "/client/selection/SelectionEditController.class");
+                assertNotNull(entry);
+                try (var input = jar.getInputStream(entry)) {
+                    new org.objectweb.asm.ClassReader(input).accept(new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                        @Override public org.objectweb.asm.MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                            if (!name.equals("initialize")) return null;
+                            return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                                @Override public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
+                                    if (owner.equals("net/neoforged/bus/api/IEventBus") && name.equals("addListener")) registered.incrementAndGet();
+                                }
+                            };
+                        }
+                    }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+                }
+                assertEquals(1, registered.get(), id + ": duplicated editing HUD");
+            }
+        }
+    }
+    @Test
     void selectionEditingHooksAreActiveInEveryRuntime() throws Exception {
         try (var jar = new JarFile(System.getProperty("universal.jar"))) {
             var counts = new java.util.HashMap<String, Integer>();

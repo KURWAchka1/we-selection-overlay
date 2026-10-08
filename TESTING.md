@@ -1,6 +1,6 @@
 # Verification
 
-Current source verification: 1.8.0, 2026-10-07. The test worlds, generated
+Current source verification: 1.8.0, 2026-10-08. The test worlds, generated
 fixtures, screenshots, and logs are local data and are not committed.
 
 ## Release build
@@ -11,7 +11,7 @@ boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
 1.4 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,425,394 bytes (Fabric) and 1,397,248 bytes
+The archived release outputs are 1,440,525 bytes (Fabric) and 1,412,194 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -194,11 +194,20 @@ than using the set/replace repair path. No larger tick budget is used.
 
 The command/editing matrix loads the production universal JARs on the same six
 WorldEdit-enabled targets listed above. Each runtime checks all six cuboid faces
-through native mouse-wheel input, then checks native handle dragging and release
-commit. The server's region stays unchanged during drafting. Fast contraction
+through distant native LMB selection and wheel input. UP is the initial choice;
+re-entry remembers the clicked face, and looking around does not retarget it.
+Native handle dragging and release commit remain available.
+All eight corners additionally drag/commit without a hold key, with alternating
+standard/extending selectors. The opposite corner and the native initial
+Pos1/Pos2 ordering are preserved; extending selectors may start with a different
+ordering from standard selectors. Normal off-marker clicks/wheel remain uncaptured.
+The server's region stays unchanged during drafting. Fast contraction
 stops at one block, preserves ExtendingCuboidRegionSelector, and a native
 transaction retains the identity of reversed primary/secondary corners.
 
+The default Shift modifier clears the native sneak input during editing; the
+flying fixture's height stays unchanged. Outside editing, vanilla sneak input
+is retained. Corner Escape cancels without leaking an attack or committing.
 Native Escape cancels without opening the pause menu. Releasing the editing key
 during a drag restores the captured cursor without applying the draft or leaking
 an attack. Opening chat cancels. Replacing the selector with an identical-looking
@@ -209,20 +218,26 @@ WorldEdit session history before/after the sequence; selection editing must
 change neither. Those observations cover the fixture area, not every block in
 the save; the production transaction never creates an EditSession.
 An additional client fixture replaces the stored world identity while a pending
-context exists and asserts that pending/origin/draft references are cleared.
+context exists and asserts that pending/origin/shown/draft references are cleared.
 It checks the source's weak cache as well; it is not a real network-disconnect
 or garbage-collection benchmark.
 
 Both languages and requested GUI scales 2x/3x/4x are captured for the compact
-editing settings, with every widget checked against its panel bounds. Screenshots
-include the thin draft/old contours, six handles, and the small dimensions HUD.
+editing settings, with every widget checked against its panel bounds. The actual
+native keybind menu is also captured at those scales/languages; both shortened
+editing labels have bounded measured widths and do not reach assignment buttons.
+Screenshots include passive corner markers, thin draft/old contours, face handles
+and the dimensions/offsets HUD. NeoForge additionally has a bytecode regression
+test that requires exactly one editing HUD registration per packaged runtime.
 The existing command regressions run alongside these checks, including large
 grass replacement and incremental chunk arrival; no command-engine changes were
 needed for editing. Tests and temporary configs are confined to disposable worlds.
 
-The shared domain suite passes 20 cases covering face signs, inside/outside rays,
+The shared domain suite passes 30 cases covering face signs, inside/outside rays,
 axis dragging from either camera side, end-on rejection, world boundaries,
-minimum size, integer overflow, large volume, and configuration defaults/clamps.
+minimum size, integer overflow, large volume, configuration defaults/clamps,
+all corner signs/opposite-point preservation, step snapping, captured plane
+projection and huge corner offsets without arithmetic overflow.
 Both packagers also assert the editing classes and explicit active-mixin registry
 for each relocated runtime, including the 1.21.11 FOV accessor.
 

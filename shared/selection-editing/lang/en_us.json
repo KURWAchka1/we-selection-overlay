@@ -1,6 +1,6 @@
 {
-  "key.worldedit_selection_overlay.selection_edit": "Hold to edit selection",
-  "key.worldedit_selection_overlay.selection_edit_fast": "Selection editing: fast step",
+  "key.worldedit_selection_overlay.selection_edit": "Edit faces",
+  "key.worldedit_selection_overlay.selection_edit_fast": "Fast step",
   "screen.worldedit_selection_overlay.settings.selection_edit": "Selection editing: %s",
   "screen.worldedit_selection_overlay.settings.selection_edit_label": "Selection editing",
   "screen.worldedit_selection_overlay.settings.selection_edit_options": "Editing controls...",

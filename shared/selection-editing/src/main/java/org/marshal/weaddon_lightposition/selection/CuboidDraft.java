@@ -11,6 +11,16 @@ public record CuboidDraft(int minX, int minY, int minZ, int maxX, int maxY, int 
         public String label() { return (sign > 0 ? "+" : "-") + "XYZ".charAt(axis); }
     }
 
+    public enum Corner {
+        WEST_DOWN_NORTH, EAST_DOWN_NORTH, WEST_UP_NORTH, EAST_UP_NORTH,
+        WEST_DOWN_SOUTH, EAST_DOWN_SOUTH, WEST_UP_SOUTH, EAST_UP_SOUTH;
+        public Face face(int axis) {
+            boolean positive = (ordinal() & (1 << axis)) != 0;
+            return axis == 0 ? positive ? Face.EAST : Face.WEST : axis == 1 ? positive ? Face.UP : Face.DOWN : positive ? Face.SOUTH : Face.NORTH;
+        }
+        public Corner opposite() { return values()[ordinal() ^ 7]; }
+    }
+
     public record Point(double x, double y, double z) {
         public double at(int axis) { return axis == 0 ? x : axis == 1 ? y : z; }
         public Point add(Point p) { return new Point(x + p.x, y + p.y, z + p.z); }
@@ -33,6 +43,34 @@ public record CuboidDraft(int minX, int minY, int minZ, int maxX, int maxY, int 
         double[] c = {(minX + (double) maxX + 1) / 2, (minY + (double) maxY + 1) / 2, (minZ + (double) maxZ + 1) / 2};
         c[f.axis] = boundary(f) + (f.sign > 0 ? 1.0 : 0.0);
         return new Point(c[0], c[1], c[2]);
+    }
+    public Point corner(Corner corner) {
+        return new Point(boundary(corner.face(0)) + (corner.face(0).sign > 0 ? 1.0 : 0.0),
+                boundary(corner.face(1)) + (corner.face(1).sign > 0 ? 1.0 : 0.0),
+                boundary(corner.face(2)) + (corner.face(2).sign > 0 ? 1.0 : 0.0));
+    }
+    public CuboidDraft moveCorner(Corner corner, Point movement, int step, int worldMinY, int worldMaxY) {
+        CuboidDraft result = this;
+        for (int axis = 0; axis < 3; axis++) {
+            Face face = corner.face(axis);
+            long delta = snappedOffset(movement.at(axis), step, face.sign);
+            result = result.resize(face, delta, worldMinY, worldMaxY);
+        }
+        return result;
+    }
+    public static long snappedOffset(double distance, int step, int sign) {
+        if (step <= 0 || !Double.isFinite(distance)) throw new IllegalArgumentException("Invalid drag offset");
+        double snapped = Math.rint(distance / step) * step * sign;
+        return (long) Math.max(Long.MIN_VALUE, Math.min(Long.MAX_VALUE, snapped));
+    }
+
+    /** Captured view-plane dragging keeps depth stable and never guesses from camera yaw. */
+    public static Point planePoint(Point eye, Point direction, Point planeOrigin, Point normal) {
+        double denominator = direction.dot(normal);
+        if (denominator < 0.05) return null;
+        double distance = planeOrigin.subtract(eye).dot(normal) / denominator;
+        if (!Double.isFinite(distance) || distance <= 0) return null;
+        return eye.add(direction.scale(distance));
     }
 
     public CuboidDraft resize(Face face, long outward, int worldMinY, int worldMaxY) {

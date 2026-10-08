@@ -17,4 +17,11 @@ public abstract class SelectionEditMovementMixin extends ClientInput {
         if (!SelectionEditController.instance().dragging()) return;
         keyPresses = Input.EMPTY; moveVector = Vec2.ZERO; ci.cancel();
     }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void weso$editingModifier(CallbackInfo ci) {
+        if (!SelectionEditController.instance().suppressSneak()) return;
+        Input input = keyPresses;
+        keyPresses = new Input(input.forward(), input.backward(), input.left(), input.right(), input.jump(), false, input.sprint());
+    }
 }

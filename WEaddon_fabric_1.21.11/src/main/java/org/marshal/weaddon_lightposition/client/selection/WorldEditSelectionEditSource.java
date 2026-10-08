@@ -39,7 +39,7 @@ public final class WorldEditSelectionEditSource implements SelectionEditSource {
         });
     }
 
-    @Override public void commit(MinecraftClient client, SelectionEditSnapshot origin, CuboidDraft draft, CuboidDraft.Face face, Consumer<SelectionEditSnapshot> result) {
+    @Override public void commit(MinecraftClient client, SelectionEditSnapshot origin, CuboidDraft draft, CuboidDraft.Face face, CuboidDraft.Corner corner, Consumer<SelectionEditSnapshot> result) {
         if (!(origin.token() instanceof Context context) || client.getServer() != context.server
                 || client.world != context.level || client.player == null || !client.player.getUuid().equals(context.player)) {
             result.accept(SelectionEditSnapshot.unavailable("stale")); return;
@@ -49,7 +49,8 @@ public final class WorldEditSelectionEditSource implements SelectionEditSource {
             try {
                 var nativePlayer = context.server.getPlayerManager().getPlayer(context.player);
                 value = nativePlayer == null || nativePlayer.getEntityWorld() != context.nativeLevel ? SelectionEditSnapshot.unavailable("stale")
-                        : SelectionEditTransaction.commit(FabricAdapter.adaptPlayer(nativePlayer), context.selection, draft, face);
+                        : corner == null ? SelectionEditTransaction.commit(FabricAdapter.adaptPlayer(nativePlayer), context.selection, draft, face)
+                        : SelectionEditTransaction.commitCorner(FabricAdapter.adaptPlayer(nativePlayer), context.selection, draft, corner);
             } catch (RuntimeException | LinkageError ex) {
                 org.slf4j.LoggerFactory.getLogger("worldedit_selection_overlay/selection-edit").warn("Selection adjustment failed.", ex);
                 value = SelectionEditSnapshot.unavailable("failed");

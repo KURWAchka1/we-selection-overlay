@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 import org.marshal.weaddon_lightposition.client.overlay.SelectionRegion;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft;
+import org.marshal.weaddon_lightposition.selection.CuboidDraft.Corner;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Face;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Point;
 import org.marshal.weaddon_lightposition.selection.SelectionEditOptions;
@@ -22,13 +23,15 @@ public final class SelectionEditController {
     private SelectionEditSource source;
     private KeyMapping editKey, fastKey;
     private Path settings;
-    private SelectionEditSnapshot origin;
+    private SelectionEditSnapshot origin, shown;
     private CuboidDraft draft, acknowledged;
-    private Face target, locked;
+    private Face selected = Face.UP, locked;
+    private Corner lockedCorner;
+    private Point cornerDragStart;
     private SelectionEditRenderer.View dragView;
     private double dragStart, scrollRemainder;
-    private boolean active, dragging, pending, reading, latch;
-    private int blockedButtons, ticks, epoch, ackTicks, commitSerial;
+    private boolean active, dragging, directCorner, pending, reading, latch;
+    private int blockedButtons, ticks, epoch, ackTicks, commitSerial, lastReadTick = -4;
     private Object level, player;
     private long appeared;
     private int dragWidth, dragHeight;
@@ -45,9 +48,11 @@ public final class SelectionEditController {
         return client.level == level && client.player == player && client.screen == null && client.isWindowActive();
     }
     public boolean dragging() { return dragging; }
+    public boolean visible() { return usable(Minecraft.getInstance()) && (active() || shown != null); }
+    public boolean suppressSneak() { return active() && fastKey != null && fastKey.isDown(); }
     public boolean pending() { return pending; }
     public CuboidDraft draft() { return draft; }
-    public Face target() { return locked != null ? locked : target; }
+    public Face target() { return locked != null ? locked : selected; }
     public String reason() { return reason; }
     public void keys(KeyMapping edit, KeyMapping fast) { editKey = edit; fastKey = fast; }
     public Component bindingName(boolean fast) { return (fast ? fastKey : editKey).getTranslatedKeyMessage(); }
@@ -58,7 +63,6 @@ public final class SelectionEditController {
     }
 
     public void initialize(Path directory) {
-        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderGuiEvent.Post event) -> renderHud(event.getGuiGraphics()));
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderGuiEvent.Post event) -> renderHud(event.getGuiGraphics()));
         settings = directory.resolve("selection-editing.properties");
         if (Files.isRegularFile(settings)) {
@@ -75,7 +79,7 @@ public final class SelectionEditController {
         SelectionEditOptions next = new SelectionEditOptions(enabled, step, fast);
         if (options.equals(next)) return;
         options = next;
-        if (!enabled) cancel();
+        if (!enabled) { cancel(); shown = null; }
         if (settings == null) return;
         try {
             Files.createDirectories(settings.getParent());
@@ -89,37 +93,46 @@ public final class SelectionEditController {
         if (!held) latch = false;
         if (client.level != level || client.player != player) {
             pending = false; ++commitSerial; cancel();
-            level = client.level; player = client.player; acknowledged = null;
+            level = client.level; player = client.player; acknowledged = null; shown = null; lastReadTick = ticks - 4;
         }
         if (acknowledged != null && --ackTicks <= 0) acknowledged = null;
-        boolean valid = options.enabled() && source != null && client.player != null && client.level != null
-                && client.getSingleplayerServer() != null && client.screen == null && client.isWindowActive();
-        if (!valid) { if (active) cancel(); return; }
+        if (!usable(client)) { if (active || reading) cancel(); shown = null; return; }
         if (dragging && (client.getWindow().getScreenWidth() != dragWidth || client.getWindow().getScreenHeight() != dragHeight
                 || client.options.getCameraType() != dragCamera)) { cancel(); return; }
-        if (active && !held) {
+        if (active && !held && !directCorner) {
             if (dragging) cancel(); else submit();
             return;
         }
-        if (!held || latch || pending) return;
-        if (!active) {
-            active = true; appeared = System.nanoTime(); reason = ""; origin = null; draft = null; locked = target = null;
-            scrollRemainder = 0; clearConstruction(client); read(client);
-        } else if (!reading && ticks % 4 == 0) read(client);
+        if (pending) return;
+        if (!active && held && !latch) begin(client);
+        if (!reading && ticks - lastReadTick >= 4) read(client);
         if (dragging) client.player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+    }
+
+    private boolean usable(Minecraft client) {
+        return options.enabled() && source != null && client.player != null && client.level != null
+                && client.level == level && client.player == player && client.getSingleplayerServer() != null
+                && client.screen == null && client.isWindowActive();
+    }
+    private void begin(Minecraft client) {
+        active = true; appeared = System.nanoTime(); reason = ""; origin = shown;
+        draft = origin == null ? null : origin.bounds(); locked = null; lockedCorner = null;
+        directCorner = false; scrollRemainder = 0; clearConstruction(client);
     }
 
     private void read(Minecraft client) {
         if (reading) return;
-        reading = true;
+        reading = true; lastReadTick = ticks;
         int generation = epoch;
         source.read(client, value -> {
             if (generation != epoch) return;
             reading = false;
-            if (!active || pending) return;
-            if (!value.ready()) { reason = value.reason(); if (origin != null) cancel(); return; }
+            if (!usable(client) || pending) return;
+            if (!value.ready()) { shown = null; reason = value.reason(); if (origin != null) cancel(); return; }
+            if (shown != value) appeared = System.nanoTime();
+            shown = value;
             if (origin != null && origin != value) { reason = "stale"; cancel(); return; }
-            if (origin == null) { origin = value; draft = value.bounds(); }
+            if (active && origin == null) { origin = value; draft = value.bounds(); }
         });
     }
 
@@ -130,7 +143,7 @@ public final class SelectionEditController {
         long notches = (long) scrollRemainder;
         scrollRemainder -= notches;
         if (notches == 0) return true;
-        if (locked == null) locked = target;
+        if (locked == null) locked = selected;
         int step = fastKey != null && fastKey.isDown() ? options.fastStep() : options.step();
         if (notches > 0 ? !origin.expand() : !origin.contract()) return true;
         draft = draft.resize(locked, Math.clamp(notches, -1000L, 1000L) * step, origin.minY(), origin.maxY());
@@ -150,44 +163,80 @@ public final class SelectionEditController {
         }
         if (blocked || active()) {
             blockedButtons |= bit;
-            if (button == 0 && active && !pending && !dragging && locked == null && draft != null && target != null) beginDrag();
+            if (button == 0 && active && !pending && !dragging && locked == null && draft != null) choose();
             return true;
+        }
+        if (button == 0 && action == GLFW.GLFW_PRESS && visible() && !pending && shown != null) {
+            SelectionEditRenderer.View view = renderer.view(Minecraft.getInstance());
+            Corner corner = renderer.cornerHit(shown.bounds(), view);
+            if (corner != null) {
+                begin(Minecraft.getInstance());
+                if (beginCorner(corner, view)) { directCorner = true; blockedButtons |= bit; return true; }
+                cancel();
+            }
         }
         return false;
     }
 
-    private void beginDrag() {
+    private void choose() {
         Minecraft client = Minecraft.getInstance();
         SelectionEditRenderer.View view = renderer.view(client);
+        Corner corner = renderer.cornerHit(draft, view);
+        if (corner != null) { beginCorner(corner, view); return; }
         Face handle = renderer.handleHit(draft, view);
-        if (handle == null || handle != target) return;
+        Face face = handle != null ? handle : draft.intersect(view.eye(), view.forward());
+        if (face == null) return;
+        selected = face;
+        if (handle == null) return;
         double start = CuboidDraft.axisParameter(view.eye(), view.forward(), draft.center(handle), handle);
         if (!Double.isFinite(start)) return;
-        locked = handle; dragView = view; dragStart = start; dragging = true;
+        locked = handle; dragStart = start; capture(view);
+    }
+    private boolean beginCorner(Corner corner, SelectionEditRenderer.View view) {
+        Point start = CuboidDraft.planePoint(view.eye(), view.forward(), draft.corner(corner), view.forward());
+        if (start == null) return false;
+        lockedCorner = corner; cornerDragStart = start; capture(view); return true;
+    }
+    private void capture(SelectionEditRenderer.View view) {
+        Minecraft client = Minecraft.getInstance();
+        dragView = view; dragging = true;
         dragWidth = client.getWindow().getScreenWidth(); dragHeight = client.getWindow().getScreenHeight();
         dragCamera = client.options.getCameraType();
         client.mouseHandler.releaseMouse();
     }
     public void move(double x, double y) {
-        if (!dragging || draft == null || !active()) return;
+        if (!dragging || draft == null || !active() || !Double.isFinite(x) || !Double.isFinite(y)) return;
         Minecraft client = Minecraft.getInstance();
         Point ray = dragView.ray(x / client.getWindow().getScreenWidth(), y / client.getWindow().getScreenHeight());
-        double parameter = CuboidDraft.axisParameter(dragView.eye(), ray, origin.bounds().center(locked), locked);
-        if (!Double.isFinite(parameter)) return;
         int step = fastKey != null && fastKey.isDown() ? options.fastStep() : options.step();
-        long offset = Math.round((parameter - dragStart) / step) * step * locked.sign;
-        if (offset > 0 ? !origin.expand() : !origin.contract()) return;
-        draft = origin.bounds().resize(locked, offset, origin.minY(), origin.maxY());
+        CuboidDraft next;
+        if (lockedCorner != null) {
+            Point position = CuboidDraft.planePoint(dragView.eye(), ray, origin.bounds().corner(lockedCorner), dragView.forward());
+            if (position == null) return;
+            next = origin.bounds().moveCorner(lockedCorner, position.subtract(cornerDragStart), step, origin.minY(), origin.maxY());
+            for (int axis = 0; axis < 3; axis++) if (!permitted(next, lockedCorner.face(axis))) return;
+        } else {
+            double parameter = CuboidDraft.axisParameter(dragView.eye(), ray, origin.bounds().center(locked), locked);
+            if (!Double.isFinite(parameter)) return;
+            long offset = CuboidDraft.snappedOffset(parameter - dragStart, step, locked.sign);
+            next = origin.bounds().resize(locked, offset, origin.minY(), origin.maxY());
+            if (!permitted(next, locked)) return;
+        }
+        draft = next;
+    }
+    private boolean permitted(CuboidDraft next, Face face) {
+        long delta = ((long) next.boundary(face) - origin.bounds().boundary(face)) * face.sign;
+        return delta == 0 || (delta > 0 ? origin.expand() : origin.contract());
     }
 
     private void submit() {
         if (!active || pending) return;
-        if (origin == null || locked == null || draft.equals(origin.bounds())) { cancel(); return; }
+        if (origin == null || (locked == null && lockedCorner == null) || draft.equals(origin.bounds())) { cancel(); return; }
         active = false; pending = true; latch = true; reading = false; ++epoch;
         CuboidDraft committed = draft;
         Object submittedLevel = level;
         int submittedSerial = ++commitSerial;
-        source.commit(Minecraft.getInstance(), origin, committed, locked, value -> {
+        source.commit(Minecraft.getInstance(), origin, committed, locked, lockedCorner, value -> {
             if (submittedSerial != commitSerial || level != submittedLevel) return;
             pending = false;
             if (value.ready() && value.bounds().equals(committed)) { acknowledged = committed; ackTicks = 40; }
@@ -196,13 +245,14 @@ public final class SelectionEditController {
                 reason = value.reason();
                 Minecraft.getInstance().gui.setOverlayMessage(Component.translatable("selection_edit.worldedit_selection_overlay." + reason), false);
             }
-            draft = null; origin = null; locked = target = null;
+            draft = null; origin = shown = null; locked = null; lockedCorner = null; directCorner = false; dragView = null; cornerDragStart = null;
         });
     }
     public void cancel() {
         boolean wasDragging = dragging;
-        dragging = false; active = false; reading = false; latch = true; ++epoch;
-        if (!pending) { origin = null; draft = null; locked = target = null; }
+        dragging = false; directCorner = false; active = false; reading = false; latch = true; ++epoch;
+        dragView = null; cornerDragStart = null;
+        if (!pending) { origin = null; draft = null; locked = null; lockedCorner = null; }
         if (wasDragging) restoreCursor();
     }
     private static void restoreCursor() {
@@ -227,16 +277,14 @@ public final class SelectionEditController {
     }
     public boolean waitingForCui() { return pending || acknowledged != null; }
     public void renderWorld() {
-        if (!active() || draft == null) return;
+        if (!visible()) return;
         Minecraft client = Minecraft.getInstance();
         SelectionEditRenderer.View view = dragging ? dragView : renderer.view(client);
-        if (!dragging && locked == null) {
-            Face handle = renderer.handleHit(draft, view);
-            target = handle != null ? handle : draft.intersect(view.eye(), view.forward());
-        }
-        renderer.world(origin.bounds(), draft, target(), view, appeared, pending);
+        if (active() && draft != null) renderer.world(origin.bounds(), draft, lockedCorner == null ? target() : null,
+                lockedCorner, view, appeared, pending);
+        else if (shown != null) renderer.corners(shown.bounds(), renderer.cornerHit(shown.bounds(), view), view, appeared, false);
     }
     public void renderHud(net.minecraft.client.gui.GuiGraphics graphics) {
-        if (active()) renderer.hud(graphics, draft, target(), origin, reason, pending, appeared);
+        if (active()) renderer.hud(graphics, draft, target(), lockedCorner, origin, reason, pending, appeared);
     }
 }

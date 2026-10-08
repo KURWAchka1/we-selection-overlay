@@ -7,5 +7,6 @@ import java.util.function.Consumer;
 
 public interface SelectionEditSource {
     void read(MinecraftClient client, Consumer<SelectionEditSnapshot> result);
-    void commit(MinecraftClient client, SelectionEditSnapshot origin, CuboidDraft draft, CuboidDraft.Face face, Consumer<SelectionEditSnapshot> result);
+    void commit(MinecraftClient client, SelectionEditSnapshot origin, CuboidDraft draft, CuboidDraft.Face face,
+                CuboidDraft.Corner corner, Consumer<SelectionEditSnapshot> result);
 }

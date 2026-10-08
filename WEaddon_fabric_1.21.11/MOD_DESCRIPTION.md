@@ -111,10 +111,12 @@ Customize how the overlay looks directly in-game:
 
 ## Edit Selection Bounds
 
-Hold a configurable key to resize cuboid faces with the mouse wheel or drag
-their handles. A small HUD shows dimensions, volume, and the face offset.
+Drag visible corner markers, or hold a configurable key to click a face and
+resize it with the wheel/handle. The chosen face stays highlighted and remembered.
+A small HUD shows dimensions, volume, and offsets.
 
 * Configurable normal/fast steps and snapped dragging
+* Shift speeds up editing without lowering you in flight
 * Release to apply; Escape cancels an unfinished edit
 * Disabled by default, with no assigned hold key
 
@@ -177,7 +179,7 @@ Everything is visual only. Hidden blocks still exist, still collide, and are nev
 * Optional internal selection grid toggle
 * Textured WorldEdit clipboard preview, off by default
 * Live command-result preview while typing in singleplayer
-* Optional in-world cuboid resizing with face handles
+* Optional in-world cuboid resizing with corner and face handles
 * Full-screen palette editor with live preview
 * Custom colors, transparency, thickness, and presets
 * Adaptive performance for large selections

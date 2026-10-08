@@ -17,4 +17,11 @@ public abstract class SelectionEditMovementMixin extends Input {
         if (!SelectionEditController.instance().dragging()) return;
         playerInput = PlayerInput.DEFAULT; movementVector = Vec2f.ZERO; ci.cancel();
     }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void weso$editingModifier(CallbackInfo ci) {
+        if (!SelectionEditController.instance().suppressSneak()) return;
+        PlayerInput input = playerInput;
+        playerInput = new PlayerInput(input.forward(), input.backward(), input.left(), input.right(), input.jump(), false, input.sprint());
+    }
 }

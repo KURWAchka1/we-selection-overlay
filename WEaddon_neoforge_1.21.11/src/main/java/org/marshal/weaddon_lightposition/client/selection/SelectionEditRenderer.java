@@ -12,11 +12,13 @@ import org.marshal.weaddon_lightposition.client.screen.UiChrome;
 import org.marshal.weaddon_lightposition.client.screen.UiStyle;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Face;
+import org.marshal.weaddon_lightposition.selection.CuboidDraft.Corner;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Point;
 import org.marshal.weaddon_lightposition.selection.SelectionEditSnapshot;
 
 final class SelectionEditRenderer {
     private static final Face[] FACES = Face.values();
+    private static final Corner[] CORNERS = Corner.values();
     record View(Point eye, Point forward, Point right, Point up, double tangent, double aspect, int pixelsHigh) {
         Point ray(double x, double y) { return forward.add(right.scale((x * 2 - 1) * tangent * aspect)).add(up.scale((1 - y * 2) * tangent)).normalized(); }
         double radius(Point p, double pixels) { return Math.max(0.01, p.subtract(eye).dot(forward) * 2 * tangent * pixels / pixelsHigh); }
@@ -41,7 +43,32 @@ final class SelectionEditRenderer {
         }
         return hit;
     }
-    void world(CuboidDraft original, CuboidDraft draft, Face target, View view, long appeared, boolean pending) {
+    Corner cornerHit(CuboidDraft bounds, View view) {
+        Corner hit = null;
+        double nearest = Double.POSITIVE_INFINITY;
+        for (Corner corner : CORNERS) {
+            Point center = bounds.corner(corner), offset = center.subtract(view.eye);
+            double depth = offset.dot(view.forward);
+            if (depth <= 0.05) continue;
+            double distance = offset.subtract(view.forward.scale(depth)).length();
+            if (distance <= view.radius(center, 10) && depth < nearest) { hit = corner; nearest = depth; }
+        }
+        return hit;
+    }
+    void corners(CuboidDraft bounds, Corner target, View view, long appeared, boolean pending) {
+        UiStyle style = UiStyle.current();
+        float alpha = fade(appeared) * (pending ? 0.45f : 1);
+        for (Corner corner : CORNERS) {
+            Point center = bounds.corner(corner);
+            if (center.subtract(view.eye).dot(view.forward) <= 0.05) continue;
+            double radius = view.radius(center, corner == target ? 8 : 6);
+            Point r = view.right.scale(radius), u = view.up.scale(radius);
+            Gizmos.rect(vec(center.subtract(u)), vec(center.add(r)), vec(center.add(u)), vec(center.subtract(r)),
+                    GizmoStyle.strokeAndFill(tint(corner == target ? style.accent : style.text, alpha), 1.5f,
+                            tint(style.surface, alpha * 0.95f))).setAlwaysOnTop();
+        }
+    }
+    void world(CuboidDraft original, CuboidDraft draft, Face target, Corner corner, View view, long appeared, boolean pending) {
         float alpha = fade(appeared);
         UiStyle style = UiStyle.current();
         if (!original.equals(draft)) Gizmos.cuboid(box(original), GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.28f), 1)).setAlwaysOnTop();
@@ -56,6 +83,7 @@ final class SelectionEditRenderer {
                     vec(center.subtract(r).add(u)), GizmoStyle.strokeAndFill(color, 1, color)).setAlwaysOnTop();
         }
         if (target != null) face(draft, target, tint(style.accent, alpha));
+        corners(draft, corner != null ? corner : cornerHit(draft, view), view, appeared, pending);
     }
     private void face(CuboidDraft b, Face f, int color) {
         int a = (f.axis + 1) % 3, c = (f.axis + 2) % 3;
@@ -66,10 +94,10 @@ final class SelectionEditRenderer {
             p[c] = i >= 2 ? b.max(c) + 1.0 : b.min(c);
             corners[i] = new Point(p[0], p[1], p[2]);
         }
-        for (int i = 0; i < 4; i++) Gizmos.line(vec(corners[i]), vec(corners[(i + 1) % 4]), color, 1.25f).setAlwaysOnTop();
+        for (int i = 0; i < 4; i++) Gizmos.line(vec(corners[i]), vec(corners[(i + 1) % 4]), color, 1.75f).setAlwaysOnTop();
     }
 
-    void hud(GuiGraphics graphics, CuboidDraft draft, Face face, SelectionEditSnapshot origin, String reason, boolean pending, long appeared) {
+    void hud(GuiGraphics graphics, CuboidDraft draft, Face face, Corner corner, SelectionEditSnapshot origin, String reason, boolean pending, long appeared) {
         Minecraft client = Minecraft.getInstance();
         int screenWidth = client.getWindow().getGuiScaledWidth(), screenHeight = client.getWindow().getGuiScaledHeight();
         if (screenWidth < 100 || screenHeight < 100) return;
@@ -79,7 +107,10 @@ final class SelectionEditRenderer {
         long offset = draft != null && face != null ? ((long) draft.boundary(face) - origin.bounds().boundary(face)) * face.sign : 0;
         Component detail = pending ? Component.translatable("selection_edit.worldedit_selection_overlay.applying")
                 : draft == null ? Component.empty() : Component.translatable("selection_edit.worldedit_selection_overlay.volume", draft.volume().toString())
-                .append(face == null ? "" : "   " + face.label() + ": " + (offset >= 0 ? "+" : "") + offset);
+                .append(corner == null ? face == null ? "" : "   " + face.label() + ": " + signed(offset)
+                        : "   X: " + signed((long) draft.boundary(corner.face(0)) - origin.bounds().boundary(corner.face(0)))
+                        + " Y: " + signed((long) draft.boundary(corner.face(1)) - origin.bounds().boundary(corner.face(1)))
+                        + " Z: " + signed((long) draft.boundary(corner.face(2)) - origin.bounds().boundary(corner.face(2))));
         int width = Math.min(screenWidth - 16, Math.max(120, Math.max(client.font.width(UiChrome.label(title)), client.font.width(UiChrome.label(detail))) + 20));
         var titleLines = client.font.split(UiChrome.label(title), width - 20);
         var detailLines = client.font.split(UiChrome.label(detail), width - 20);
@@ -93,6 +124,7 @@ final class SelectionEditRenderer {
         graphics.disableScissor();
     }
     private static float fade(long start) { return UiStyle.reducedMotion() ? 1 : Math.min(1, (System.nanoTime() - start) / 120_000_000f); }
+    private static String signed(long value) { return (value >= 0 ? "+" : "") + value; }
     private static int tint(int color, float alpha) { return color & 0xFFFFFF | Math.round((color >>> 24) * alpha) << 24; }
     private static Point point(Vec3 v) { return new Point(v.x(), v.y(), v.z()); }
     private static Point point(Vector3f v) { return new Point(v.x(), v.y(), v.z()); }

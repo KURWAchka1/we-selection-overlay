@@ -70,6 +70,7 @@ function yarn(code) {
     .replaceAll('extractWidgetRenderState', 'renderWidget')
     .replaceAll('method = "onButton"', 'method = "onMouseButton"').replaceAll('method = "onScroll"', 'method = "onMouseScroll"').replaceAll('method = "onMove"', 'method = "onCursorPos"')
     .replaceAll('method = "keyPress"', 'method = "onKey"').replaceAll('keyPresses = Input.EMPTY; moveVector = Vec2f.ZERO;', 'playerInput = PlayerInput.DEFAULT; movementVector = Vec2f.ZERO;')
+    .replaceAll('Input input = keyPresses;', 'PlayerInput input = playerInput;').replaceAll('keyPresses = new Input(', 'playerInput = new PlayerInput(')
     .replaceAll('Identifier.fromNamespaceAndPath(', 'Identifier.of(');
 }
 
@@ -80,7 +81,7 @@ for (const [name, version, neo] of targets) {
     if (version !== '26.2') code = code.replaceAll('client.gui.screen()', 'client.screen').replaceAll('minecraft.gui.setScreen(', 'minecraft.setScreen(')
       .replaceAll('Minecraft.getInstance().gui.hud.setOverlayMessage(', 'Minecraft.getInstance().gui.setOverlayMessage(')
       .replaceAll('client.gameRenderer.mainCamera()', 'client.gameRenderer.getMainCamera()');
-    if (file.endsWith('Controller.java') && !code.includes('HudElementRegistry')) code = code.replace('        settings = directory.resolve(', (neo
+    if (file.endsWith('Controller.java') && !code.includes('HudElementRegistry') && !code.includes('RenderGuiEvent.Post')) code = code.replace('        settings = directory.resolve(', (neo
       ? '        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderGuiEvent.Post event) -> renderHud(event.getGuiGraphics()));'
       : hud) + '\n        settings = directory.resolve(');
     if (neo) code = code.replace('import net.fabricmc.loader.api.FabricLoader;', 'import net.neoforged.fml.ModList;')
@@ -165,6 +166,7 @@ public interface SelectionEditFovAccessor {
     main = main.replace('    private void resetState() {', '    private void resetState() {\n        selectionEditController.cancel();');
   }
   if (version !== '26.2') main = main.replaceAll('editClient.levelRenderer.collectPerFrameRenderThreadGizmos()', 'editClient.levelRenderer.collectPerFrameGizmos()');
+  main = main.replace('if (selectionEditController.active() && editClient.', 'if (selectionEditController.visible() && editClient.');
   main = main.replace('            if (selectionEditController.deferIsolation()) return;\n', '')
     .replace('                if (selectionEditController.active()) {\n                    // The draft renderer owns the contour; saved overlay preferences remain untouched.\n                } else if (isolationActive || (overlayEnabled && !selectionGridEnabled)) {',
       '                if (!selectionEditController.active() && (isolationActive || (overlayEnabled && !selectionGridEnabled))) {')

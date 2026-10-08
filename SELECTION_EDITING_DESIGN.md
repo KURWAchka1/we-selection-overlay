@@ -1,15 +1,16 @@
 # Interactive selection editing
 
 Status: implemented and six-runtime tested for the 1.8.0 development line,
-2026-10-07. Milestone 2 of
+2026-10-08. Milestone 2 of
 [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md). See TESTING.md for verified coverage
 and remaining integration checks.
 
 ## Goal and scope
 
 Resize a real WorldEdit cuboid directly in the world without changing blocks,
-opening a large editor, or adding permanent visual controls. Normal building,
-selection rendering and mouse behavior remain unchanged outside edit mode.
+opening a large editor. Eight corner markers are visible only while the feature
+is enabled and a supported selection is ready. Normal building, selection
+rendering and mouse behavior remain unchanged away from these markers.
 
 First scope: complete standard cuboid and extending-cuboid selections in an
 integrated world with compatible local WorldEdit. Preserve the selector type
@@ -20,7 +21,7 @@ plugin, custom editing protocol or automatic chat-command fallback.
 
 ## Interaction
 
-Use a temporary hold-to-edit key, not a sticky mode that can be forgotten.
+Use direct corner dragging plus a temporary hold-to-edit key for face controls.
 The feature is opt-in; start with an unassigned native keybind to avoid taking
 another mod's shortcut. Expose its availability/settings in the compact O menu.
 The hold key remains unassigned by default. Left Shift is the configurable
@@ -28,25 +29,30 @@ fast modifier; default steps are 1 and 8 blocks.
 
 | State/action | Behavior |
 | --- | --- |
-| Key not held | No handles, extra HUD, server polling or mouse interception. |
-| Hold edit key | Read an authoritative selection snapshot, then show handles and a small dimensions HUD. Normal movement/look remain available until a drag begins. |
-| Aim at a face | Highlight one unambiguous target. A face intersection can target a large cuboid even when its center handle is outside the viewport. |
+| Feature disabled | No markers, HUD, selection reads or mouse interception. |
+| Enabled, key not held | Show eight corner markers for a ready cuboid. Coalesce authoritative reads; intercept LMB only on a marker. No extra HUD or hotbar-wheel capture. |
+| Left-drag a corner | Aim at a marker, press LMB and drag without a hold key. Snap the captured corner in the captured camera's view plane; keep the opposite corner fixed. Release LMB to commit once. |
+| Hold edit key | Show face handles and a small dimensions HUD. Start with the previously clicked face (UP initially). Movement/look remain available until a drag begins. |
+| Click a face | Select that side at any visible distance before resizing. Accent its perimeter/handle. Camera movement alone never changes the remembered choice. Intersection works even when the center handle is outside the viewport. |
 | Mouse wheel | Outward/inward resize of the targeted face by the normal step. Lock that face for the gesture. Update only the local draft. Release the edit key to commit once. |
-| Fast modifier | Use the configurable fast step only for an editing gesture. Proposed steps: 1 and 8 blocks; the modifier must be configurable. |
+| Fast modifier | Use the configurable fast step only during editing. Shift does not sneak or lower a flying player while serving as the active modifier; vanilla behavior returns on exit. |
 | Left-drag a handle | Capture one face and axis, temporarily release the cursor and freeze camera rotation/movement. Release LMB to commit once; restore mouse state without a camera jump. |
-| Escape | Cancel an uncommitted draft immediately, remove the editing UI, and require key release before re-entry. |
-| Release edit key during a drag | Cancel the incomplete drag. Do not forward a still-held mouse button into an attack. |
+| Escape | Cancel an uncommitted draft immediately, hide the gesture HUD/face handles, and require key release before hold-mode re-entry. Enabled corner markers remain available. |
+| Release edit key during a hold-mode drag | Cancel the incomplete drag. Direct corner drags do not require that key. Do not forward a still-held mouse button into an attack. |
 | Chat/menu, lost focus, disconnect, changed world or changed authoritative selection | Cancel the draft; never treat these interruptions as a commit. |
 | Commit pending | Permit only one outstanding request. Do not queue further gestures against an unconfirmed selection. |
 
 While the explicit edit mode is active, construction/attack/use/pick clicks are
 not forwarded to the world. The wheel cannot change hotbar slots during an edit.
-Outside that mode, hooks must return immediately and preserve vanilla behavior.
+Outside that mode, only LMB hits on visible corner markers start a gesture.
+All other mouse input preserves vanilla behavior.
 Use native input APIs/events where available, with narrowly scoped hooks only
 where the supported runtime requires them. Verify capture and cursor restoration
 on each runtime before calling this interaction implemented.
 
-Dragging changes only the selected face, never the opposite face or other axes.
+Face dragging changes only the selected face, never the opposite face or other
+axes. Corner dragging changes its three adjoining sides together; the opposite
+corner stays fixed. Every coordinate snaps to the configured block step.
 The face cannot cross the opposite face: the minimum dimension is one block.
 Wheel direction is always outward/inward, independent of camera orientation.
 Dragging uses the captured world axis and camera projection, not camera yaw
@@ -59,8 +65,11 @@ negative coordinates, from inside the selection and on all six faces.
 The world remains the main view. There is no full-screen background, blur,
 sidebar, persistent toolbar, luminous wall or filled selection volume.
 
-- Six small face-center handles, with a stable apparent screen size and slightly
-  larger interaction targets. Inactive handles are quiet neutral tones.
+- Eight high-contrast diamond corner markers when enabled, with dark interiors,
+  screen-stable sizes and slightly larger hit targets. Hover/capture accents
+  only that marker. Six face-center handles are additionally visible while held.
+- Face-center handles also have stable apparent size and larger interaction
+  targets. Inactive handles are quiet neutral tones.
 - Only the targeted/captured handle and face perimeter receive a clear accent.
   Reuse the current UI theme and overlay line-width/color settings where relevant.
   Do not brighten the complete cuboid or add a second full grid.
@@ -68,7 +77,7 @@ sidebar, persistent toolbar, luminous wall or filled selection volume.
   for comparison. Temporarily suppress the original grid only in this edit view;
   never change the saved overlay/grid/ruler settings.
 - One compact, noninteractive HUD above the hotbar: dimensions, volume and the
-  active face's signed offset. Example content: `24 x 12 x 18`, `5,184 blocks`,
+  active face's signed offset, or X/Y/Z offsets for a corner. Example content: `24 x 12 x 18`, `5,184 blocks`,
   `+Y: +3`. No permanent shortcut legend or tutorial text.
 - Reuse UiChrome, existing font assets and style tokens. Keep safe margins from
   the crosshair, hotbar, subtitles and screen edges. Stack the two short rows at
@@ -100,8 +109,9 @@ integer draft bounds. WorldEdit remains the source of truth.
 4. On commit, reacquire and compare the authoritative origin and permissions.
    Reject stale requests rather than overwriting an axe/command selection change.
    Identical CUI resends alone are not evidence of a changed selection.
-5. Apply the one-axis delta with the public CuboidRegion expansion/contraction
-   route, after prevalidation on a clone. Match the appropriate
+5. Apply the one-axis face delta or three-axis corner deltas with the public
+   CuboidRegion expansion/contraction route, after prevalidating the entire
+   change on a clone. Check every delta's appropriate
    `worldedit.selection.expand` / `worldedit.selection.contract` permission.
    Do not recreate an extending selector or shrink it using selectSecondary.
 6. Follow WorldEdit's selection-adjustment lifecycle: learnChanges(), then
@@ -137,14 +147,16 @@ were checked for each version; real packaged-runtime tests exercise these hooks.
 
 ## Performance contract
 
-The resize interaction itself is independent of selected volume: six handles,
+The resize interaction itself is independent of selected volume: eight corner
+markers and at most six face handles,
 twelve box edges, a few coordinate values and at most one short server commit.
 Do not build SelectionRegion grid geometry, scan blocks, request unloaded chunks,
 recompile terrain or allocate framebuffer targets for a draft.
 
-Reuse geometry/storage; update corners only when bounds change. Selection reads
-and stale-state checks are contextual to an active gesture and bounded/coalesced,
-never one server task per rendered frame. A disabled feature has no extra render
+Draft updates touch only immutable coordinate values. Selection reads
+and stale-state checks run only while enabled with a valid local context, at most
+once per four client ticks and with one outstanding read. Unavailable selections
+obey that same cadence. Never submit a server task per rendered frame. A disabled feature has no extra render
 submission or selection-session polling.
 
 Existing isolation/chunk rebuilds after a committed resize still have a real
@@ -196,12 +208,12 @@ Do not add release notes or mark the milestone complete based only on compilatio
   `tools/sync-selection-editing.mjs` maps it to the other five native runtimes.
 - Settings use a separate `selection-editing.properties` file. Existing overlay,
   palette, grid, ruler and clipboard preferences are not migrated or overwritten.
-- Face reads are coalesced at most once per four active client ticks. Draft
+- Selection reads are coalesced at most once per four eligible client ticks. Draft
   updates touch only immutable bounds. A commit is server-thread owned and
   revalidates session, selector identity, ordered corners, world and permissions.
   The source's weak snapshot cache cannot keep a closed world alive; changed
   player/world identity clears pending draft references and invalidates callbacks.
-- Input hooks are active only in the explicit mode. Dragging captures the camera
+- Outside hold mode, only a marker hit starts input capture. Dragging captures the camera
   projection, stops movement and releases the cursor. Resize/camera-mode changes
   also cancel the draft. Minecraft's early-return first mouse event is handled.
 - Both universal packagers register the hooks explicitly. Artifact tests check

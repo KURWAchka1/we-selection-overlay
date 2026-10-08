@@ -13,6 +13,8 @@ import net.minecraft.client.input.MouseButtonInfo;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.client.selection.SelectionEditController;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft.Face;
+import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft.Corner;
+import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft.Point;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.worldedit.SelectionEditTransaction;
 import java.util.Set;
 import java.util.List;
@@ -34,6 +36,7 @@ public final class SelectionEditingChecks {
     private final SelectionEditController editing = SelectionEditController.instance();
     private KeyMapping hold, fast;
     private Object cachedClipboard;
+    private boolean lastAimAngled;
     private final CuboidDraft original = new CuboidDraft(-8, 66, -8, -3, 71, -3);
     private SelectionEditingChecks(Minecraft client, Object overlay, Object clipboardSource, Consumer<String> screenshot, Dispatch dispatch) {
         this.client = client; this.overlay = overlay; this.clipboardSource = clipboardSource; this.screenshot = screenshot; this.dispatch = dispatch;
@@ -56,8 +59,11 @@ public final class SelectionEditingChecks {
             hold = (KeyMapping) field(editing, "editKey"); fast = (KeyMapping) field(editing, "fastKey");
             check(hold.isUnbound(), "Editing must not take a default key");
             cachedClipboard = call(call(clipboardSource, "snapshot"), "blocks");
+            client.player.getAbilities().flying = true;
+            check(editing.target() == Face.UP, "Initial face must be the upper side");
             editing.configure(true, 1, 8); return null;
         });
+        onServer(() -> { client.getSingleplayerServer().getPlayerList().getPlayers().getFirst().getAbilities().flying = true; return null; });
         for (Face f : Face.values()) {
             select(false);
             aim(f, false);
@@ -71,6 +77,14 @@ public final class SelectionEditingChecks {
             check(serverBounds().equals(draft), "Wheel failed on " + f);
         }
         select(true); aim(Face.EAST, false); start(Face.EAST);
+        double heightBeforeShift = onClient(() -> client.player.getY());
+        onClient(() -> { fast.setDown(true); client.options.keyShift.setDown(true); return null; });
+        pause(300);
+        onClient(() -> {
+            check(!client.player.input.keyPresses.shift(), "Editing Shift retained sneak input");
+            check(Math.abs(client.player.getY() - heightBeforeShift) < 0.05, "Editing Shift lowered flying player");
+            client.options.keyShift.setDown(false); return null;
+        });
         onClient(() -> { fast.setDown(true); nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, -1.0); fast.setDown(false); return null; });
         check(onClient(editing::draft).size(0) == 1, "Fast step crossed opposite face");
         release(); await(() -> !editing.pending(), "extending commit");
@@ -149,6 +163,66 @@ public final class SelectionEditingChecks {
             check(region.getPos1().equals(p1), "Reversed Pos1 lost identity");
             check(region.getPos2().equals(p2.add(-2, 0, 0)), "Reversed Pos2 lost identity"); return null;
         });
+        for (Corner corner : Corner.values()) {
+            select(corner.ordinal() % 2 == 0);
+            List<BlockVector3> ordered = onServer(() -> {
+                var region = (CuboidRegion) WorldEdit.getInstance().getSessionManager().get(actor()).getSelection(actor().getWorld());
+                return List.of(region.getPos1(), region.getPos2());
+            });
+            Point position = original.corner(corner);
+            Point eye = position.add(new Point(9 * corner.face(0).sign, 7 * corner.face(1).sign, 11 * corner.face(2).sign));
+            aimAt(eye, position);
+            await(() -> editing.visible() && !editing.active(), "passive corner " + corner);
+            onClient(() -> { nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1); return null; });
+            check(onClient(editing::dragging), "Direct corner did not drag: " + corner);
+            onClient(() -> {
+                check(!hold.isDown(), "Direct corner needed hold key");
+                nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), client.getWindow().getScreenWidth() / 2.0 + 80,
+                        client.getWindow().getScreenHeight() / 2.0 - 60);
+                return null;
+            });
+            CuboidDraft cornerDraft = onClient(editing::draft);
+            check(!cornerDraft.equals(original), "Corner drag did not change bounds: " + corner);
+            check(cornerDraft.corner(corner.opposite()).equals(original.corner(corner.opposite())), "Corner moved opposite point");
+            check(serverBounds().equals(original), "Corner drag committed early");
+            if (corner == Corner.EAST_UP_SOUTH) {
+                onClient(() -> { client.gui.hud.getChat().clearMessages(false); return null; });
+                pause(200); screenshot.accept("selection-edit-corner");
+            }
+            onClient(() -> { nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0); return null; });
+            await(() -> !editing.pending(), "corner commit " + corner);
+            check(serverBounds().equals(cornerDraft), "Corner commit failed: " + corner);
+            onServer(() -> {
+                var selector = WorldEdit.getInstance().getSessionManager().get(actor()).getRegionSelector(actor().getWorld());
+                check(selector.getClass() == (corner.ordinal() % 2 == 0 ? ExtendingCuboidRegionSelector.class : CuboidRegionSelector.class), "Corner replaced selector type");
+                var region = (CuboidRegion) selector.getRegion();
+                check(region.getPos1().equals(movedPoint(ordered.get(0), cornerDraft)), "Corner changed Pos1 ordering: " + corner);
+                check(region.getPos2().equals(movedPoint(ordered.get(1), cornerDraft)), "Corner changed Pos2 ordering: " + corner);
+                return null;
+            });
+        }
+        select(false); aim(Face.EAST, false);
+        await(editing::visible, "passive markers");
+        onClient(() -> {
+            check(!editing.button(0, 1), "Passive markers captured an ordinary face click");
+            check(!editing.scroll(1), "Passive markers captured ordinary wheel input");
+            client.options.keyShift.setDown(true); client.player.input.tick();
+            check(client.player.input.keyPresses.shift(), "Normal Shift was disabled outside editing");
+            client.options.keyShift.setDown(false); return null;
+        });
+        onClient(() -> { client.gui.hud.getChat().clearMessages(false); return null; });
+        pause(200); screenshot.accept("selection-edit-passive");
+        Point cornerPosition = original.corner(Corner.EAST_UP_SOUTH);
+        aimAt(cornerPosition.add(new Point(9, 7, 11)), cornerPosition);
+        onClient(() -> {
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+            check(editing.dragging(), "Corner cancel probe failed");
+            nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(256, 0, 0));
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+            check(!editing.active() && client.gui.screen() == null && !client.options.keyAttack.isDown(), "Corner Escape leaked input");
+            return null;
+        });
+        check(serverBounds().equals(original), "Cancelled corner committed");
         select(false); aim(Face.DOWN, false); start(Face.DOWN);
         onClient(() -> {
             check(field(field(editing, "source"), "last") instanceof java.lang.ref.WeakReference<?>, "Source cache strongly retains the world");
@@ -156,7 +230,7 @@ public final class SelectionEditingChecks {
             setField(editing, "pending", true);
             setField(editing, "level", new Object());
             call(editing, "tick", client);
-            check(!editing.pending() && !editing.active() && editing.draft() == null && field(editing, "origin") == null,
+            check(!editing.pending() && !editing.active() && editing.draft() == null && field(editing, "origin") == null && field(editing, "shown") == null,
                     "World identity change retained a pending context");
             return null;
         });
@@ -187,13 +261,31 @@ public final class SelectionEditingChecks {
                 }
                 return null;
             });
+            onClient(() -> {
+                client.gui.setScreen(new net.minecraft.client.gui.screens.options.controls.KeyBindsScreen(null, client.options));
+                for (var child : client.gui.screen().children()) if (child instanceof net.minecraft.client.gui.components.AbstractSelectionList<?> list) {
+                    int index = 0;
+                    for (Object entry : (List<?>) list.children()) {
+                        boolean ours = false;
+                        for (var field : entry.getClass().getDeclaredFields()) if (KeyMapping.class.isAssignableFrom(field.getType())) {
+                            field.setAccessible(true); if (field.get(entry) == hold || field.get(entry) == fast) ours = true;
+                        }
+                        if (ours) { call(list, "setScrollAmount", ((Number) call(list, "getRowTop", index)).doubleValue() - list.getY()); break; }
+                        index++;
+                    }
+                }
+                check(client.font.width(net.minecraft.network.chat.Component.translatable("key.worldedit_selection_overlay.selection_edit")) <= 110, "Face key label too wide");
+                check(client.font.width(net.minecraft.network.chat.Component.translatable("key.worldedit_selection_overlay.selection_edit_fast")) <= 110, "Fast key label too wide");
+                return null;
+            });
+            pause(250); screenshot.accept("selection-edit-controls-" + language + "-x" + scale);
         }
         }
         var reload = onClient(() -> { client.getLanguageManager().setSelected("en_us"); return client.reloadResourcePacks(); });
         await(reload::isDone, "restore language");
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
-        System.out.println("SELECTION EDIT VERIFY PASS: all six faces, drag, cancel, stale, extending, isolation, clipboard, unchanged blocks/history");
+        System.out.println("SELECTION EDIT VERIFY PASS: six clicked/remembered faces, eight direct corners, flight Shift, drag, cancel, stale, extending, isolation, clipboard, unchanged blocks/history");
     }
     private void select(boolean extending) {
         onServer(() -> {
@@ -205,17 +297,37 @@ public final class SelectionEditingChecks {
         }); pause(250);
     }
     private void aim(Face f, boolean angled) {
+        aim(f, angled, false);
+        lastAimAngled = angled;
+    }
+    private void aim(Face f, boolean angled, boolean offCenter) {
         var center = original.center(f);
+        if (offCenter) center = center.add(new Point(f.axis == 2 ? 1.5 : 0, f.axis == 0 ? 1.5 : 0, f.axis == 1 ? 1.5 : 0));
         double[] eye = {center.x(), center.y(), center.z()}; eye[f.axis] += 9 * f.sign;
         if (angled) eye[(f.axis + 1) % 3] += 5;
-        double dx = center.x() - eye[0], dy = center.y() - eye[1], dz = center.z() - eye[2];
+        aimAt(new Point(eye[0], eye[1], eye[2]), center);
+    }
+    private void aimAt(Point eye, Point center) {
+        double dx = center.x() - eye.x(), dy = center.y() - eye.y(), dz = center.z() - eye.z();
         double yaw = Math.toDegrees(Math.atan2(-dx, dz)), pitch = -Math.toDegrees(Math.atan2(dy, Math.hypot(dx, dz)));
         onServer(() -> { var server = client.getSingleplayerServer(); server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),
-            "tp @p " + eye[0] + " " + (eye[1] - 1.62) + " " + eye[2] + " " + yaw + " " + pitch); return null; }); pause(500);
+            "tp @p " + eye.x() + " " + (eye.y() - 1.62) + " " + eye.z() + " " + yaw + " " + pitch); return null; }); pause(500);
     }
     private void start(Face face) {
+        Face previous = onClient(editing::target);
+        boolean angled = lastAimAngled;
+        aim(face, false, true);
         onClient(() -> { org.lwjgl.glfw.GLFW.glfwFocusWindow(client.getWindow().handle()); hold.setDown(true); return null; });
-        await(() -> editing.active() && editing.draft() != null && editing.target() == face, "target " + face);
+        await(() -> editing.active() && editing.draft() != null, "enter editing " + face);
+        onClient(() -> {
+            check(editing.target() == previous, "Looking at a new face changed remembered choice");
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+            check(!editing.dragging(), "Whole face click unexpectedly dragged handle");
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+            check(editing.target() == face, "Distance face click did not select " + face);
+            return null;
+        });
+        aim(face, angled);
     }
     private void release() { onClient(() -> { hold.setDown(false); return null; }); pause(150); }
     private com.sk89q.worldedit.entity.Player actor() { return FabricAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst()); }
@@ -231,6 +343,10 @@ public final class SelectionEditingChecks {
         return List.copyOf(blocks);
     }
     private CuboidDraft serverBounds() { return onServer(() -> SelectionEditTransaction.read(actor()).bounds()); }
+    private BlockVector3 movedPoint(BlockVector3 point, CuboidDraft draft) {
+        return BlockVector3.at(point.x() == original.maxX() ? draft.maxX() : draft.minX(),
+                point.y() == original.maxY() ? draft.maxY() : draft.minY(), point.z() == original.maxZ() ? draft.maxZ() : draft.minZ());
+    }
     private <T> T onClient(Callable<T> action) { return dispatch.client(action); }
     private <T> T onServer(Callable<T> action) { return dispatch.server(action); }
     private static <T> T checked(Callable<T> action) { try { return action.call(); } catch (Exception ex) { throw new AssertionError(ex); } }

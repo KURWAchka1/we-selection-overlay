@@ -5,6 +5,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import static org.junit.jupiter.api.Assertions.*;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Face;
+import org.marshal.weaddon_lightposition.selection.CuboidDraft.Corner;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Point;
 
 class CuboidDraftTest {
@@ -54,5 +55,39 @@ class CuboidDraftTest {
         var values = new java.util.Properties(); values.setProperty("step", "bad"); values.setProperty("fastStep", "99999");
         assertEquals(new SelectionEditOptions(false, 1, 512), SelectionEditOptions.load(values));
         assertEquals(SelectionEditOptions.defaults(), SelectionEditOptions.load(SelectionEditOptions.defaults().properties()));
+    }
+    @ParameterizedTest @EnumSource(Corner.class)
+    void cornerDragKeepsOppositeAndSnapsAllAxes(Corner corner) {
+        Point opposite = bounds.corner(corner.opposite());
+        Point movement = new Point(3.2 * corner.face(0).sign, -4.2 * corner.face(1).sign, 5.2 * corner.face(2).sign);
+        CuboidDraft draft = bounds.moveCorner(corner, movement, 2, -64, 319);
+        assertEquals(opposite, draft.corner(corner.opposite()));
+        assertEquals(4, (draft.boundary(corner.face(0)) - bounds.boundary(corner.face(0))) * corner.face(0).sign);
+        assertEquals(-4, (draft.boundary(corner.face(1)) - bounds.boundary(corner.face(1))) * corner.face(1).sign);
+        assertEquals(6, (draft.boundary(corner.face(2)) - bounds.boundary(corner.face(2))) * corner.face(2).sign);
+        Point towardsOpposite = new Point(-1000 * corner.face(0).sign, -1000 * corner.face(1).sign, -1000 * corner.face(2).sign);
+        CuboidDraft cell = bounds.moveCorner(corner, towardsOpposite, 1, -64, 319);
+        for (int axis = 0; axis < 3; axis++) assertEquals(1, cell.size(axis));
+        assertEquals(opposite, cell.corner(corner.opposite()));
+    }
+    @Test void capturedPlaneDoesNotFlipOrMoveDepth() {
+        Point eye = new Point(2, 3, 4), forward = new Point(1, 2, 3).normalized();
+        Point center = eye.add(forward.scale(12));
+        Point side = new Point(-2, 1, 0).normalized().scale(3);
+        for (int sign : new int[]{-1, 1}) {
+            Point wanted = center.add(side.scale(sign));
+            assertEquals(wanted.x(), CuboidDraft.planePoint(eye, wanted.subtract(eye).normalized(), center, forward).x(), 1e-7);
+            assertEquals(wanted.y(), CuboidDraft.planePoint(eye, wanted.subtract(eye).normalized(), center, forward).y(), 1e-7);
+            assertEquals(wanted.z(), CuboidDraft.planePoint(eye, wanted.subtract(eye).normalized(), center, forward).z(), 1e-7);
+        }
+        assertNull(CuboidDraft.planePoint(eye, side.normalized(), center, forward));
+        assertNull(CuboidDraft.planePoint(eye, forward.scale(-1), center, forward));
+        assertNull(CuboidDraft.planePoint(eye, forward, eye.subtract(forward), forward));
+    }
+    @Test void hugeCornerOffsetsClampWithoutOverflow() {
+        var huge = bounds.moveCorner(Corner.WEST_UP_SOUTH, new Point(-Double.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE), 512, -64, 319);
+        assertEquals(-30_000_000, huge.minX()); assertEquals(319, huge.maxY()); assertEquals(29_999_999, huge.maxZ());
+        assertThrows(IllegalArgumentException.class, () -> CuboidDraft.snappedOffset(Double.NaN, 1, 1));
+        assertThrows(IllegalArgumentException.class, () -> CuboidDraft.snappedOffset(1, 0, 1));
     }
 }

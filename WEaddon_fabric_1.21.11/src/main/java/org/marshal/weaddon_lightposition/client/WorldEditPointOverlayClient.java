@@ -247,7 +247,7 @@ public final class WorldEditPointOverlayClient {
 
     private void onRenderWorld(WorldRenderContext context) {
         MinecraftClient editClient = MinecraftClient.getInstance();
-        if (selectionEditController.active() && editClient.world != null && editClient.player != null) {
+        if (selectionEditController.visible() && editClient.world != null && editClient.player != null) {
             try (GizmoDrawing.CollectorScope editScope = editClient.worldRenderer.startDrawingGizmos()) { selectionEditController.renderWorld(); }
         }
         boolean isolationActive = BlockIsolationController.active();
