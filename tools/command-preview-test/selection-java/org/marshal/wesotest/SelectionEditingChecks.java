@@ -173,6 +173,13 @@ public final class SelectionEditingChecks {
         onClient(() -> {
             nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
             check(editing.cursorDrag() && !client.mouseHandler.isMouseGrabbed(), "Held corner did not preserve precise cursor dragging");
+            editing.configure(true, 4, 8);
+            checkCornerStep(Corner.EAST_UP_SOUTH, 5.2, 4);
+            fast.setDown(true);
+            checkCornerStep(Corner.EAST_UP_SOUTH, 5.2, 8);
+            fast.setDown(false);
+            call(editing, "updateCorner", field(editing, "cornerDragStart"));
+            editing.configure(true, 1, 8);
             nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), client.getWindow().getScreenWidth() / 2.0 + 80,
                     client.getWindow().getScreenHeight() / 2.0 - 60);
             check(!editing.draft().equals(original), "Precise corner cursor did not change bounds");
@@ -182,6 +189,7 @@ public final class SelectionEditingChecks {
             return null;
         });
         release(); check(serverBounds().equals(original), "Precise corner cancellation committed");
+        onClient(() -> { editing.configure(true, 4, 8); return null; });
         for (Corner corner : Corner.values()) {
             select(corner.ordinal() % 2 == 0);
             List<BlockVector3> ordered = onServer(() -> {
@@ -199,6 +207,14 @@ public final class SelectionEditingChecks {
                 check(!hold.isDown(), "Direct corner needed hold key");
                 check(!editing.cursorDrag() && client.mouseHandler.isMouseGrabbed(), "Direct corner locked camera or released cursor");
                 check(editing.draft().equals(original), "Direct corner jumped on initial grab");
+                checkCornerStep(corner, 2.2, 1);
+                fast.setDown(true);
+                checkCornerStep(corner, 2.2, 1);
+                hold.setDown(true);
+                checkCornerStep(corner, 2.2, 1);
+                hold.setDown(false); fast.setDown(false);
+                call(editing, "updateCorner", field(editing, "cornerDragStart"));
+                check(editing.draft().equals(original), "Step probe did not restore the corner draft");
                 // Seed native's first-move guard, then send a relative delta instead of cancelling two absolute moves.
                 double x = client.mouseHandler.xpos(), y = client.mouseHandler.ypos();
                 nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y);
@@ -253,6 +269,7 @@ public final class SelectionEditingChecks {
                 return null;
             });
         }
+        onClient(() -> { editing.configure(true, 1, 8); return null; });
         select(false); aim(Face.EAST, false);
         await(editing::visible, "passive markers");
         onClient(() -> {
@@ -337,7 +354,14 @@ public final class SelectionEditingChecks {
         await(reload::isDone, "restore language");
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
-        System.out.println("SELECTION EDIT VERIFY PASS: default G, six clicked/remembered faces, eight live-camera flying corners, precise held drag, flight Shift, cancel, stale, extending, isolation, clipboard, unchanged blocks/history");
+        System.out.println("SELECTION EDIT VERIFY PASS: default G, six clicked/remembered faces, eight live-camera flying corners with fixed one-block steps, configurable precise held steps, flight Shift, cancel, stale, extending, isolation, clipboard, unchanged blocks/history");
+    }
+    private void checkCornerStep(Corner corner, double distance, int step) {
+        Point offset = new Point(distance * corner.face(0).sign, distance * corner.face(1).sign, distance * corner.face(2).sign);
+        Point start = (Point) field(editing, "cornerDragStart");
+        call(editing, "updateCorner", start.add(offset));
+        check(editing.draft().equals(original.moveCorner(corner, offset, step, -64, 319)),
+                "Wrong corner step: " + corner + " expected=" + step + " fast=" + fast.isDown() + " hold=" + hold.isDown());
     }
     private void select(boolean extending) {
         onServer(() -> {

@@ -239,7 +239,7 @@ public final class SelectionEditController {
     }
     private void updateCorner(Point position) {
         if (position == null || lockedCorner == null || origin == null || cornerDragStart == null) return;
-        int step = fastKey != null && fastKey.isDown() ? options.fastStep() : options.step();
+        int step = directCorner ? 1 : (fastKey != null && fastKey.isDown() ? options.fastStep() : options.step());
         CuboidDraft next = origin.bounds().moveCorner(lockedCorner, position.subtract(cornerDragStart), step, origin.minY(), origin.maxY());
         for (int axis = 0; axis < 3; axis++) if (!permitted(next, lockedCorner.face(axis))) return;
         if (!next.equals(draft)) draft = next;

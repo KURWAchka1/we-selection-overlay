@@ -11,7 +11,7 @@ boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
 1.4 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,442,387 bytes (Fabric) and 1,414,003 bytes
+The archived release outputs are 1,442,406 bytes (Fabric) and 1,414,029 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -202,6 +202,11 @@ standard/extending selectors. Native mouse motion changes camera yaw, sideways
 movement and upward flight remain available, and the live draft follows the
 moving camera. The initial grab does not jump. Held face/corner drags still
 release the cursor and suppress movement for precise projection-based editing.
+Within each captured free-corner gesture, fixed-position probes verify one-block
+snapping despite configured 4/8-block steps, the fast modifier, and pressing the
+hold key mid-gesture. A held-corner probe separately verifies configured normal
+and fast steps of 4/8 blocks. Probes run together on the client thread so flight
+or camera interpolation cannot change their position between assertions.
 The opposite corner and the native initial
 Pos1/Pos2 ordering are preserved; extending selectors may start with a different
 ordering from standard selectors. Normal off-marker clicks/wheel remain uncaptured.

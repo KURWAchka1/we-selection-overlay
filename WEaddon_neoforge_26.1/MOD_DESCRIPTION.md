@@ -115,8 +115,8 @@ Grab corner markers while freely looking/flying, or hold `G` to precisely drag
 a handle/corner or click a face and resize it with the wheel. The chosen face stays highlighted and remembered.
 A small HUD shows dimensions, volume, and offsets.
 
-* Configurable normal/fast steps and snapped dragging
-* Shift speeds up editing without lowering you in flight
+* One-block steps for free corner grabs; configurable steps in hold mode
+* Shift speeds up hold-mode editing without lowering you in flight
 * Release to apply; Escape cancels an unfinished edit
 * Disabled by default; configurable hold key defaults to `G`
 

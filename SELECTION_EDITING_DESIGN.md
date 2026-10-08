@@ -31,11 +31,11 @@ fast modifier; default steps are 1 and 8 blocks.
 | --- | --- |
 | Feature disabled | No markers, HUD, selection reads or mouse interception. |
 | Enabled, key not held | Show eight corner markers for a ready cuboid. Coalesce authoritative reads; intercept LMB only on a marker. No extra HUD or hotbar-wheel capture. |
-| Left-drag a corner without the edit key | Aim at a marker and hold LMB. Keep normal camera/flight controls; the corner follows the live view ray at its original grab distance, with the initial off-center offset retained. Snap its coordinates and keep the opposite corner fixed. Release LMB to commit once. |
+| Left-drag a corner without the edit key | Aim at a marker and hold LMB. Keep normal camera/flight controls; the corner follows the live view ray at its original grab distance, with the initial off-center offset retained. Always snap by one block, ignoring configured normal/fast steps and modifier keys; keep the opposite corner fixed. Release LMB to commit once. |
 | Hold edit key | Show face handles and a small dimensions HUD. Start with the previously clicked face (UP initially). Movement/look remain available until a drag begins. |
 | Click a face | Select that side at any visible distance before resizing. Accent its perimeter/handle. Camera movement alone never changes the remembered choice. Intersection works even when the center handle is outside the viewport. |
 | Mouse wheel | Outward/inward resize of the targeted face by the normal step. Lock that face for the gesture. Update only the local draft. Release the edit key to commit once. |
-| Fast modifier | Use the configurable fast step only during editing. Shift does not sneak or lower a flying player while serving as the active modifier; vanilla behavior returns on exit. |
+| Fast modifier | Use the configurable fast step only for gestures started in hold mode. Free corner grabs retain one-block snapping. Shift does not sneak or lower a flying player while serving as the active modifier in either mode; vanilla behavior returns on exit. |
 | Left-drag a handle/corner while holding the edit key | Capture one face axis or the corner's view plane, temporarily release the cursor and freeze camera rotation/movement. Release LMB to commit once; restore mouse state without a camera jump. |
 | Escape | Cancel an uncommitted draft immediately, hide the gesture HUD/face handles, and require key release before hold-mode re-entry. Enabled corner markers remain available. |
 | Release edit key during a hold-mode drag | Cancel the incomplete drag. Direct corner drags do not require that key. Do not forward a still-held mouse button into an attack. |
@@ -52,7 +52,8 @@ on each runtime before calling this interaction implemented.
 
 Face dragging changes only the selected face, never the opposite face or other
 axes. Corner dragging changes its three adjoining sides together; the opposite
-corner stays fixed. Every coordinate snaps to the configured block step.
+corner stays fixed. Hold-mode coordinates snap to the configured block step;
+free corner grabs always use one block, even if G or Shift is pressed afterwards.
 The face cannot cross the opposite face: the minimum dimension is one block.
 Wheel direction is always outward/inward, independent of camera orientation.
 Precise hold-mode dragging uses the captured world axis and camera projection,
