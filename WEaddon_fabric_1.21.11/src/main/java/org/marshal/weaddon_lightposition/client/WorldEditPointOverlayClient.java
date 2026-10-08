@@ -173,7 +173,7 @@ public final class WorldEditPointOverlayClient {
                 KEY_CATEGORY
         ));
         commandPreviewController.setToggleKey(commandPreviewKey);
-        selectionEditKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.worldedit_selection_overlay.selection_edit", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, KEY_CATEGORY));
+        selectionEditKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.worldedit_selection_overlay.selection_edit", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_G, KEY_CATEGORY));
         selectionEditFastKey = KeyBindingHelper.registerKeyBinding(new KeyBinding("key.worldedit_selection_overlay.selection_edit_fast", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_LEFT_SHIFT, KEY_CATEGORY));
         selectionEditController.keys(selectionEditKey, selectionEditFastKey);
 

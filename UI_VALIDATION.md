@@ -60,8 +60,8 @@ not new FPS measurements.
 
 The 2026-10-08 editing runs also capture the real native keybind menu in EN/RU
 at requested 2x/3x/4x on all six targets. The shorter face-edit/fast-step names
-do not overlap the assignment buttons. Passive corner markers, captured corner
-dragging and the face-drag HUD are captured in-world, using native gizmos and
+do not overlap the assignment buttons. Passive corner markers, free-camera corner
+dragging during flight and the precise face-drag HUD are captured in-world, using native gizmos and
 the actual camera projection, not a separate UI illustration. NeoForge's HUD
 is registered once per runtime; packaging tests enforce that invariant.
 

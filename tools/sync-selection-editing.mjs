@@ -138,7 +138,7 @@ public interface SelectionEditFovAccessor {
       '        commandPreviewController.initialize(settingsFile.getParent());\n        selectionEditController.initialize(settingsFile.getParent());');
     const register = neo ? '' : version === 'yarn' ? 'KeyBindingHelper.registerKeyBinding(' : 'KeyMappingHelper.registerKeyMapping(';
     main = main.replace('        commandPreviewController.setToggleKey(commandPreviewKey);', `        commandPreviewController.setToggleKey(commandPreviewKey);
-        selectionEditKey = ${register}new ${kb}("key.worldedit_selection_overlay.selection_edit", ${inp}.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, KEY_CATEGORY)${neo ? '' : ')'};
+        selectionEditKey = ${register}new ${kb}("key.worldedit_selection_overlay.selection_edit", ${inp}.Type.KEYSYM, GLFW.GLFW_KEY_G, KEY_CATEGORY)${neo ? '' : ')'};
         selectionEditFastKey = ${register}new ${kb}("key.worldedit_selection_overlay.selection_edit_fast", ${inp}.Type.KEYSYM, GLFW.GLFW_KEY_LEFT_SHIFT, KEY_CATEGORY)${neo ? '' : ')'};
         selectionEditController.keys(selectionEditKey, selectionEditFastKey);`);
     if (neo) main = main.replace('        event.register(commandPreviewKey);', '        event.register(commandPreviewKey);\n        event.register(selectionEditKey);\n        event.register(selectionEditFastKey);');
@@ -165,6 +165,7 @@ public interface SelectionEditFovAccessor {
     main = main.replaceAll('boolean showDiagonals = !isolationActive &&', 'boolean showDiagonals = !selectionEditController.active() && !isolationActive &&');
     main = main.replace('    private void resetState() {', '    private void resetState() {\n        selectionEditController.cancel();');
   }
+  main = main.replace(/("key\.worldedit_selection_overlay\.selection_edit", \w+\.Type\.KEYSYM, )GLFW\.GLFW_KEY_UNKNOWN/, '$1GLFW.GLFW_KEY_G');
   if (version !== '26.2') main = main.replaceAll('editClient.levelRenderer.collectPerFrameRenderThreadGizmos()', 'editClient.levelRenderer.collectPerFrameGizmos()');
   main = main.replace('if (selectionEditController.active() && editClient.', 'if (selectionEditController.visible() && editClient.');
   main = main.replace('            if (selectionEditController.deferIsolation()) return;\n', '')

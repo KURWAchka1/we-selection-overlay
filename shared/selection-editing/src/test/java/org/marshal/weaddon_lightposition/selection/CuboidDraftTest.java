@@ -90,4 +90,42 @@ class CuboidDraftTest {
         assertThrows(IllegalArgumentException.class, () -> CuboidDraft.snappedOffset(Double.NaN, 1, 1));
         assertThrows(IllegalArgumentException.class, () -> CuboidDraft.snappedOffset(1, 0, 1));
     }
+    @ParameterizedTest @EnumSource(Corner.class)
+    void liveCameraTranslationMovesCapturedCornerWithoutMovingOpposite(Corner corner) {
+        Point target = bounds.corner(corner), ray = new Point(1, -2, 3).normalized();
+        Point eye = target.subtract(ray.scale(20)), movement = new Point(4, 2, -3);
+        Point start = CuboidDraft.rayPoint(eye, ray, 20);
+        Point moved = CuboidDraft.rayPoint(eye.add(movement), ray, 20);
+        CuboidDraft draft = bounds.moveCorner(corner, moved.subtract(start), 1, -64, 319);
+        assertEquals(bounds.corner(corner.opposite()), draft.corner(corner.opposite()));
+        for (int axis = 0; axis < 3; axis++) assertEquals(movement.at(axis),
+                draft.boundary(corner.face(axis)) - bounds.boundary(corner.face(axis)), 1e-7);
+    }
+    @Test void liveCameraCanTurnThroughEveryAxisWithoutParallelPlaneFailure() {
+        Point eye = new Point(2, 3, 4);
+        for (Face face : Face.values()) {
+            Point ray = new Point(face.axis == 0 ? face.sign * 2 : 0,
+                    face.axis == 1 ? face.sign * 2 : 0, face.axis == 2 ? face.sign * 2 : 0);
+            Point position = CuboidDraft.rayPoint(eye, ray, 12);
+            assertNotNull(position);
+            assertEquals(12, position.subtract(eye).length(), 1e-7);
+            assertEquals(face.sign * 12, position.subtract(eye).at(face.axis), 1e-7);
+        }
+    }
+    @Test void liveCameraCapturePreservesOffCenterGrabWithoutInitialJump() {
+        Point eye = new Point(-5, 6, 7), ray = new Point(1, 0, 0);
+        Point corner = new Point(15, 6.2, 7.1);
+        double distance = corner.subtract(eye).dot(ray);
+        Point start = CuboidDraft.rayPoint(eye, ray, distance);
+        assertEquals(new Point(0, 0, 0), CuboidDraft.rayPoint(eye, ray, distance).subtract(start));
+        assertEquals(new Point(0, 2, -3), CuboidDraft.rayPoint(eye.add(new Point(0, 2, -3)), ray, distance).subtract(start));
+    }
+    @Test void liveCameraRejectsNonfiniteOrEmptyRays() {
+        Point eye = new Point(2, 3, 4), ray = new Point(0, 0, 1);
+        for (double distance : new double[]{0, -1, Double.NaN, Double.POSITIVE_INFINITY})
+            assertNull(CuboidDraft.rayPoint(eye, ray, distance));
+        assertNull(CuboidDraft.rayPoint(eye, new Point(0, 0, 0), 12));
+        assertNull(CuboidDraft.rayPoint(eye, new Point(Double.NaN, 0, 0), 12));
+        assertNull(CuboidDraft.rayPoint(new Point(Double.POSITIVE_INFINITY, 0, 0), ray, 12));
+    }
 }

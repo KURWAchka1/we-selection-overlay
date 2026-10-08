@@ -57,7 +57,7 @@ public final class SelectionEditingChecks {
         onClient(() -> {
             check(!editing.options().enabled(), "Editing must be opt-in");
             hold = (KeyMapping) field(editing, "editKey"); fast = (KeyMapping) field(editing, "fastKey");
-            check(hold.isUnbound(), "Editing must not take a default key");
+            check(hold.getDefaultKey().getValue() == 71, "Default editing key must be G");
             cachedClipboard = call(call(clipboardSource, "snapshot"), "blocks");
             client.player.getAbilities().flying = true;
             check(editing.target() == Face.UP, "Initial face must be the upper side");
@@ -98,6 +98,10 @@ public final class SelectionEditingChecks {
         check(onClient(editing::dragging), "Handle did not start drag");
         onClient(() -> {
             check(!client.mouseHandler.isMouseGrabbed(), "Cursor remained captured during drag");
+            check(editing.cursorDrag(), "Held face drag lost precise cursor mode");
+            client.options.keyRight.setDown(true); client.player.input.tick();
+            check(!client.player.input.keyPresses.right(), "Precise drag retained movement input");
+            client.options.keyRight.setDown(false);
             nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), client.getWindow().getScreenWidth() / 2.0 + 80,
                     client.getWindow().getScreenHeight() / 2.0 + 80);
             check(!client.options.keyAttack.isDown(), "Drag leaked into attack"); return null;
@@ -163,6 +167,21 @@ public final class SelectionEditingChecks {
             check(region.getPos1().equals(p1), "Reversed Pos1 lost identity");
             check(region.getPos2().equals(p2.add(-2, 0, 0)), "Reversed Pos2 lost identity"); return null;
         });
+        select(false); aim(Face.EAST, false); start(Face.EAST);
+        Point preciseCorner = original.corner(Corner.EAST_UP_SOUTH);
+        aimAt(preciseCorner.add(new Point(9, 7, 11)), preciseCorner);
+        onClient(() -> {
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+            check(editing.cursorDrag() && !client.mouseHandler.isMouseGrabbed(), "Held corner did not preserve precise cursor dragging");
+            nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), client.getWindow().getScreenWidth() / 2.0 + 80,
+                    client.getWindow().getScreenHeight() / 2.0 - 60);
+            check(!editing.draft().equals(original), "Precise corner cursor did not change bounds");
+            nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(256, 0, 0));
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+            check(client.mouseHandler.isMouseGrabbed(), "Precise corner cancel did not restore cursor");
+            return null;
+        });
+        release(); check(serverBounds().equals(original), "Precise corner cancellation committed");
         for (Corner corner : Corner.values()) {
             select(corner.ordinal() % 2 == 0);
             List<BlockVector3> ordered = onServer(() -> {
@@ -175,12 +194,45 @@ public final class SelectionEditingChecks {
             await(() -> editing.visible() && !editing.active(), "passive corner " + corner);
             onClient(() -> { nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1); return null; });
             check(onClient(editing::dragging), "Direct corner did not drag: " + corner);
+            double beforeYaw = onClient(() -> client.player.getYRot());
             onClient(() -> {
                 check(!hold.isDown(), "Direct corner needed hold key");
-                nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), client.getWindow().getScreenWidth() / 2.0 + 80,
-                        client.getWindow().getScreenHeight() / 2.0 - 60);
+                check(!editing.cursorDrag() && client.mouseHandler.isMouseGrabbed(), "Direct corner locked camera or released cursor");
+                check(editing.draft().equals(original), "Direct corner jumped on initial grab");
+                // Seed native's first-move guard, then send a relative delta instead of cancelling two absolute moves.
+                double x = client.mouseHandler.xpos(), y = client.mouseHandler.ypos();
+                nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y);
+                nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x + 80, y - 60);
+                nativeCall(client.mouseHandler, "handleAccumulatedMovement");
                 return null;
             });
+            pause(250);
+            check(Math.abs(onClient(() -> client.player.getYRot()) - beforeYaw) > 0.05, "Direct corner mouse did not turn camera");
+            Point beforeFlight = onClient(() -> new Point(client.player.getX(), client.player.getY(), client.player.getZ()));
+            onClient(() -> {
+                client.options.keyRight.setDown(true); client.options.keyJump.setDown(true); client.player.input.tick();
+                check(client.player.input.keyPresses.right() && client.player.input.keyPresses.jump(), "Direct corner suppressed flight controls");
+                return null;
+            });
+            pause(300);
+            onClient(() -> { client.options.keyRight.setDown(false); client.options.keyJump.setDown(false); return null; });
+            pause(150);
+            Point afterFlight = onClient(() -> new Point(client.player.getX(), client.player.getY(), client.player.getZ()));
+            check(afterFlight.subtract(beforeFlight).length() > 0.1 && afterFlight.y() > beforeFlight.y() + 0.05,
+                    "Direct corner froze movement or upward flight");
+            if (corner == Corner.EAST_UP_SOUTH) {
+                double height = onClient(() -> client.player.getY());
+                onClient(() -> { fast.setDown(true); client.options.keyShift.setDown(true); hold.setDown(true); return null; });
+                pause(250);
+                onClient(() -> {
+                    check(!editing.cursorDrag() && client.mouseHandler.isMouseGrabbed(), "Pressing hold key during free drag locked camera");
+                    check(!client.player.input.keyPresses.shift(), "Free corner Shift retained sneak input");
+                    check(client.player.getY() >= height - 0.05,
+                            "Free corner Shift lowered flying player: before=" + height + " after=" + client.player.getY());
+                    fast.setDown(false); client.options.keyShift.setDown(false); hold.setDown(false); return null;
+                });
+                pause(100);
+            }
             CuboidDraft cornerDraft = onClient(editing::draft);
             check(!cornerDraft.equals(original), "Corner drag did not change bounds: " + corner);
             check(cornerDraft.corner(corner.opposite()).equals(original.corner(corner.opposite())), "Corner moved opposite point");
@@ -285,7 +337,7 @@ public final class SelectionEditingChecks {
         await(reload::isDone, "restore language");
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
-        System.out.println("SELECTION EDIT VERIFY PASS: six clicked/remembered faces, eight direct corners, flight Shift, drag, cancel, stale, extending, isolation, clipboard, unchanged blocks/history");
+        System.out.println("SELECTION EDIT VERIFY PASS: default G, six clicked/remembered faces, eight live-camera flying corners, precise held drag, flight Shift, cancel, stale, extending, isolation, clipboard, unchanged blocks/history");
     }
     private void select(boolean extending) {
         onServer(() -> {

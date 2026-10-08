@@ -48,6 +48,7 @@ public final class SelectionEditController {
         return client.world == level && client.player == player && client.currentScreen == null && client.isWindowFocused();
     }
     public boolean dragging() { return dragging; }
+    public boolean cursorDrag() { return dragging && !directCorner; }
     public boolean visible() { return usable(MinecraftClient.getInstance()) && (active() || shown != null); }
     public boolean suppressSneak() { return active() && fastKey != null && fastKey.isPressed(); }
     public boolean pending() { return pending; }
@@ -108,7 +109,7 @@ public final class SelectionEditController {
         if (pending) return;
         if (!active && held && !latch) begin(client);
         if (!reading && ticks - lastReadTick >= 4) read(client);
-        if (dragging) client.player.setVelocity(net.minecraft.util.math.Vec3d.ZERO);
+        if (cursorDrag()) client.player.setVelocity(net.minecraft.util.math.Vec3d.ZERO);
     }
 
     private boolean usable(MinecraftClient client) {
@@ -159,7 +160,13 @@ public final class SelectionEditController {
         boolean blocked = (blockedButtons & bit) != 0;
         if (action == GLFW.GLFW_RELEASE) {
             blockedButtons &= ~bit;
-            if (button == 0 && dragging) { dragging = false; restoreCursor(); submit(); return true; }
+            if (button == 0 && dragging) {
+                if (directCorner) followCorner(renderer.view(MinecraftClient.getInstance()));
+                boolean captured = cursorDrag();
+                dragging = false;
+                if (captured) restoreCursor(); else clearConstruction(MinecraftClient.getInstance());
+                submit(); return true;
+            }
             // Releases of buttons held before editing must still clear vanilla's mouse flags.
             return blocked;
         }
@@ -173,7 +180,7 @@ public final class SelectionEditController {
             Corner corner = renderer.cornerHit(shown.bounds(), view);
             if (corner != null) {
                 begin(MinecraftClient.getInstance());
-                if (beginCorner(corner, view)) { directCorner = true; blockedButtons |= bit; return true; }
+                if (beginCorner(corner, view, true)) { blockedButtons |= bit; return true; }
                 cancel();
             }
         }
@@ -184,7 +191,7 @@ public final class SelectionEditController {
         MinecraftClient client = MinecraftClient.getInstance();
         SelectionEditRenderer.View view = renderer.view(client);
         Corner corner = renderer.cornerHit(draft, view);
-        if (corner != null) { beginCorner(corner, view); return; }
+        if (corner != null) { beginCorner(corner, view, false); return; }
         Face handle = renderer.handleHit(draft, view);
         Face face = handle != null ? handle : draft.intersect(view.eye(), view.forward());
         if (face == null) return;
@@ -194,20 +201,24 @@ public final class SelectionEditController {
         if (!Double.isFinite(start)) return;
         locked = handle; dragStart = start; capture(view);
     }
-    private boolean beginCorner(Corner corner, SelectionEditRenderer.View view) {
-        Point start = CuboidDraft.planePoint(view.eye(), view.forward(), draft.corner(corner), view.forward());
+    private boolean beginCorner(Corner corner, SelectionEditRenderer.View view, boolean direct) {
+        double distance = draft.corner(corner).subtract(view.eye()).dot(view.forward());
+        Point start = direct ? CuboidDraft.rayPoint(view.eye(), view.forward(), distance)
+                : CuboidDraft.planePoint(view.eye(), view.forward(), draft.corner(corner), view.forward());
         if (start == null) return false;
-        lockedCorner = corner; cornerDragStart = start; capture(view); return true;
+        lockedCorner = corner; cornerDragStart = start; directCorner = direct;
+        if (direct) dragStart = distance;
+        capture(view); return true;
     }
     private void capture(SelectionEditRenderer.View view) {
         MinecraftClient client = MinecraftClient.getInstance();
         dragView = view; dragging = true;
         dragWidth = client.getWindow().getWidth(); dragHeight = client.getWindow().getHeight();
         dragCamera = client.options.getPerspective();
-        client.mouse.unlockCursor();
+        if (!directCorner) client.mouse.unlockCursor();
     }
     public void move(double x, double y) {
-        if (!dragging || draft == null || !active() || !Double.isFinite(x) || !Double.isFinite(y)) return;
+        if (!cursorDrag() || draft == null || !active() || !Double.isFinite(x) || !Double.isFinite(y)) return;
         MinecraftClient client = MinecraftClient.getInstance();
         Point ray = dragView.ray(x / client.getWindow().getWidth(), y / client.getWindow().getHeight());
         int step = fastKey != null && fastKey.isPressed() ? options.fastStep() : options.step();
@@ -215,8 +226,7 @@ public final class SelectionEditController {
         if (lockedCorner != null) {
             Point position = CuboidDraft.planePoint(dragView.eye(), ray, origin.bounds().corner(lockedCorner), dragView.forward());
             if (position == null) return;
-            next = origin.bounds().moveCorner(lockedCorner, position.subtract(cornerDragStart), step, origin.minY(), origin.maxY());
-            for (int axis = 0; axis < 3; axis++) if (!permitted(next, lockedCorner.face(axis))) return;
+            updateCorner(position); return;
         } else {
             double parameter = CuboidDraft.axisParameter(dragView.eye(), ray, origin.bounds().center(locked), locked);
             if (!Double.isFinite(parameter)) return;
@@ -225,6 +235,16 @@ public final class SelectionEditController {
             if (!permitted(next, locked)) return;
         }
         draft = next;
+    }
+    private void followCorner(SelectionEditRenderer.View view) {
+        updateCorner(CuboidDraft.rayPoint(view.eye(), view.forward(), dragStart));
+    }
+    private void updateCorner(Point position) {
+        if (position == null || lockedCorner == null || origin == null || cornerDragStart == null) return;
+        int step = fastKey != null && fastKey.isPressed() ? options.fastStep() : options.step();
+        CuboidDraft next = origin.bounds().moveCorner(lockedCorner, position.subtract(cornerDragStart), step, origin.minY(), origin.maxY());
+        for (int axis = 0; axis < 3; axis++) if (!permitted(next, lockedCorner.face(axis))) return;
+        if (!next.equals(draft)) draft = next;
     }
     private boolean permitted(CuboidDraft next, Face face) {
         long delta = ((long) next.boundary(face) - origin.bounds().boundary(face)) * face.sign;
@@ -251,11 +271,11 @@ public final class SelectionEditController {
         });
     }
     public void cancel() {
-        boolean wasDragging = dragging;
+        boolean captured = cursorDrag(), wasDragging = dragging;
         dragging = false; directCorner = false; active = false; reading = false; latch = true; ++epoch;
         dragView = null; cornerDragStart = null;
         if (!pending) { origin = null; draft = null; locked = null; lockedCorner = null; }
-        if (wasDragging) restoreCursor();
+        if (captured) restoreCursor(); else if (wasDragging) clearConstruction(MinecraftClient.getInstance());
     }
     private static void restoreCursor() {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -281,7 +301,8 @@ public final class SelectionEditController {
     public void renderWorld() {
         if (!visible()) return;
         MinecraftClient client = MinecraftClient.getInstance();
-        SelectionEditRenderer.View view = dragging ? dragView : renderer.view(client);
+        SelectionEditRenderer.View view = cursorDrag() ? dragView : renderer.view(client);
+        if (dragging && directCorner) followCorner(view);
         if (active() && draft != null) renderer.world(origin.bounds(), draft, lockedCorner == null ? target() : null,
                 lockedCorner, view, appeared, pending);
         else if (shown != null) renderer.corners(shown.bounds(), renderer.cornerHit(shown.bounds(), view), view, appeared, false);

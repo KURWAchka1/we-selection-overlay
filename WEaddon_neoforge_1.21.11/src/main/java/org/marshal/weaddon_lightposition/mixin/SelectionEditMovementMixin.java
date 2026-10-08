@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class SelectionEditMovementMixin extends ClientInput {
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void weso$freeze(CallbackInfo ci) {
-        if (!SelectionEditController.instance().dragging()) return;
+        if (!SelectionEditController.instance().cursorDrag()) return;
         keyPresses = Input.EMPTY; moveVector = Vec2.ZERO; ci.cancel();
     }
 

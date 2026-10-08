@@ -13,6 +13,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class SelectionEditPlayerMixin {
     @Inject(method = "move", at = @At("HEAD"), cancellable = true)
     private void weso$holdPosition(MovementType type, Vec3d movement, CallbackInfo ci) {
-        if (SelectionEditController.instance().dragging()) ci.cancel();
+        if (SelectionEditController.instance().cursorDrag()) ci.cancel();
     }
 }

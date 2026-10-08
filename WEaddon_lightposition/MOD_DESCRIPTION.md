@@ -111,14 +111,14 @@ Customize how the overlay looks directly in-game:
 
 ## Edit Selection Bounds
 
-Drag visible corner markers, or hold a configurable key to click a face and
-resize it with the wheel/handle. The chosen face stays highlighted and remembered.
+Grab corner markers while freely looking/flying, or hold `G` to precisely drag
+a handle/corner or click a face and resize it with the wheel. The chosen face stays highlighted and remembered.
 A small HUD shows dimensions, volume, and offsets.
 
 * Configurable normal/fast steps and snapped dragging
 * Shift speeds up editing without lowering you in flight
 * Release to apply; Escape cancels an unfinished edit
-* Disabled by default, with no assigned hold key
+* Disabled by default; configurable hold key defaults to `G`
 
 Requires integrated singleplayer WorldEdit and a complete cuboid or extending
 cuboid. Changes selection bounds only, not world blocks.

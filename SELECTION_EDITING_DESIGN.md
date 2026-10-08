@@ -22,21 +22,21 @@ plugin, custom editing protocol or automatic chat-command fallback.
 ## Interaction
 
 Use direct corner dragging plus a temporary hold-to-edit key for face controls.
-The feature is opt-in; start with an unassigned native keybind to avoid taking
-another mod's shortcut. Expose its availability/settings in the compact O menu.
-The hold key remains unassigned by default. Left Shift is the configurable
+The feature is opt-in. Expose its availability/settings in the compact O menu.
+The native hold key defaults to G; Minecraft retains existing custom assignments.
+Left Shift is the configurable
 fast modifier; default steps are 1 and 8 blocks.
 
 | State/action | Behavior |
 | --- | --- |
 | Feature disabled | No markers, HUD, selection reads or mouse interception. |
 | Enabled, key not held | Show eight corner markers for a ready cuboid. Coalesce authoritative reads; intercept LMB only on a marker. No extra HUD or hotbar-wheel capture. |
-| Left-drag a corner | Aim at a marker, press LMB and drag without a hold key. Snap the captured corner in the captured camera's view plane; keep the opposite corner fixed. Release LMB to commit once. |
+| Left-drag a corner without the edit key | Aim at a marker and hold LMB. Keep normal camera/flight controls; the corner follows the live view ray at its original grab distance, with the initial off-center offset retained. Snap its coordinates and keep the opposite corner fixed. Release LMB to commit once. |
 | Hold edit key | Show face handles and a small dimensions HUD. Start with the previously clicked face (UP initially). Movement/look remain available until a drag begins. |
 | Click a face | Select that side at any visible distance before resizing. Accent its perimeter/handle. Camera movement alone never changes the remembered choice. Intersection works even when the center handle is outside the viewport. |
 | Mouse wheel | Outward/inward resize of the targeted face by the normal step. Lock that face for the gesture. Update only the local draft. Release the edit key to commit once. |
 | Fast modifier | Use the configurable fast step only during editing. Shift does not sneak or lower a flying player while serving as the active modifier; vanilla behavior returns on exit. |
-| Left-drag a handle | Capture one face and axis, temporarily release the cursor and freeze camera rotation/movement. Release LMB to commit once; restore mouse state without a camera jump. |
+| Left-drag a handle/corner while holding the edit key | Capture one face axis or the corner's view plane, temporarily release the cursor and freeze camera rotation/movement. Release LMB to commit once; restore mouse state without a camera jump. |
 | Escape | Cancel an uncommitted draft immediately, hide the gesture HUD/face handles, and require key release before hold-mode re-entry. Enabled corner markers remain available. |
 | Release edit key during a hold-mode drag | Cancel the incomplete drag. Direct corner drags do not require that key. Do not forward a still-held mouse button into an attack. |
 | Chat/menu, lost focus, disconnect, changed world or changed authoritative selection | Cancel the draft; never treat these interruptions as a commit. |
@@ -55,8 +55,12 @@ axes. Corner dragging changes its three adjoining sides together; the opposite
 corner stays fixed. Every coordinate snaps to the configured block step.
 The face cannot cross the opposite face: the minimum dimension is one block.
 Wheel direction is always outward/inward, independent of camera orientation.
-Dragging uses the captured world axis and camera projection, not camera yaw
-heuristics. For a nearly end-on axis, do not allow an unstable jump: use the
+Precise hold-mode dragging uses the captured world axis and camera projection,
+not camera yaw heuristics. Free corner dragging instead uses the current camera
+ray at a fixed captured depth, avoiding view-plane singularities during turns.
+It updates only the draft during world rendering, with a final update on release;
+movement input, camera capture and velocity are not overridden in this mode.
+For a nearly end-on face axis, do not allow an unstable jump: use the
 wheel as the reliable fallback. Integer snapping must behave consistently at
 negative coordinates, from inside the selection and on all six faces.
 
@@ -213,8 +217,10 @@ Do not add release notes or mark the milestone complete based only on compilatio
   revalidates session, selector identity, ordered corners, world and permissions.
   The source's weak snapshot cache cannot keep a closed world alive; changed
   player/world identity clears pending draft references and invalidates callbacks.
-- Outside hold mode, only a marker hit starts input capture. Dragging captures the camera
-  projection, stops movement and releases the cursor. Resize/camera-mode changes
+- Outside hold mode, only a marker hit captures LMB for a live-camera corner
+  gesture. Hold-mode dragging captures the camera projection, stops movement
+  and releases the cursor. The gesture type is fixed at capture, so pressing G
+  halfway through a free drag does not unexpectedly lock the camera. Resize/camera-mode changes
   also cancel the draft. Minecraft's early-return first mouse event is handled.
 - Both universal packagers register the hooks explicitly. Artifact tests check
   those registration lists, not merely the presence of mixin class files.

@@ -11,7 +11,7 @@ boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
 1.4 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,440,525 bytes (Fabric) and 1,412,194 bytes
+The archived release outputs are 1,442,387 bytes (Fabric) and 1,414,003 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -198,7 +198,11 @@ through distant native LMB selection and wheel input. UP is the initial choice;
 re-entry remembers the clicked face, and looking around does not retarget it.
 Native handle dragging and release commit remain available.
 All eight corners additionally drag/commit without a hold key, with alternating
-standard/extending selectors. The opposite corner and the native initial
+standard/extending selectors. Native mouse motion changes camera yaw, sideways
+movement and upward flight remain available, and the live draft follows the
+moving camera. The initial grab does not jump. Held face/corner drags still
+release the cursor and suppress movement for precise projection-based editing.
+The opposite corner and the native initial
 Pos1/Pos2 ordering are preserved; extending selectors may start with a different
 ordering from standard selectors. Normal off-marker clicks/wheel remain uncaptured.
 The server's region stays unchanged during drafting. Fast contraction
@@ -207,7 +211,9 @@ transaction retains the identity of reversed primary/secondary corners.
 
 The default Shift modifier clears the native sneak input during editing; the
 flying fixture's height stays unchanged. Outside editing, vanilla sneak input
-is retained. Corner Escape cancels without leaking an attack or committing.
+is retained. A free corner gesture also checks Shift after flight and verifies
+that pressing the hold key halfway through does not switch gesture modes.
+Corner Escape cancels without leaking an attack or committing.
 Native Escape cancels without opening the pause menu. Releasing the editing key
 during a drag restores the captured cursor without applying the draft or leaking
 an attack. Opening chat cancels. Replacing the selector with an identical-looking
@@ -233,17 +239,19 @@ The existing command regressions run alongside these checks, including large
 grass replacement and incremental chunk arrival; no command-engine changes were
 needed for editing. Tests and temporary configs are confined to disposable worlds.
 
-The shared domain suite passes 30 cases covering face signs, inside/outside rays,
+The shared domain suite passes 41 cases covering face signs, inside/outside rays,
 axis dragging from either camera side, end-on rejection, world boundaries,
 minimum size, integer overflow, large volume, configuration defaults/clamps,
 all corner signs/opposite-point preservation, step snapping, captured plane
-projection and huge corner offsets without arithmetic overflow.
+projection, live-camera translation/turning at captured depth, off-center grabs,
+invalid rays and huge corner offsets without arithmetic overflow.
 Both packagers also assert the editing classes and explicit active-mixin registry
 for each relocated runtime, including the 1.21.11 FOV accessor.
 
 The 26.2 Fabric layout fixture passes without installed WorldEdit as well; the
 editing toggle is unavailable and ordinary menus still work. Editing is off and
-its hold key is unassigned in fresh configs. Only complete native cuboid/extending
+its native hold key defaults to G, without overwriting saved assignments. All six
+WorldEdit-enabled fixtures check the native default key. Only complete native cuboid/extending
 selections in the integrated local WorldEdit server are supported at this stage.
 
 No new uncapped FPS benchmark is claimed for editing. Its geometry and hit tests

@@ -64,6 +64,14 @@ public record CuboidDraft(int minX, int minY, int minZ, int maxX, int maxY, int 
         return (long) Math.max(Long.MIN_VALUE, Math.min(Long.MAX_VALUE, snapped));
     }
 
+    /** A grabbed marker follows the live view ray at its original depth, without a view-plane singularity. */
+    public static Point rayPoint(Point eye, Point direction, double distance) {
+        double length = direction.length();
+        if (!Double.isFinite(distance) || distance <= 0 || !Double.isFinite(length) || length < 1e-12) return null;
+        Point result = eye.add(direction.scale(distance / length));
+        return Double.isFinite(result.x) && Double.isFinite(result.y) && Double.isFinite(result.z) ? result : null;
+    }
+
     /** Captured view-plane dragging keeps depth stable and never guesses from camera yaw. */
     public static Point planePoint(Point eye, Point direction, Point planeOrigin, Point normal) {
         double denominator = direction.dot(normal);

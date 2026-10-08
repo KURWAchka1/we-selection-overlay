@@ -6,8 +6,11 @@
   six face handles, wheel nudging and snapped dragging, with a compact HUD.
 - Click a face at a distance while holding the edit key. The selected side is
   highlighted and remembered; looking around does not switch it.
+- Grab a corner without the edit key and move it while freely looking/flying.
+  Hold the edit key for precise free-cursor handle/corner dragging instead.
 - Configurable hold key, normal step and fast step. Editing starts disabled
-  with no assigned hold key; the fast modifier defaults to Left Shift.
+  with G as the default hold key; the fast modifier defaults to Left Shift.
+  Existing custom bindings remain unchanged.
 - Shift accelerates editing without lowering the player in flight. Normal
   Shift behavior returns outside editing.
 - One authoritative selection adjustment on release, Escape/interruption

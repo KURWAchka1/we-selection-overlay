@@ -59,9 +59,13 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replace(/(?<![.\w])client\.screen\b/g, 'client.currentScreen').replaceAll('getSingleplayerServer()', 'getServer()').replaceAll('getPlayerList()', 'getPlayerManager()').replaceAll('getPlayers()', 'getPlayerList()')
     .replaceAll('FabricAdapter.get().fromNativePlayer(', 'FabricAdapter.adaptPlayer(')
     .replaceAll('client.mouseHandler', 'client.mouse').replaceAll('client.keyboardHandler', 'client.keyboard')
+    .replaceAll('client.mouse.xpos()', 'client.mouse.getX()').replaceAll('client.mouse.ypos()', 'client.mouse.getY()')
     .replaceAll('getWindow().handle()', 'getWindow().getHandle()').replaceAll('getScreenWidth()', 'getWidth()').replaceAll('getScreenHeight()', 'getHeight()')
     .replaceAll('.setDown(', '.setPressed(').replaceAll('.isDown()', '.isPressed()').replaceAll('isMouseGrabbed()', 'isCursorLocked()')
     .replaceAll('client.options.keyAttack', 'client.options.attackKey')
+    .replaceAll('client.options.keyRight', 'client.options.rightKey').replaceAll('client.options.keyJump', 'client.options.jumpKey')
+    .replaceAll('.input.keyPresses.right()', '.input.playerInput.right()').replaceAll('.input.keyPresses.jump()', '.input.playerInput.jump()')
+    .replaceAll('getYRot()', 'getYaw()').replaceAll('.getDefaultKey().getValue()', '.getDefaultKey().getCode()')
     .replaceAll('client.options.keyShift', 'client.options.sneakKey').replaceAll('.input.keyPresses.shift()', '.input.playerInput.sneak()')
     .replaceAll('net.minecraft.client.gui.screens.ChatScreen', 'net.minecraft.client.gui.screen.ChatScreen')
     .replaceAll('net.minecraft.client.gui.screens.Screen', 'net.minecraft.client.gui.screen.Screen')
@@ -75,6 +79,7 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('getGuiScaledWidth()', 'getScaledWidth()')
     // Production Yarn uses intermediary names; reflection strings are not remapped by Loom.
     .replaceAll('"onScroll"', '"method_1598"').replaceAll('"onButton"', '"method_1601"').replaceAll('"onMove"', '"method_1600"').replaceAll('"keyPress"', '"method_1466"')
+    .replaceAll('"handleAccumulatedMovement"', '"method_55793"')
     .replaceAll('"getRowTop"', '"method_25337"')
     .replaceAll('"setScrollAmount"', '"method_44382"')
     .replace('server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),', 'server.getCommandManager().parseAndExecute(server.getCommandSource(),');
