@@ -7,6 +7,10 @@ this proposal. [SELECTION_EDITING_DESIGN.md](SELECTION_EDITING_DESIGN.md) record
 the implemented baseline; [SELECTION_MOVEMENT_REDESIGN.md](SELECTION_MOVEMENT_REDESIGN.md)
 is the shorter, revised Move specification.
 
+Follow-up ready-tool research: [reference shortlist and adoption decisions](SELECTION_INTERACTION_REFERENCES.md).
+Its additional wheel/precision candidates need prototype comparison before
+replacing the corresponding rules below.
+
 ## Conclusion
 
 Keep two tools: Move and Resize. Do not turn the addon into a general 3D editor.
