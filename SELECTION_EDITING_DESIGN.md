@@ -5,8 +5,9 @@ Status: implemented and six-runtime tested for the 1.8.0 development line,
 [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md). See TESTING.md for verified coverage
 and remaining integration checks.
 
-Proposed Move-only redesign: [free-camera carrying](SELECTION_MOVEMENT_REDESIGN.md).
-It is a research/design proposal; the behavior below remains the implemented baseline.
+Proposed two-tool revision: [Move and Resize audit](SELECTION_INTERACTION_AUDIT.md),
+with a shorter [free-camera transportation proposal](SELECTION_MOVEMENT_REDESIGN.md).
+These are research/design proposals; the behavior below remains the implemented baseline.
 
 ## Goal and scope
 
