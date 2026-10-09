@@ -6,6 +6,10 @@ game installation or new runtime/performance tests. This supplements the
 [Move proposal](SELECTION_MOVEMENT_REDESIGN.md); it does not mark either as
 implemented or prove the usability of our player-root carrying candidate.
 
+Follow-up: [task comparison and community evidence](SELECTION_INTERACTION_COMPARISON.md)
+adds a source ledger, contrary preferences, Axiom Pilot / Scroll for WorldEdit
+references and a prototype evaluation plan. It is research, not user-test data.
+
 ## Shortlist
 
 | Reference | Why it fits | Adopt or evaluate | Do not copy |

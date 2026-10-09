@@ -6,6 +6,11 @@ line after auditing both Move and Resize. The implemented baseline remains in
 alternatives, risk register and acceptance matrix are in
 [SELECTION_INTERACTION_AUDIT.md](SELECTION_INTERACTION_AUDIT.md).
 
+The [comparative study](SELECTION_INTERACTION_COMPARISON.md) evaluates this carry
+candidate against constrained dragging and exact nudges using documented tools
+and public user reports. Carry is not a proven default; the study proposes
+cardinal wheel input for comparison with the continuous-vector rule below.
+
 ## Revised Decision
 
 Make Move a first-person grab-and-transport tool. A volumetric arrow cross is

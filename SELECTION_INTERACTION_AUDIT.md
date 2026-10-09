@@ -11,6 +11,10 @@ Follow-up ready-tool research: [reference shortlist and adoption decisions](SELE
 Its additional wheel/precision candidates need prototype comparison before
 replacing the corresponding rules below.
 
+Further research: [task comparison and community evidence](SELECTION_INTERACTION_COMPARISON.md).
+Its cardinal-wheel refinement remains a comparison candidate; the continuous
+wheel rules here and the current runtime behavior are not silently replaced.
+
 ## Conclusion
 
 Keep two tools: Move and Resize. Do not turn the addon into a general 3D editor.
