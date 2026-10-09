@@ -1,13 +1,17 @@
 # Selection manipulation: comparative research
 
-Reviewed 2026-10-09 for the 1.8.0 development line. DESIGN ONLY: no production
-implementation, dependency changes, game installation, user experiment or new
-runtime/performance tests. This is a desk study, not a claim of consensus.
+Historical desk study, reviewed 2026-10-09 for the 1.8.0 development line.
+The study itself made no production/dependency changes, game installation,
+user experiment or runtime/performance tests. It is not a claim of consensus.
 
 Read alongside the [code audit](SELECTION_INTERACTION_AUDIT.md),
 [ready-tool references](SELECTION_INTERACTION_REFERENCES.md) and
 [Move candidate](SELECTION_MOVEMENT_REDESIGN.md). The
-[implemented baseline](SELECTION_EDITING_DESIGN.md) remains unchanged.
+[implementation record](SELECTION_EDITING_DESIGN.md) tracks subsequent changes.
+
+Implementation follow-up: the [task-first decision](SELECTION_WORKFLOW_DECISION.md)
+selects a first Move carry slice and records which earlier rules are superseded
+or deferred. The study itself is historical research, not runtime validation.
 
 ## Executive Decision
 

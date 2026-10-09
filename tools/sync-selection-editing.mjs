@@ -92,6 +92,7 @@ for (const [name, version, neo] of targets) {
       code = code.replaceAll('camera.getFov()', '((org.marshal.weaddon_lightposition.mixin.SelectionEditFovAccessor) client.gameRenderer).weso$editFov(camera, 1.0f, true)')
         .replaceAll('GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.28f), 1), true)', 'GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.28f), 1))')
         .replaceAll('GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.65f), 1), true)', 'GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.65f), 1))');
+      code = code.replaceAll('GizmoStyle.stroke(color, 1.5f), true)', 'GizmoStyle.stroke(color, 1.5f))');
       if (neo) code = code.replaceAll('NeoForgeAdapter.get().fromNativePlayer(', 'NeoForgeAdapter.adaptPlayer(');
     }
     if (version === '1.21.11') code = code.replaceAll('GuiGraphicsExtractor', 'GuiGraphics').replaceAll('extractWidgetRenderState', 'renderWidget');

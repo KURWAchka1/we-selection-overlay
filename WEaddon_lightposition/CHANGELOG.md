@@ -11,16 +11,19 @@
 - Grab a corner without the edit key and move it while freely looking/flying.
   Free grabs always use one-block steps; the explicit editor uses configurable steps.
 - Move the whole selection without resizing it or moving world blocks, with
-  snapped view-plane dragging and wheel nudges along the camera's dominant axis.
+  free-camera walking/flight carry, one-block snapping and grip-locked cardinal
+  wheel nudges. Looking around alone does not move the box. The boundary or
+  center marker can be grabbed; idle wheel retains native hotbar behavior.
 - Tap G to enter the chosen tool; tap again to apply the complete draft and exit.
   Hold G for 0.4 seconds to choose Resize or Move in a centered radial menu.
   A bounded pointer replaces the cursor; release over the empty center to cancel.
 - Configurable edit/menu key, normal step and fast step. Editing starts disabled
   with G as the default key; the fast modifier defaults to Left Shift.
   Existing custom bindings remain unchanged.
-- The explicit editor freezes the camera. LMB release finishes only a local drag;
+- Precise Resize freezes the camera; Move retains normal look, movement and
+  Shift descent. LMB release finishes only a local explicit-editor drag;
   Escape cancels the complete uncommitted draft in both tools.
-- Shift accelerates explicit editing without lowering the player in flight.
+- Shift accelerates precise Resize without lowering the player in flight.
   Free corner dragging retains normal flight descent and one-block steps.
 - One authoritative selection adjustment on apply, Escape/interruption
   cancellation and stale-selection protection through WorldEdit's public API.

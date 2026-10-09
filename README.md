@@ -71,6 +71,7 @@ and preparation without opening a game window.
 - [Command preview behavior and limits](COMMAND_PREVIEW.md)
 - [Feature roadmap](FEATURE_ROADMAP.md)
 - [Selection editing interaction, implementation, and verification](SELECTION_EDITING_DESIGN.md)
+- [Task-first selection workflow and staged refinement](SELECTION_WORKFLOW_DECISION.md)
 - [UI redesign research and implementation contract](UI_REDESIGN_RESEARCH.md)
 - [UI screenshots, tests, and performance measurements](UI_VALIDATION.md)
 - [Fabric packaging and tests](WEaddon_fabric_universal_1.21.11-26.2/README.md)

@@ -11,7 +11,7 @@ boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
 1.4 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,505,633 bytes (Fabric) and 1,477,035 bytes
+The archived release outputs are 1,515,587 bytes (Fabric) and 1,486,889 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -200,8 +200,8 @@ The command/editing matrix loads the production universal JARs on the same six
 WorldEdit-enabled targets listed above. Each runtime checks all six cuboid faces
 through distant native LMB selection and wheel input. UP is the initial choice;
 re-entry remembers the clicked face, and looking around does not retarget it.
-A short G tap releases the cursor and freezes camera/movement, even before a
-drag. Native distant face clicks and projected cursor picking use that captured
+A short G tap in Resize releases the cursor and freezes camera/movement, even
+before a drag. Native distant face clicks and projected cursor picking use that captured
 view. LMB release leaves a composed local draft active; a second corner drag
 starts from the current draft without jumping or losing the first face edit.
 The server bounds remain unchanged between these drags. A second short tap
@@ -221,7 +221,7 @@ center cancellation, Escape while held and cursor
 restoration. Actual ring screenshots cover requested scales 2x/3x/4x. Opening
 and cancelling the menu during editing must leave the composed draft unchanged;
 choosing a mode must not enter editing or apply a draft automatically.
-Move checks snapped view-plane dragging and depth-wheel nudges, unchanged
+Move checks root-displacement carry and grip-locked cardinal wheel nudges, unchanged
 dimensions, reversed ordered corners and ExtendingCuboidRegionSelector identity.
 Separate native transactions reject a missing shift permission, allow a
 shift-only actor to move and deny that actor a resize. Both tools remain local
@@ -229,7 +229,7 @@ selection adjustments, not world-block operations.
 All eight corners additionally drag/commit without a hold key, with alternating
 standard/extending selectors. Native mouse motion changes camera yaw, sideways
 movement and upward flight remain available, and the live draft follows the
-moving camera. The initial grab does not jump. Explicit-editor face/corner drags
+moving camera. The initial grab does not jump. Explicit Resize face/corner drags
 release the cursor and suppress movement for precise projection-based editing.
 Within each captured free-corner gesture, fixed-position probes verify one-block
 snapping despite configured 4/8-block steps, the fast modifier, and pressing the
@@ -243,7 +243,7 @@ The server's region stays unchanged during drafting. Fast contraction
 stops at one block, preserves ExtendingCuboidRegionSelector, and a native
 transaction retains the identity of reversed primary/secondary corners.
 
-The default Shift modifier clears native sneak input only in the explicit editor; the
+The default Shift modifier clears native sneak input only in explicit Resize; the
 flying fixture's height stays unchanged. In free corner dragging, the fixture
 checks native Shift input and an actual height decrease after upward flight,
 even with the hold key pressed midway. This does not switch gesture modes or
@@ -276,7 +276,7 @@ The existing command regressions run alongside these checks, including large
 grass replacement and incremental chunk arrival; no command-engine changes were
 needed for editing. Tests and temporary configs are confined to disposable worlds.
 
-The shared domain suite passes 58 cases covering face signs, inside/outside rays,
+The shared domain suite passes 80 cases covering face signs, inside/outside rays,
 zero-depth face intersections, axis dragging from either camera side, world boundaries,
 minimum size, integer overflow, large volume, configuration defaults/clamps,
 all corner signs/opposite-point preservation, step snapping, captured plane
@@ -298,6 +298,47 @@ are fixed-size work, independent of selection volume; it does not scan blocks.
 Live focus loss, disconnect during a pending commit, third-person camera changes,
 custom mouse/controller bindings, modpacks, and remote-server editing still need
 separate manual review. Remote CUI selection display is not remote editing.
+
+### Move Carry Regression
+
+On 2026-10-09, all six production-artifact command/editing/palette runs passed
+after the first [task-first Move slice](SELECTION_WORKFLOW_DECISION.md). Native
+LMB grips work 0.2 blocks outside, 0.2 blocks inside and 256 blocks away without
+a pickup jump. Native mouse look changes yaw without translating a stationary
+box; actual root displacement translates it. Spectator flight descends with
+Shift during a grip. This is automated native-flight coverage, not manual
+Creative/Survival ergonomic acceptance.
+
+Four fractional wheel events compose one exact signed-axis nudge. Idle/released
+Move leaves the wheel native. LMB release retains the draft, radial cancellation
+preserves it, Escape cancels and G applies even with LMB held. The trailing
+release cannot attack. After G, the test checks both Minecraft's grab flag and
+actual GLFW_CURSOR_DISABLED, covering the native grabMouse early-return case.
+The existing stale-selection, permissions, isolation, clipboard and unchanged
+world/history assertions also pass. No command-engine change was needed.
+
+The 22 new shared carry cases cover re-grabbing, all six signed axes, fractional
+motion, independent-axis clamping, immediate reversal after rejected overshoot,
+nonfinite data, huge regions and long travel. Both packagers pass their tests:
+90 Fabric-side and 8 NeoForge-side executions, including the shared suite on
+Fabric (not 98 distinct domain cases). All six runtime builds also succeeded.
+
+Logs are in `build/command-validation/`; carry screenshots are in each runtime's
+`run-command-test/screenshots/` or the NeoForge packager's versioned equivalent.
+The first NeoForge combined run exhausted its former 2,400-tick overall fixture
+budget at the final command; all three NeoForge reruns passed with a bounded
+4,800-tick budget and unchanged assertions. Individual editing awaits still
+time out after ten seconds. Screenshot capture waits for the real-time HUD fade,
+not only accelerated game ticks. No production delay was added.
+The focused Fabric 26.1 recapture passed; all six final carry screenshots pass
+`tools/check-selection-pixels.ps1` for both a dark panel and actual bright text.
+This pixel predicate is a blank/covered-text regression check, not OCR or proof
+of every locale/layout. The 1280x720, 2x carry images were also visually inspected.
+
+This slice has no new controlled frame-time measurement. 4K/DPI, live server
+corrections/teleports, gravity/knockback ergonomics, modpack input and human task
+comparisons remain release gates. Resize refinements, numeric input, local
+gesture history and mixed-operation semantics are not claimed implemented.
 
 ## Palette History
 

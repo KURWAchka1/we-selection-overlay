@@ -1,9 +1,10 @@
 # Selection interaction audit and revised proposal
 
-Status: DESIGN ONLY, not implemented or game-tested. Reviewed 2026-10-09 against
+Historical design audit, reviewed 2026-10-09 against
 commit `4504021a785f44376dea506d66e37c61810c341a` on the 1.8.0 development line.
-No production code, test code, settings, release notes or JARs are changed by
-this proposal. [SELECTION_EDITING_DESIGN.md](SELECTION_EDITING_DESIGN.md) records
+The original audit changed no production code, tests, settings or JARs. Its
+subsequent first Move slice is recorded separately below; the full proposal is
+not implemented or game-tested. [SELECTION_EDITING_DESIGN.md](SELECTION_EDITING_DESIGN.md) records
 the implemented baseline; [SELECTION_MOVEMENT_REDESIGN.md](SELECTION_MOVEMENT_REDESIGN.md)
 is the shorter, revised Move specification.
 
@@ -12,8 +13,13 @@ Its additional wheel/precision candidates need prototype comparison before
 replacing the corresponding rules below.
 
 Further research: [task comparison and community evidence](SELECTION_INTERACTION_COMPARISON.md).
-Its cardinal-wheel refinement remains a comparison candidate; the continuous
-wheel rules here and the current runtime behavior are not silently replaced.
+Its cardinal-wheel refinement was selected for the later first Move slice;
+the continuous-wheel rules below remain historical alternatives.
+
+Implementation follow-up: [task-first decision](SELECTION_WORKFLOW_DECISION.md)
+specifies the first Move slice, cardinal grip-locked wheel and preserved quick
+corner semantics. Treat this audit as the original research proposal, not a
+claim that all its later Resize, numeric, history and permission work is done.
 
 ## Conclusion
 

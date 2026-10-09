@@ -61,6 +61,7 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('FabricAdapter.get().fromNativePlayer(', 'FabricAdapter.adaptPlayer(')
     .replaceAll('client.mouseHandler', 'client.mouse').replaceAll('client.keyboardHandler', 'client.keyboard')
     .replaceAll('client.mouse.xpos()', 'client.mouse.getX()').replaceAll('client.mouse.ypos()', 'client.mouse.getY()')
+    .replaceAll('client.player.setPos(', 'client.player.setPosition(')
     .replaceAll('getWindow().handle()', 'getWindow().getHandle()').replaceAll('getScreenWidth()', 'getWidth()').replaceAll('getScreenHeight()', 'getHeight()')
     .replaceAll('.setDown(', '.setPressed(').replaceAll('.isDown()', '.isPressed()').replaceAll('isMouseGrabbed()', 'isCursorLocked()')
     .replaceAll('client.options.keyAttack', 'client.options.attackKey')

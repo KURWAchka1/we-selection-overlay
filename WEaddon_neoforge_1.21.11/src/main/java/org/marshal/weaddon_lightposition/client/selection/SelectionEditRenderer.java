@@ -67,6 +67,32 @@ final class SelectionEditRenderer {
         }
         return hit;
     }
+    private static Point center(CuboidDraft bounds) {
+        return new Point((bounds.minX() + (double) bounds.maxX() + 1) / 2,
+                (bounds.minY() + (double) bounds.maxY() + 1) / 2, (bounds.minZ() + (double) bounds.maxZ() + 1) / 2);
+    }
+    Point moveHit(CuboidDraft bounds, View view) {
+        Point center = center(bounds);
+        if (Double.isFinite(view.hitDepth(center, view.forward(), 12))) return center;
+        Face face = bounds.intersect(view.eye(), view.forward());
+        if (face == null) return null;
+        double distance = (bounds.center(face).at(face.axis) - view.eye().at(face.axis)) / view.forward().at(face.axis);
+        return view.eye().add(view.forward().scale(Math.max(0, distance)));
+    }
+    void moveGrip(CuboidDraft bounds, View view, Point anchor, Face wheelAxis, long appeared) {
+        UiStyle style = UiStyle.current();
+        Point hover = anchor == null ? moveHit(bounds, view) : null;
+        Point point = anchor != null ? anchor : hover != null ? hover : center(bounds);
+        if (point.subtract(view.eye()).dot(view.forward()) <= 0.05) return;
+        double radius = view.radius(point, 5);
+        int color = tint(anchor != null || hover != null ? style.accent : style.text, fade(appeared));
+        Gizmos.cuboid(new AABB(point.x() - radius, point.y() - radius, point.z() - radius,
+                point.x() + radius, point.y() + radius, point.z() + radius), GizmoStyle.stroke(color, 1.5f)).setAlwaysOnTop();
+        if (wheelAxis != null) {
+            Point direction = new Point(wheelAxis.axis == 0 ? 1 : 0, wheelAxis.axis == 1 ? 1 : 0, wheelAxis.axis == 2 ? 1 : 0);
+            Gizmos.line(vec(point.subtract(direction.scale(radius * 3))), vec(point.add(direction.scale(radius * 3))), color, 1.5f).setAlwaysOnTop();
+        }
+    }
     void corners(CuboidDraft bounds, Corner target, View view, long appeared, boolean pending) {
         UiStyle style = UiStyle.current();
         float alpha = fade(appeared) * (pending ? 0.45f : 1);
@@ -110,7 +136,7 @@ final class SelectionEditRenderer {
         for (int i = 0; i < 4; i++) Gizmos.line(vec(corners[i]), vec(corners[(i + 1) % 4]), color, 1.75f).setAlwaysOnTop();
     }
 
-    void hud(GuiGraphics graphics, CuboidDraft draft, Face face, Corner corner, SelectionEditSnapshot origin, String reason, boolean pending, long appeared, boolean moving) {
+    void hud(GuiGraphics graphics, CuboidDraft draft, Face face, Corner corner, SelectionEditSnapshot origin, String reason, boolean pending, long appeared, boolean moving, Face wheelAxis) {
         Minecraft client = Minecraft.getInstance();
         int screenWidth = client.getWindow().getGuiScaledWidth(), screenHeight = client.getWindow().getGuiScaledHeight();
         if (screenWidth < 100 || screenHeight < 100) return;
@@ -118,6 +144,7 @@ final class SelectionEditRenderer {
         Component title = draft == null ? Component.translatable("selection_edit.worldedit_selection_overlay." + (reason.isEmpty() ? "reading" : reason))
                 : Component.translatable("selection_edit.worldedit_selection_overlay." + (moving ? "move" : "resize"))
                 .append("   " + draft.size(0) + " x " + draft.size(1) + " x " + draft.size(2));
+        if (moving && wheelAxis != null) title = title.copy().append("   " + wheelAxis.label());
         long offset = draft != null && face != null ? ((long) draft.boundary(face) - origin.bounds().boundary(face)) * face.sign : 0;
         Component detail = pending ? Component.translatable("selection_edit.worldedit_selection_overlay.applying")
                 : draft == null ? Component.empty() : Component.translatable("selection_edit.worldedit_selection_overlay.volume", draft.volume().toString())

@@ -398,7 +398,7 @@ public final class SelectionEditingChecks {
         await(reload::isDone, "restore language");
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
-        System.out.println("SELECTION EDIT VERIFY PASS: G tap toggle, close/inside six-face dragging, hidden-cursor radial/dead zone, whole selection shift, LMB retains draft, eight free-camera one-block corners, Shift, Escape, stale, isolation, clipboard, unchanged blocks/history");
+        System.out.println("SELECTION EDIT VERIFY PASS: G tap toggle, close/inside six-face dragging, hidden-cursor radial/dead zone, root carry/look/Shift/fractional wheel/near-inside-far grips, LMB retains draft, eight free-camera one-block corners, Escape, stale, isolation, clipboard, unchanged blocks/history");
     }
     private void closeFacesAndModes() {
         for (Face face : Face.values()) for (int side : new int[]{1, -1}) {
@@ -451,6 +451,57 @@ public final class SelectionEditingChecks {
         check(onClient(() -> client.mouseHandler.isMouseGrabbed()), "Radial center failed to restore cursor");
         chooseMode(SelectionEditMode.MOVE, true);
         check(onClient(editing::mode) == SelectionEditMode.MOVE && !onClient(editing::active), "Radial selection unexpectedly applied or activated");
+        for (double distance : new double[]{0.2, -0.2, 256}) {
+            select(false);
+            Point anchor = original.center(Face.EAST).add(new Point(0, 2, 2));
+            aimAt(anchor.add(new Point(distance, 0, 0)), anchor);
+            tap(); await(() -> editing.active() && editing.draft() != null, "near/inside/far carry");
+            onClient(() -> {
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+                check(editing.dragging() && editing.draft().equals(original), "Near/inside/far pickup missed or jumped: " + distance);
+                nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 1.0);
+                return null;
+            });
+            CuboidDraft nudge = onClient(editing::draft);
+            check(!nudge.equals(original), "Near/inside/far carry did not nudge");
+            release(); await(() -> !editing.pending(), "apply carry with LMB held");
+            onClient(() -> {
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+                check(client.mouseHandler.isMouseGrabbed() && !client.options.keyAttack.isDown(), "Carry G leaked a trailing attack");
+                check(org.lwjgl.glfw.GLFW.glfwGetInputMode(client.getWindow().handle(), org.lwjgl.glfw.GLFW.GLFW_CURSOR)
+                        == org.lwjgl.glfw.GLFW.GLFW_CURSOR_DISABLED, "Carry G left GLFW cursor unlocked despite native grab flag");
+                return null;
+            });
+            check(serverBounds().equals(nudge), "Carry G lost the final held-grip sample");
+        }
+        select(false); aim(Face.SOUTH, false); tap();
+        await(() -> editing.active() && editing.draft() != null, "carry flight entry");
+        double flightY = onClient(() -> {
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+            check(editing.dragging(), "Carry flight grip missed");
+            client.options.keyShift.setDown(true);
+            return client.player.getY();
+        });
+        pause(350);
+        onClient(() -> {
+            check(client.player.getY() < flightY - 0.1 && editing.dragging(), "Shift did not descend during carry");
+            client.options.keyShift.setDown(false);
+            return null;
+        });
+        onClient(() -> { client.gui.hud.getChat().clearMessages(false); return null; });
+        // Fabric's accelerated game ticks do not guarantee the real-time HUD fade has finished.
+        await(() -> System.nanoTime() - (long) field(editing, "appeared") >= 200_000_000L, "carry appearance");
+        onClient(() -> {
+            check(editing.active() && editing.dragging() && !editing.capturesCamera(), "Carry ended before screenshot");
+            return null;
+        });
+        screenshot.accept("selection-edit-carry");
+        onClient(() -> {
+            nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(256, 0, 0));
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+            return null;
+        });
+        check(serverBounds().equals(original), "Flight carry cancellation committed");
         select(true); aim(Face.EAST, true);
         List<BlockVector3> ordered = onServer(() -> {
             var r = (CuboidRegion) WorldEdit.getInstance().getSessionManager().get(actor()).getSelection(actor().getWorld());
@@ -458,15 +509,37 @@ public final class SelectionEditingChecks {
         });
         tap(); await(() -> editing.active() && editing.draft() != null, "move entry");
         onClient(() -> {
+            check(!editing.capturesCamera() && client.mouseHandler.isMouseGrabbed(), "Move entry captured camera");
+            check(!editing.scroll(1), "Idle Move captured hotbar wheel");
             double x = client.getWindow().getScreenWidth() / 2.0, y = client.getWindow().getScreenHeight() / 2.0;
-            nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y);
             nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
-            check(editing.draft().equals(original), "Move jumped on grab");
+            check(editing.dragging() && editing.draft().equals(original), "Move missed or jumped on grab");
+            check(!editing.cursorDrag() && !editing.capturesCamera(), "Carry took precise cursor ownership");
+            double yaw = client.player.getYRot();
+            nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y);
             nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x + 100, y - 80);
-            check(!editing.draft().equals(original), "Move failed to change origin");
+            nativeCall(client.mouseHandler, "handleAccumulatedMovement");
+            check(Math.abs(client.player.getYRot() - yaw) > 0.05, "Carry did not retain native mouse look");
+            call(editing, "followCarry");
+            check(editing.draft().equals(original), "Stationary look translated the selection");
+            client.options.keyRight.setDown(true); client.options.keyShift.setDown(true); client.player.input.tick();
+            check(client.player.input.keyPresses.right() && client.player.input.keyPresses.shift() && !editing.suppressSneak(), "Carry suppressed flight/Shift input");
+            client.options.keyRight.setDown(false); client.options.keyShift.setDown(false); client.player.input.tick();
+            // Same native root delta at any grab distance; no captured screen-plane dependency.
+            client.player.setPos(client.player.getX() + 12, client.player.getY() + 3, client.player.getZ() - 9);
+            call(editing, "followCarry");
+            check(editing.draft().equals(original.translate(new Point(12, 3, -9), 1, -64, 319)), "Carry did not follow root displacement");
+            Face wheel = (Face) call(field(editing, "carry"), "wheelAxis");
+            nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.25);
+            nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.25);
+            nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.25);
+            nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.25);
+            Point nudge = new Point(wheel.axis == 0 ? wheel.sign : 0, wheel.axis == 1 ? wheel.sign : 0, wheel.axis == 2 ? wheel.sign : 0);
+            check(editing.draft().equals(original.translate(new Point(12, 3, -9).add(nudge), 1, -64, 319)), "Fractional carry wheel lost its captured axis");
             for (int axis = 0; axis < 3; axis++) check(editing.draft().size(axis) == original.size(axis), "Move resized box");
             nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
-            nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 1.0);
+            check(editing.active() && !editing.dragging() && client.mouseHandler.isMouseGrabbed(), "Carry release committed or captured camera");
+            check(!editing.scroll(1), "Released carry captured idle wheel");
             return null;
         });
         CuboidDraft moved = onClient(editing::draft);
@@ -479,6 +552,7 @@ public final class SelectionEditingChecks {
             hold.setDown(false); return null;
         }); pause(150);
         check(onClient(editing::draft).equals(moved) && onClient(editing::active), "Active radial center discarded or applied draft");
+        check(onClient(() -> !editing.capturesCamera() && client.mouseHandler.isMouseGrabbed()), "Active Move menu failed to restore native camera");
         release(); await(() -> !editing.pending(), "move commit");
         check(serverBounds().equals(moved), "Whole move did not commit");
         onServer(() -> {
@@ -491,8 +565,11 @@ public final class SelectionEditingChecks {
         });
         select(false); aim(Face.SOUTH, false); tap(); await(() -> editing.active() && editing.draft() != null, "move cancel entry");
         onClient(() -> {
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+            check(editing.dragging(), "Move cancellation missed grip");
             nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 3.0);
             nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(256, 0, 0));
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
             check(!editing.active() && client.gui.screen() == null && client.mouseHandler.isMouseGrabbed(), "Move Escape failed"); return null;
         });
         check(serverBounds().equals(original), "Move Escape committed");

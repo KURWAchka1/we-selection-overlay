@@ -38,6 +38,10 @@ not a replacement for the features below. Preserve existing settings and feature
    LMB release ends one local drag; Escape cancels the draft. Whole-selection
    movement uses WorldEdit Region.shift without moving blocks. Free corner
    grabs retain one-block steps and normal Shift descent.
+   **Task-first refinement:** [decision and staged implementation](SELECTION_WORKFLOW_DECISION.md).
+   The first Move slice uses native camera/flight carry, signed grip-locked
+   cardinal wheel, exact box dimensions and coordinate-limit overshoot rejection.
+   Later Resize/input, numeric and local-history improvements remain pending.
    Palette undo/redo is a separate, local editor improvement, not selection
    undo or clipboard-placement implementation.
 3. **Advanced Clipboard Placement** - pending. Position, rotate, flip, reset,

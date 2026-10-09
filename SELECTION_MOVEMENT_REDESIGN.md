@@ -1,10 +1,16 @@
 # Selection movement: free-camera transportation
 
-Status: proposed, not implemented. Revised 2026-10-09 for the 1.8.0 development
-line after auditing both Move and Resize. The implemented baseline remains in
+Historical proposal, revised 2026-10-09 for the 1.8.0 development
+line after auditing both Move and Resize. Only the subsequent first Move slice
+is implemented, not this complete proposal. Current behavior is recorded in
 [SELECTION_EDITING_DESIGN.md](SELECTION_EDITING_DESIGN.md). The complete evidence,
 alternatives, risk register and acceptance matrix are in
 [SELECTION_INTERACTION_AUDIT.md](SELECTION_INTERACTION_AUDIT.md).
+
+Implementation follow-up: [task-first decision](SELECTION_WORKFLOW_DECISION.md).
+It supersedes this proposal's continuous-vector wheel rule and defers the
+passive-corner confirmation change. Only its Move carry slice is being
+implemented; the numeric and Resize proposals below are not runtime features.
 
 The [comparative study](SELECTION_INTERACTION_COMPARISON.md) evaluates this carry
 candidate against constrained dragging and exact nudges using documented tools

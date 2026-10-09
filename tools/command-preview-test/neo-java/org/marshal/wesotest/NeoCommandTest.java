@@ -83,7 +83,8 @@ public final class NeoCommandTest {
     }
     private void tick(ClientTickEvent.Post event) {
         Minecraft client = Minecraft.getInstance();
-        check(++ticks < 2400, "Timeout, stage " + stage);
+        // Includes the bounded palette/selection input suites before command assertions.
+        check(++ticks < 4800, "Timeout, stage " + stage);
         if (client.level == null || client.player == null) return;
         if (wait > 0) { wait--; return; }
         var controller = CommandPreviewController.instance();
