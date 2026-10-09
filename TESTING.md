@@ -11,7 +11,7 @@ boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
 1.4 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,453,178 bytes (Fabric) and 1,424,775 bytes
+The archived release outputs are 1,505,633 bytes (Fabric) and 1,477,035 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -85,6 +85,10 @@ Optional `-Only fabric-26.2` selects a focused rerun. Logs are written to
 `build/command-validation/`. NeoForge command fixtures reuse a disposable copy
 of the corresponding isolation world; fixture settings are reset before each
 launch to verify defaults. No player save or normal Minecraft config is used.
+Editing fixtures explicitly bind G in their disposable profile: prior keybind
+screen checks may have left it unassigned. Production never overwrites saved
+assignments. The matrix requires the command, editing and palette-history
+completion markers in the fresh game log, not just a zero process exit code.
 
 ### Complete results and scheduling regression
 
@@ -196,20 +200,40 @@ The command/editing matrix loads the production universal JARs on the same six
 WorldEdit-enabled targets listed above. Each runtime checks all six cuboid faces
 through distant native LMB selection and wheel input. UP is the initial choice;
 re-entry remembers the clicked face, and looking around does not retarget it.
-Holding G immediately releases the cursor and freezes camera/movement, even
-before a drag. Native distant face clicks and projected cursor picking use that
-captured view. LMB release leaves a composed local draft active; a second corner
-drag starts from the current draft without jumping or losing the first face edit.
-The server bounds remain unchanged between these drags. G release applies all
-changed sides once and restores camera/cursor control, also when LMB is still held.
+A short G tap releases the cursor and freezes camera/movement, even before a
+drag. Native distant face clicks and projected cursor picking use that captured
+view. LMB release leaves a composed local draft active; a second corner drag
+starts from the current draft without jumping or losing the first face edit.
+The server bounds remain unchanged between these drags. A second short tap
+applies all changed sides once and restores camera/cursor control, also when
+LMB is still held. Native press/release callbacks, not tick polling alone, catch
+two genuine taps shorter than a client tick.
+The close-view regression grabs every face from 0.2 blocks outside and inside
+the cuboid, away from center/corner handles. Two physical pixels of jitter must
+not resize it; fixed 96-pixel end-on drags expand/contract by two blocks without
+an initial jump or sign inversion. Surface picking does not require an on-screen
+face-center handle.
+
+Holding G for 400 ms opens the Resize/Move ring. A shorter 200 ms hold must not
+open it. The fixture checks the actual GLFW hidden-cursor state, captured camera,
+clamped relative replacement dot, immediate inward response at the ring edge,
+center cancellation, Escape while held and cursor
+restoration. Actual ring screenshots cover requested scales 2x/3x/4x. Opening
+and cancelling the menu during editing must leave the composed draft unchanged;
+choosing a mode must not enter editing or apply a draft automatically.
+Move checks snapped view-plane dragging and depth-wheel nudges, unchanged
+dimensions, reversed ordered corners and ExtendingCuboidRegionSelector identity.
+Separate native transactions reject a missing shift permission, allow a
+shift-only actor to move and deny that actor a resize. Both tools remain local
+selection adjustments, not world-block operations.
 All eight corners additionally drag/commit without a hold key, with alternating
 standard/extending selectors. Native mouse motion changes camera yaw, sideways
 movement and upward flight remain available, and the live draft follows the
-moving camera. The initial grab does not jump. Held face/corner drags still
+moving camera. The initial grab does not jump. Explicit-editor face/corner drags
 release the cursor and suppress movement for precise projection-based editing.
 Within each captured free-corner gesture, fixed-position probes verify one-block
 snapping despite configured 4/8-block steps, the fast modifier, and pressing the
-hold key mid-gesture. A held-corner probe separately verifies configured normal
+edit key mid-gesture. An explicit-editor corner probe verifies configured normal
 and fast steps of 4/8 blocks. Probes run together on the client thread so flight
 or camera interpolation cannot change their position between assertions.
 The opposite corner and the native initial
@@ -219,15 +243,15 @@ The server's region stays unchanged during drafting. Fast contraction
 stops at one block, preserves ExtendingCuboidRegionSelector, and a native
 transaction retains the identity of reversed primary/secondary corners.
 
-The default Shift modifier clears native sneak input only in held editing; the
+The default Shift modifier clears native sneak input only in the explicit editor; the
 flying fixture's height stays unchanged. In free corner dragging, the fixture
 checks native Shift input and an actual height decrease after upward flight,
 even with the hold key pressed midway. This does not switch gesture modes or
 change one-block snapping. Free commit checks use the final release-time draft,
 not an earlier frame's position while the camera/player is still moving.
 Corner Escape cancels without leaking an attack or committing.
-Native Escape cancels in both held/free modes without opening the pause menu,
-applying the draft or leaking an attack. Releasing the editing key during a held
+Native Escape cancels in both explicit/free modes without opening the pause menu,
+applying the draft or leaking an attack. A second short G tap during an explicit
 drag applies it and restores the captured cursor without leaking an attack.
 Opening chat cancels. Replacing the selector with an identical-looking
 one rejects the obsolete transaction instead of overwriting it. Isolation's
@@ -252,18 +276,20 @@ The existing command regressions run alongside these checks, including large
 grass replacement and incremental chunk arrival; no command-engine changes were
 needed for editing. Tests and temporary configs are confined to disposable worlds.
 
-The shared domain suite passes 41 cases covering face signs, inside/outside rays,
-axis dragging from either camera side, end-on rejection, world boundaries,
+The shared domain suite passes 58 cases covering face signs, inside/outside rays,
+zero-depth face intersections, axis dragging from either camera side, world boundaries,
 minimum size, integer overflow, large volume, configuration defaults/clamps,
 all corner signs/opposite-point preservation, step snapping, captured plane
 projection, live-camera translation/turning at captured depth, off-center grabs,
-invalid rays and huge corner offsets without arithmetic overflow.
+invalid rays and huge corner offsets without arithmetic overflow. New cases
+cover near/end-on screen-axis mapping, stable signs, whole-box translation,
+tap/hold timing, key repeats, cancellation and radial center/seam hit testing.
 Both packagers also assert the editing classes and explicit active-mixin registry
 for each relocated runtime, including the 1.21.11 FOV accessor.
 
 The 26.2 Fabric layout fixture passes without installed WorldEdit as well; the
 editing toggle is unavailable and ordinary menus still work. Editing is off and
-its native hold key defaults to G, without overwriting saved assignments. All six
+its native edit/menu key defaults to G, without overwriting saved assignments. All six
 WorldEdit-enabled fixtures check the native default key. Only complete native cuboid/extending
 selections in the integrated local WorldEdit server are supported at this stage.
 

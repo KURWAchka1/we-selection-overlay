@@ -4,19 +4,23 @@
 
 - Optional in-world cuboid editing: eight directly draggable corner markers,
   six face handles, wheel nudging and snapped dragging, with a compact HUD.
-- Click a face at a distance while holding the edit key. The selected side is
-  highlighted and remembered; looking around does not switch it.
+- Select and drag a face anywhere on its surface, including up close or from
+  inside the cuboid. The selected side stays highlighted and remembered.
 - Grab a corner without the edit key and move it while freely looking/flying.
-  Free grabs always use one-block steps. Hold the edit key for precise
-  free-cursor handle/corner dragging with configurable steps instead.
-- Configurable hold key, normal step and fast step. Editing starts disabled
-  with G as the default hold key; the fast modifier defaults to Left Shift.
+  Free grabs always use one-block steps; the explicit editor uses configurable steps.
+- Move the whole selection without resizing it or moving world blocks, with
+  snapped view-plane dragging and wheel nudges along the camera's dominant axis.
+- Tap G to enter the chosen tool; tap again to apply the complete draft and exit.
+  Hold G for 0.4 seconds to choose Resize or Move in a centered radial menu.
+  A bounded pointer replaces the cursor; release over the empty center to cancel.
+- Configurable edit/menu key, normal step and fast step. Editing starts disabled
+  with G as the default key; the fast modifier defaults to Left Shift.
   Existing custom bindings remain unchanged.
-- Hold G to freeze the camera and edit with the cursor. LMB release finishes
-  a local drag; releasing G applies all accumulated changes together.
-- Shift accelerates hold-mode editing without lowering the player in flight.
+- The explicit editor freezes the camera. LMB release finishes only a local drag;
+  Escape cancels the complete uncommitted draft in both tools.
+- Shift accelerates explicit editing without lowering the player in flight.
   Free corner dragging retains normal flight descent and one-block steps.
-- One authoritative selection adjustment on release, Escape/interruption
+- One authoritative selection adjustment on apply, Escape/interruption
   cancellation and stale-selection protection through WorldEdit's public API.
 - Palette editor undo/redo with Ctrl+Z / Ctrl+Y (also Ctrl+Shift+Z), including
   colors, transparency, thickness, resets and confirmed presets. Each slider
@@ -43,6 +47,7 @@
 
 ## Changed
 
+- The deselect keybind no longer adds a "//deselect sent" overlay message.
 - Clipboard preview is retained, off by default, and temporarily yields to a
   command draft without losing its setting, transforms, or cached clipboard.
 - Selection editing temporarily pauses clipboard rendering and the regular grid;

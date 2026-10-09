@@ -29,9 +29,10 @@ public final class WorldEditSelectionEditSource implements SelectionEditSource {
                     SelectionEditSnapshot cached = last.get();
                     if (cached != null && cached.token() instanceof Context old && old.server == server && old.level == level
                             && old.player.equals(uuid) && old.nativeLevel == nativePlayer.level()
-                            && SelectionEditTransaction.same(old.selection, current) && cached.expand() == current.expand() && cached.contract() == current.contract()) value = cached;
+                            && SelectionEditTransaction.same(old.selection, current) && cached.expand() == current.expand() && cached.contract() == current.contract()
+                            && cached.shift() == current.shift()) value = cached;
                     else value = current.ready() ? new SelectionEditSnapshot(new Context(server, level, uuid, nativePlayer.level(), current),
-                            current.bounds(), current.minY(), current.maxY(), current.expand(), current.contract(), "") : current;
+                            current.bounds(), current.minY(), current.maxY(), current.expand(), current.contract(), current.shift(), "") : current;
                 }
             } catch (RuntimeException | LinkageError ex) { value = SelectionEditSnapshot.unavailable("failed"); }
             last = new java.lang.ref.WeakReference<>(value);

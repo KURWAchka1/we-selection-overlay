@@ -45,6 +45,13 @@ try {
             & .\gradlew.bat @($target.Args) --offline --no-daemon --console=plain 2>&1 |
                 Tee-Object -FilePath (Join-Path $logs "$($target.Name).log")
             if ($LASTEXITCODE -ne 0) { throw "Command test failed: $($target.Name)" }
+            $result = [IO.File]::ReadAllText((Join-Path $logs "$($target.Name).log"))
+            $commandMarker = if ($target.Family) { 'WESO NEO COMMAND PASS:' } else { 'WESO COMMAND PASS:' }
+            foreach ($marker in @($commandMarker, 'SELECTION EDIT VERIFY PASS:', 'PALETTE HISTORY VERIFY PASS:')) {
+                if (!$result.Contains($marker)) { throw "Incomplete $($target.Name) fixture: missing '$marker'" }
+            }
+            if ($result.Contains('Client gametests failed with an exception')) { throw "Client fixture failed: $($target.Name)" }
+            Write-Host "Verified commands, selection editing and palette history: $($target.Name)"
         } finally { Pop-Location }
     }
 } finally { $env:JAVA_HOME = $previousJava }

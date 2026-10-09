@@ -1,6 +1,6 @@
 # WorldEdit Selection Overlay
 
-Client-side selection visualization and inspection for WorldEdit. The current development version is **1.8.0**, adding live command-result preview and optional in-world cuboid editing in integrated singleplayer WorldEdit sessions.
+Client-side selection visualization and inspection for WorldEdit. The current development version is **1.8.0**, adding live command-result preview and optional in-world cuboid resizing/movement in integrated singleplayer WorldEdit sessions.
 
 ## Supported release targets
 

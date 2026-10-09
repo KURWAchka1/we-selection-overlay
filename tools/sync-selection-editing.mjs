@@ -17,7 +17,7 @@ const files = ['client/selection/SelectionEditController.java', 'client/selectio
   'mixin/SelectionEditKeyboardMixin.java', 'mixin/SelectionEditMovementMixin.java', 'mixin/SelectionEditPlayerMixin.java'];
 const copies = new Map();
 for (const file of files) copies.set(file, await fs.readFile(path.join(root, canonical, java, file), 'utf8'));
-const hud = `        net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.attachElementBefore(
+const hud = `        net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.attachElementAfter(
                 net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.CHAT,
                 net.minecraft.resources.Identifier.fromNamespaceAndPath("worldedit_selection_overlay", "selection_edit"), (graphics, delta) -> renderHud(graphics));`;
 

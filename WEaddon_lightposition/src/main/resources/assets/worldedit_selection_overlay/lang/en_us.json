@@ -7,7 +7,6 @@
   "message.worldedit_selection_overlay.overlay_on": "WorldEdit Selection Overlay: ON",
   "message.worldedit_selection_overlay.overlay_off": "WorldEdit Selection Overlay: OFF",
   "message.worldedit_selection_overlay.render_mode_changed": "WorldEdit Selection Overlay mode: %s",
-  "message.worldedit_selection_overlay.deselect_sent": "WorldEdit //deselect sent",
   "message.worldedit_selection_overlay.deselect_failed": "Could not send WorldEdit //deselect",
   "message.worldedit_selection_overlay.render_mode.blocky": "Blocky",
   "message.worldedit_selection_overlay.render_mode.smooth": "Smooth",
@@ -277,13 +276,13 @@
   "preview.worldedit_selection_overlay.failed": "Preview unavailable; the world was not changed.",
   "screen.worldedit_selection_overlay.settings.command_preview_label": "Command preview",
   "preview.worldedit_selection_overlay.loaded_scope": "Result within client-loaded chunks.",
-  "key.worldedit_selection_overlay.selection_edit": "Edit faces",
+  "key.worldedit_selection_overlay.selection_edit": "Edit selection",
   "key.worldedit_selection_overlay.selection_edit_fast": "Fast step",
   "screen.worldedit_selection_overlay.settings.selection_edit": "Selection editing: %s",
   "screen.worldedit_selection_overlay.settings.selection_edit_label": "Selection editing",
   "screen.worldedit_selection_overlay.settings.selection_edit_options": "Editing controls...",
   "selection_edit.worldedit_selection_overlay.title": "Selection editing",
-  "selection_edit.worldedit_selection_overlay.binding": "Hold key: %s",
+  "selection_edit.worldedit_selection_overlay.binding": "Edit/menu key: %s",
   "selection_edit.worldedit_selection_overlay.fast_binding": "Fast step key: %s",
   "selection_edit.worldedit_selection_overlay.binding_wait": "...",
   "selection_edit.worldedit_selection_overlay.step": "Step (blocks): %s",
@@ -298,5 +297,7 @@
   "selection_edit.worldedit_selection_overlay.session": "World override is not supported",
   "selection_edit.worldedit_selection_overlay.stale": "Selection changed; edit cancelled",
   "selection_edit.worldedit_selection_overlay.invalid": "Selection adjustment rejected",
-  "selection_edit.worldedit_selection_overlay.failed": "Selection adjustment failed"
+  "selection_edit.worldedit_selection_overlay.failed": "Selection adjustment failed",
+  "selection_edit.worldedit_selection_overlay.resize": "Resize",
+  "selection_edit.worldedit_selection_overlay.move": "Move"
 }

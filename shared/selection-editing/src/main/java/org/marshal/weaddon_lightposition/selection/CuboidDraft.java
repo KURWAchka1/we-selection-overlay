@@ -100,13 +100,25 @@ public record CuboidDraft(int minX, int minY, int minZ, int maxX, int maxY, int 
             double d = direction.at(f.axis);
             if (Math.abs(d) < 1e-10) continue;
             double t = (center(f).at(f.axis) - eye.at(f.axis)) / d;
-            if (t < 1e-6 || t >= nearest) continue;
+            if (!Double.isFinite(t) || t < 0 || t >= nearest) continue;
             Point p = eye.add(direction.scale(t));
             boolean inside = true;
             for (int axis = 0; axis < 3; axis++) if (axis != f.axis && (p.at(axis) < min(axis) - 1e-7 || p.at(axis) > max(axis) + 1.0 + 1e-7)) inside = false;
             if (inside) { hit = f; nearest = t; }
         }
         return hit;
+    }
+
+    public CuboidDraft translate(Point movement, int step, int worldMinY, int worldMaxY) {
+        long x = shift(snappedOffset(movement.x, step, 1), minX, maxX, -30_000_000, 29_999_999);
+        long y = shift(snappedOffset(movement.y, step, 1), minY, maxY, worldMinY, worldMaxY);
+        long z = shift(snappedOffset(movement.z, step, 1), minZ, maxZ, -30_000_000, 29_999_999);
+        return new CuboidDraft((int) (minX + x), (int) (minY + y), (int) (minZ + z),
+                (int) (maxX + x), (int) (maxY + y), (int) (maxZ + z));
+    }
+
+    private static long shift(long delta, int min, int max, int low, int high) {
+        return Math.max((long) low - min, Math.min((long) high - max, delta));
     }
 
     public static double axisParameter(Point eye, Point direction, Point origin, Face f) {

@@ -28,9 +28,10 @@ public final class SelectionEditTransaction {
         try {
             CuboidRegion region = (CuboidRegion) selector.getRegion();
             boolean expand = actor.hasPermission("worldedit.selection.expand"), contract = actor.hasPermission("worldedit.selection.contract");
-            if (!expand && !contract) return SelectionEditSnapshot.unavailable("permission");
+            boolean shift = actor.hasPermission("worldedit.selection.shift");
+            if (!expand && !contract && !shift) return SelectionEditSnapshot.unavailable("permission");
             return new SelectionEditSnapshot(new Origin(session, selector, world, region.getPos1(), region.getPos2()), bounds(region),
-                    world.getMinY(), world.getMaxY(), expand, contract, "");
+                    world.getMinY(), world.getMaxY(), expand, contract, shift, "");
         } catch (IncompleteRegionException ex) { return SelectionEditSnapshot.unavailable("selection"); }
     }
 
@@ -48,7 +49,37 @@ public final class SelectionEditTransaction {
     }
 
     public static SelectionEditSnapshot commitBounds(Player actor, SelectionEditSnapshot original, CuboidDraft draft) {
+        if (original.bounds() != null && original.bounds().size(0) == draft.size(0)
+                && original.bounds().size(1) == draft.size(1) && original.bounds().size(2) == draft.size(2))
+            return commitShift(actor, original, draft);
         return commitAxes(actor, original, draft, CuboidDraft.Face.values());
+    }
+
+    private static SelectionEditSnapshot commitShift(Player actor, SelectionEditSnapshot original, CuboidDraft draft) {
+        SelectionEditSnapshot current = read(actor);
+        if (!same(original, current)) return SelectionEditSnapshot.unavailable("stale");
+        if (draft.equals(original.bounds())) return current;
+        if (!current.shift()) return SelectionEditSnapshot.unavailable("permission");
+        var movement = new CuboidDraft.Point((long) draft.minX() - original.bounds().minX(),
+                (long) draft.minY() - original.bounds().minY(), (long) draft.minZ() - original.bounds().minZ());
+        if (!original.bounds().translate(movement, 1, current.minY(), current.maxY()).equals(draft))
+            return SelectionEditSnapshot.unavailable("invalid");
+        Origin origin = (Origin) current.token();
+        try {
+            CuboidRegion actual = (CuboidRegion) origin.selector.getRegion();
+            BlockVector3 delta = BlockVector3.at(movement.x(), movement.y(), movement.z());
+            CuboidRegion checked = actual.clone(); shift(checked, delta);
+            if (!bounds(checked).equals(draft)) return SelectionEditSnapshot.unavailable("invalid");
+            shift(actual, delta);
+            origin.selector.learnChanges();
+            origin.selector.explainRegionAdjust(actor, origin.session);
+            return read(actor);
+        } catch (IncompleteRegionException ex) { return SelectionEditSnapshot.unavailable("stale"); }
+        catch (com.sk89q.worldedit.regions.RegionOperationException ex) { return SelectionEditSnapshot.unavailable("invalid"); }
+    }
+
+    private static void shift(CuboidRegion region, BlockVector3 delta) throws com.sk89q.worldedit.regions.RegionOperationException {
+        region.shift(delta);
     }
 
     private static SelectionEditSnapshot commitAxes(Player actor, SelectionEditSnapshot original, CuboidDraft draft, CuboidDraft.Face[] faces) {

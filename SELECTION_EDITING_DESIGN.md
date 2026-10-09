@@ -7,7 +7,7 @@ and remaining integration checks.
 
 ## Goal and scope
 
-Resize a real WorldEdit cuboid directly in the world without changing blocks,
+Resize or translate a real WorldEdit cuboid directly in the world without changing blocks,
 opening a large editor. Eight corner markers are visible only while the feature
 is enabled and a supported selection is ready. Normal building, selection
 rendering and mouse behavior remain unchanged away from these markers.
@@ -27,24 +27,26 @@ authoritative session state on the server; CUI is not an authorization protocol.
 
 ## Interaction
 
-Use direct corner dragging plus a temporary hold-to-edit key for face controls.
+Use direct free-camera corner dragging plus a tap-to-toggle explicit editor.
 The feature is opt-in. Expose its availability/settings in the compact O menu.
-The native hold key defaults to G; Minecraft retains existing custom assignments.
+The native edit/menu key defaults to G; Minecraft retains existing custom assignments.
 Left Shift is the configurable
 fast modifier; default steps are 1 and 8 blocks.
 
 | State/action | Behavior |
 | --- | --- |
 | Feature disabled | No markers, HUD, selection reads or mouse interception. |
-| Enabled, key not held | Show eight corner markers for a ready cuboid. Coalesce authoritative reads; intercept LMB only on a marker. No extra HUD or hotbar-wheel capture. |
+| Enabled, editor inactive | Show eight corner markers for a ready cuboid. Coalesce authoritative reads; intercept LMB only on a marker. No extra HUD or hotbar-wheel capture. |
 | Left-drag a corner without the edit key | Aim at a marker and hold LMB. Keep normal camera/flight controls; the corner follows the live view ray at its original grab distance, with the initial off-center offset retained. Always snap by one block, ignoring configured normal/fast steps and modifier keys; keep the opposite corner fixed. Release LMB to commit once. |
-| Hold edit key | Immediately freeze movement/look and release the cursor. Show face handles and a small dimensions HUD. Start with the previously clicked face (UP initially). Keep this captured view until the key is released or the draft is cancelled. |
+| Tap edit key | Toggle the explicit editor. Entering captures movement/look and releases the cursor; the next tap commits and exits. The remembered tool/face is retained (Resize/UP initially). |
+| Hold edit key for 400 ms | Open a centered two-sector Resize/Move ring, not a new Screen. Hide the cursor and constrain its replacement dot within the ring. Release over a sector to select that tool; the empty center and seams cancel the menu without changing the tool/draft. A long hold never applies a draft. |
 | Click a face | Select that side at any visible distance before resizing. Accent its perimeter/handle. Camera movement alone never changes the remembered choice. Intersection works even when the center handle is outside the viewport. |
-| Mouse wheel | Outward/inward resize of the targeted face by the normal step. Lock that face for the gesture. Update only the local draft. Release the edit key to commit once. |
-| Fast modifier | Use the configurable fast step only in hold mode, without lowering a flying player. Free corner grabs retain one-block snapping and normal Shift descent, even if G is pressed midway. |
-| Left-drag a handle/corner while holding the edit key | Use the fixed captured view to move one face axis or the corner's view plane. Release LMB to finish only that local drag. Continue with other corners/faces in the same draft, without applying it or restoring the camera yet. |
-| Escape | Cancel an uncommitted draft immediately, hide the gesture HUD/face handles, and require key release before hold-mode re-entry. Enabled corner markers remain available. |
-| Release edit key | Finalize any current hold-mode drag and commit the complete composed draft once, including when LMB is still held. Restore cursor/camera control without forwarding a held button into an attack. Direct/free corner drags still apply on LMB release instead. |
+| Mouse wheel | Resize the targeted face outward/inward in Resize; shift the whole box along the captured camera's dominant world axis in Move. Update only the local draft. |
+| Fast modifier | Use the configurable fast step only in the explicit editor, without lowering a flying player. Free corner grabs retain one-block snapping and normal Shift descent, even if G is pressed midway. |
+| Left-drag in Resize | Grab a face handle, corner or any face surface. Surface grabs require four physical pixels of motion, so ordinary selection clicks do not resize. Release LMB to finish only that local drag. Compose further drags against the current draft. |
+| Left-drag in Move | Grab any face/corner and translate the whole box on the captured view plane with block snapping. All dimensions and both ordered corners stay unchanged relative to each other. Wheel supplies the remaining depth axis. |
+| Escape | Cancel the complete draft immediately, including in Move and while the radial menu is open. A still-held key must be released before re-entry. Enabled free corner markers remain available. |
+| Second short tap | Finalize a current cursor drag and commit the complete composed draft once, including when LMB is still held. Restore cursor/camera without forwarding an attack. Direct/free corner drags still apply on LMB release. |
 | Chat/menu, lost focus, disconnect, changed world or changed authoritative selection | Cancel the draft; never treat these interruptions as a commit. |
 | Commit pending | Permit only one outstanding request. Do not queue further gestures against an unconfirmed selection. |
 
@@ -58,19 +60,24 @@ on each runtime before calling this interaction implemented.
 
 Face dragging changes only the selected face, never the opposite face or other
 axes. Corner dragging changes its three adjoining sides together; the opposite
-corner stays fixed. Hold-mode coordinates snap to the configured block step;
+corner stays fixed. Explicit-editor coordinates snap to the configured block step;
 free corner grabs always use one block, even if G or Shift is pressed afterwards.
 The face cannot cross the opposite face: the minimum dimension is one block.
 Each new drag starts from the current draft, while the original authoritative
 snapshot remains unchanged for stale-state checks and cancellation.
 Wheel direction is always outward/inward, independent of camera orientation.
-Precise hold-mode dragging uses the captured world axis and camera projection,
+Precise face dragging uses a fixed screen projection of the captured world axis,
 not camera yaw heuristics. Free corner dragging instead uses the current camera
 ray at a fixed captured depth, avoiding view-plane singularities during turns.
 It updates only the draft during world rendering, with a final update on release;
 movement input, camera capture and velocity are not overridden in this mode.
-For a nearly end-on face axis, do not allow an unstable jump: use the
-wheel as the reliable fallback. Integer snapping must behave consistently at
+For a nearly end-on face axis, vertical motion provides a stable fallback:
+up expands and down contracts. Its choice is fixed for the gesture, not switched
+as the cursor moves. Captured sensitivity uses camera depth with a one-block
+working-depth floor and at least one block per 48 physical pixels for close grabs.
+Perspective-correct marker picking uses fixed pixel targets and rejects markers
+behind the camera. Face-plane intersection accepts exact zero-depth hits.
+Integer snapping must behave consistently at
 negative coordinates, from inside the selection and on all six faces.
 
 ## Appearance
@@ -80,7 +87,7 @@ sidebar, persistent toolbar, luminous wall or filled selection volume.
 
 - Eight high-contrast diamond corner markers when enabled, with dark interiors,
   screen-stable sizes and slightly larger hit targets. Hover/capture accents
-  only that marker. Six face-center handles are additionally visible while held.
+  only that marker. Six face-center handles are additionally visible in Resize.
 - Face-center handles also have stable apparent size and larger interaction
   targets. Inactive handles are quiet neutral tones.
 - Only the targeted/captured handle and face perimeter receive a clear accent.
@@ -122,7 +129,9 @@ integer draft bounds. WorldEdit remains the source of truth.
 4. On commit, reacquire and compare the authoritative origin and permissions.
    Reject stale requests rather than overwriting an axe/command selection change.
    Identical CUI resends alone are not evidence of a changed selection.
-5. Validate every changed face in the final composed bounds with the public
+5. For an unchanged-size translation, validate a clone and apply Region.shift
+   with `worldedit.selection.shift` permission. Otherwise validate every changed
+   face in the final composed bounds with the public
    CuboidRegion expansion/contraction route, before mutating the real region.
    Apply expansions before contractions on both a draft and a region clone, then
    on the real region. This permits a valid translation across an old opposite
@@ -223,6 +232,15 @@ Do not add release notes or mark the milestone complete based only on compilatio
   permission annotations and native region-adjustment sequence.
 - [Official CuboidRegion source](https://github.com/EngineHub/WorldEdit/blob/version/7.4.x/worldedit-core/src/main/java/com/sk89q/worldedit/regions/CuboidRegion.java):
   ordered corners, one-axis operations and height clamping.
+- [Blender axis constraints](https://github.com/blender/blender/blob/main/source/blender/editors/transform/transform_constraints.cc):
+  close-view working-depth correction and vertical-motion fallback for view-aligned axes.
+  These are interaction precedents; the mod's linear snapped mapping is independently implemented.
+- [Three.js TransformControls](https://github.com/mrdoob/three.js/blob/dev/examples/jsm/controls/TransformControls.js):
+  captured drag origins and camera-aware axis/plane constraints.
+- [Official WorldEdit shift command](https://github.com/EngineHub/WorldEdit/blob/master/worldedit-core/src/main/java/com/sk89q/worldedit/command/SelectionCommands.java):
+  worldedit.selection.shift permission, Region.shift, learnChanges and explainRegionAdjust.
+- [GLFW input guide](https://www.glfw.org/docs/latest/input_guide.html#cursor_mode):
+  disabled-cursor capture, relative virtual coordinates and native cursor restoration.
 
 ## Implementation notes
 
@@ -236,12 +254,29 @@ Do not add release notes or mark the milestone complete based only on compilatio
   revalidates session, selector identity, ordered corners, world and permissions.
   The source's weak snapshot cache cannot keep a closed world alive; changed
   player/world identity clears pending draft references and invalidates callbacks.
-- Outside hold mode, only a marker hit captures LMB for a live-camera corner
-  gesture. Entering hold mode captures the camera projection, stops movement
+- Outside the explicit editor, only a marker hit captures LMB for a live-camera corner
+  gesture. Entering the editor captures the camera projection, stops movement
   and releases the cursor immediately; LMB release leaves that mode active.
   The gesture type is fixed at capture, so pressing G
   halfway through a free drag does not unexpectedly lock the camera. Resize/camera-mode changes
   also cancel the draft. Minecraft's early-return first mouse event is handled.
+- Key timing is a shared monotonic state machine. Repeats do not reopen menus;
+  a stalled frame cannot turn a long hold into an accidental short-tap commit.
+  Native press/release callbacks catch taps shorter than a client tick; ticks
+  only advance the hold threshold. Existing configurable bindings remain native.
+  Radial rendering uses two cached anti-aliased ring masks, existing GUI batching
+  and licensed Lucide icons. There is no blur, framebuffer or world/block scan.
+  GLFW's disabled-cursor mode provides captured relative movement. Only the
+  replacement dot is clamped; the mod never warps/recenters the system cursor
+  per event. Reversing at the ring edge responds immediately without backtracking.
+  Closing restores the native cursor for other menus. The editing HUD is hidden
+  while the ring is open so its cancel center stays empty.
+  Short hover fades respect Reduced Motion. The HUD is registered above chat
+  without replacing chat or changing its position.
+- Pure translations are clone-validated and applied with Region.shift on the
+  server thread using the shift permission. Both ordered corners and selector
+  identity are preserved. The whole box clamps at world borders/height without
+  shrinking. Mixed resize drafts retain the existing all-face validation path.
 - Both universal packagers register the hooks explicitly. Artifact tests check
   those registration lists, not merely the presence of mixin class files.
 - The native gizmo renderer submits fixed-size geometry without a framebuffer

@@ -29,6 +29,27 @@ class CuboidDraftTest {
         assertEquals(face, bounds.intersect(center, normal));
     }
     @ParameterizedTest @EnumSource(Face.class)
+    void intersectionAtOrExtremelyCloseToEveryFace(Face face) {
+        Point normal = new Point(face.axis == 0 ? face.sign : 0, face.axis == 1 ? face.sign : 0, face.axis == 2 ? face.sign : 0);
+        Point center = bounds.center(face);
+        assertEquals(face, bounds.intersect(center, normal));
+        assertEquals(face, bounds.intersect(center, normal.scale(-1)));
+        assertEquals(face, bounds.intersect(center.add(normal.scale(1e-9)), normal.scale(-1)));
+        assertEquals(face, bounds.intersect(center.subtract(normal.scale(1e-9)), normal));
+        assertNull(bounds.intersect(center.add(normal.scale(0.01)), normal));
+    }
+    @Test void translationKeepsDimensionsAndClampsTheWholeBox() {
+        var shifted = bounds.translate(new Point(13, -4, 21), 1, -64, 319);
+        assertEquals(new CuboidDraft(-7, -14, -9, 8, 11, 20), shifted);
+        for (int axis = 0; axis < 3; axis++) assertEquals(bounds.size(axis), shifted.size(axis));
+        assertEquals(bounds.volume(), shifted.volume());
+        assertEquals(bounds, shifted.translate(new Point(-13, 4, -21), 1, -64, 319));
+        var clamped = bounds.translate(new Point(Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE), 8, -64, 319);
+        assertEquals(29_999_999, clamped.maxX()); assertEquals(319, clamped.maxY()); assertEquals(-30_000_000, clamped.minZ());
+        for (int axis = 0; axis < 3; axis++) assertEquals(bounds.size(axis), clamped.size(axis));
+        assertEquals(bounds.translate(new Point(8, -8, 0), 1, -64, 319), bounds.translate(new Point(5.2, -5.2, 0), 8, -64, 319));
+    }
+    @ParameterizedTest @EnumSource(Face.class)
     void dragWorldAxisNeverDependsOnCameraSide(Face face) {
         Point axis = new Point(face.axis == 0 ? 1 : 0, face.axis == 1 ? 1 : 0, face.axis == 2 ? 1 : 0);
         Point other = new Point(face.axis != 0 ? 10 : 0, face.axis == 0 ? 10 : 0, 0);

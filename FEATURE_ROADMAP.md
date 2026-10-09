@@ -31,11 +31,13 @@ not a replacement for the features below. Preserve existing settings and feature
    markers, six clicked/remembered face handles,
    configurable normal/fast steps, dimensions/volume HUD, and actual WorldEdit
    selection synchronization. Leave an extension point for polygon/convex vertices.
-   Opt-in, default G hold key, draft/commit/cancel mechanics and tested scope:
+   Opt-in, default G edit/menu key, draft/commit/cancel mechanics and tested scope:
    [SELECTION_EDITING_DESIGN.md](SELECTION_EDITING_DESIGN.md).
-   **Hold workflow:** G captures camera/movement immediately; LMB release ends
-   one local drag, G release commits the composed draft, Escape cancels in both
-   held/free modes. Free grabs use one-block steps and normal Shift descent.
+   **Workflow:** tap G to enter, tap again to commit/exit. Hold for 0.4 seconds
+   for the Resize/Move radial menu, with a hidden cursor and bounded pointer.
+   LMB release ends one local drag; Escape cancels the draft. Whole-selection
+   movement uses WorldEdit Region.shift without moving blocks. Free corner
+   grabs retain one-block steps and normal Shift descent.
    Palette undo/redo is a separate, local editor improvement, not selection
    undo or clipboard-placement implementation.
 3. **Advanced Clipboard Placement** - pending. Position, rotate, flip, reset,

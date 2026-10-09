@@ -12,10 +12,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Keyboard.class)
 public abstract class SelectionEditKeyboardMixin {
+    @Inject(method = "onKey", at = @At("RETURN"))
+    private void weso$key(long window, int action, KeyInput event, CallbackInfo ci) {
+        if (window == MinecraftClient.getInstance().getWindow().getHandle()) SelectionEditController.instance().keyEvent();
+    }
     @Inject(method = "onKey", at = @At("HEAD"), cancellable = true)
     private void weso$escape(long window, int action, KeyInput event, CallbackInfo ci) {
         if (window == MinecraftClient.getInstance().getWindow().getHandle() && event.key() == GLFW.GLFW_KEY_ESCAPE
-                && action == GLFW.GLFW_PRESS && SelectionEditController.instance().active() && !SelectionEditController.instance().pending()) {
+                && action == GLFW.GLFW_PRESS && SelectionEditController.instance().inputActive() && !SelectionEditController.instance().pending()) {
             SelectionEditController.instance().cancel(); ci.cancel();
         }
     }

@@ -718,7 +718,6 @@ public final class WorldEditPointOverlayClient {
 
         try {
             client.getNetworkHandler().sendChatCommand("/deselect");
-            client.player.sendMessage(Text.translatable("message.worldedit_selection_overlay.deselect_sent"), true);
             LOGGER.info("Requested WorldEdit deselect via command: //deselect");
         } catch (Exception ex) {
             client.player.sendMessage(Text.translatable("message.worldedit_selection_overlay.deselect_failed"), true);

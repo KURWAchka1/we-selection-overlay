@@ -15,6 +15,7 @@ import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft.Face;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft.Corner;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft.Point;
+import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.SelectionEditMode;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.worldedit.SelectionEditTransaction;
 import java.util.Set;
 import java.util.List;
@@ -58,6 +59,7 @@ public final class SelectionEditingChecks {
             check(!editing.options().enabled(), "Editing must be opt-in");
             hold = (KeyMapping) field(editing, "editKey"); fast = (KeyMapping) field(editing, "fastKey");
             check(hold.getDefaultKey().getValue() == 71, "Default editing key must be G");
+            call(editing, "bind", false, new KeyEvent(71, 0, 0));
             cachedClipboard = call(call(clipboardSource, "snapshot"), "blocks");
             client.player.getAbilities().flying = true;
             check(editing.target() == Face.UP, "Initial face must be the upper side");
@@ -203,7 +205,7 @@ public final class SelectionEditingChecks {
         select(false);
         Point preciseCorner = original.corner(Corner.EAST_UP_SOUTH);
         aimAt(preciseCorner.add(new Point(9, 7, 11)), preciseCorner);
-        onClient(() -> { hold.setDown(true); return null; });
+        tap();
         await(() -> editing.active() && editing.draft() != null, "precise corner entry");
         cursorAt(preciseCorner);
         onClient(() -> {
@@ -343,6 +345,7 @@ public final class SelectionEditingChecks {
                     "World identity change retained a pending context");
             return null;
         });
+        closeFacesAndModes();
         check(onServer(this::history).equals(historyBefore), "Selection editing changed WorldEdit history");
         check(onServer(this::worldBlocks).equals(blocksBefore), "Selection editing changed world blocks");
         paletteHistory();
@@ -395,7 +398,167 @@ public final class SelectionEditingChecks {
         await(reload::isDone, "restore language");
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
-        System.out.println("SELECTION EDIT VERIFY PASS: G captures camera, LMB retains composed draft, G commits all faces, eight free-camera one-block corners, free Shift descent, held steps, Escape, stale, isolation, clipboard, unchanged blocks/history");
+        System.out.println("SELECTION EDIT VERIFY PASS: G tap toggle, close/inside six-face dragging, hidden-cursor radial/dead zone, whole selection shift, LMB retains draft, eight free-camera one-block corners, Shift, Escape, stale, isolation, clipboard, unchanged blocks/history");
+    }
+    private void closeFacesAndModes() {
+        for (Face face : Face.values()) for (int side : new int[]{1, -1}) {
+            select(false);
+            Point normal = new Point(face.axis == 0 ? face.sign : 0, face.axis == 1 ? face.sign : 0, face.axis == 2 ? face.sign : 0);
+            int tangentAxis = (face.axis + 1) % 3;
+            Point anchor = original.center(face).add(new Point(tangentAxis == 0 ? 2 : 0, tangentAxis == 1 ? 2 : 0, tangentAxis == 2 ? 2 : 0));
+            aimAt(anchor.add(normal.scale(side * 0.2)), anchor);
+            tap(); await(() -> editing.active() && editing.draft() != null, "close face entry");
+            onClient(() -> {
+                double x = client.getWindow().getScreenWidth() / 2.0, y = client.getWindow().getScreenHeight() / 2.0;
+                nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y);
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+                check(editing.target() == face && field(editing, "lockedCorner") == null, "Close face did not select " + face + " side=" + side);
+                check(editing.draft().equals(original) && !editing.dragging(), "Surface click moved before threshold");
+                nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x + 2, y);
+                check(!editing.dragging() && editing.draft().equals(original), "Subthreshold jitter dragged the face");
+                nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y - 96);
+                check(editing.dragging() && editing.draft().equals(original.resize(face, 2, -64, 319)), "Close/end-on drag failed " + face + " side=" + side + " actual=" + editing.draft());
+                nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y + 96);
+                check(editing.draft().equals(original.resize(face, -2, -64, 319)), "Close drag changed direction or another axis");
+                nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y - 96);
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+                check(editing.active() && !client.mouseHandler.isMouseGrabbed(), "Close surface release applied early");
+                return null;
+            });
+            check(serverBounds().equals(original), "Close drag changed server before toggle");
+            if (face == Face.EAST && side == 1) { pause(200); screenshot.accept("selection-edit-close-face"); }
+            release(); await(() -> !editing.pending(), "close face commit");
+            check(serverBounds().equals(original.resize(face, 2, -64, 319)), "Close face commit failed");
+        }
+        select(false); aim(Face.SOUTH, false);
+        onClient(() -> { hold.setDown(true); return null; }); pause(200);
+        check(!onClient(editing::radialOpen) && !onClient(editing::active), "Short hold opened menu or entered editor");
+        await(editing::radialOpen, "radial hold");
+        onClient(() -> {
+            check(org.lwjgl.glfw.GLFW.glfwGetInputMode(client.getWindow().handle(), org.lwjgl.glfw.GLFW.GLFW_CURSOR) == org.lwjgl.glfw.GLFW.GLFW_CURSOR_DISABLED,
+                    "Radial retained visible system cursor");
+            check(editing.capturesCamera(), "Radial did not freeze camera");
+            radialPointer(1000, 0);
+            check(Math.hypot((double) field(editing, "radialX"), (double) field(editing, "radialY")) <= (int) call(editing, "menuRadius", client),
+                    "Radial pointer escaped the ring");
+            double edge = (double) field(editing, "radialX");
+            radialPointer(edge - 1, 0);
+            check((double) field(editing, "radialX") < edge, "Pointer needed to backtrack after reaching the edge");
+            radialPointer(0, 0);
+            hold.setDown(false); return null;
+        }); pause(150);
+        check(!onClient(editing::active) && onClient(editing::mode) == SelectionEditMode.RESIZE, "Center choice applied or changed mode");
+        check(onClient(() -> client.mouseHandler.isMouseGrabbed()), "Radial center failed to restore cursor");
+        chooseMode(SelectionEditMode.MOVE, true);
+        check(onClient(editing::mode) == SelectionEditMode.MOVE && !onClient(editing::active), "Radial selection unexpectedly applied or activated");
+        select(true); aim(Face.EAST, true);
+        List<BlockVector3> ordered = onServer(() -> {
+            var r = (CuboidRegion) WorldEdit.getInstance().getSessionManager().get(actor()).getSelection(actor().getWorld());
+            return List.of(r.getPos1(), r.getPos2());
+        });
+        tap(); await(() -> editing.active() && editing.draft() != null, "move entry");
+        onClient(() -> {
+            double x = client.getWindow().getScreenWidth() / 2.0, y = client.getWindow().getScreenHeight() / 2.0;
+            nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y);
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+            check(editing.draft().equals(original), "Move jumped on grab");
+            nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x + 100, y - 80);
+            check(!editing.draft().equals(original), "Move failed to change origin");
+            for (int axis = 0; axis < 3; axis++) check(editing.draft().size(axis) == original.size(axis), "Move resized box");
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+            nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 1.0);
+            return null;
+        });
+        CuboidDraft moved = onClient(editing::draft);
+        check(serverBounds().equals(original), "Whole move committed early");
+        pause(250); screenshot.accept("selection-edit-move");
+        // Opening the menu over an existing draft and releasing in its center must keep that draft.
+        onClient(() -> { hold.setDown(true); return null; }); await(editing::radialOpen, "active menu");
+        onClient(() -> {
+            radialPointer(0, 0);
+            hold.setDown(false); return null;
+        }); pause(150);
+        check(onClient(editing::draft).equals(moved) && onClient(editing::active), "Active radial center discarded or applied draft");
+        release(); await(() -> !editing.pending(), "move commit");
+        check(serverBounds().equals(moved), "Whole move did not commit");
+        onServer(() -> {
+            var selector = WorldEdit.getInstance().getSessionManager().get(actor()).getRegionSelector(actor().getWorld());
+            check(selector.getClass() == ExtendingCuboidRegionSelector.class, "Shift replaced selector");
+            var r = (CuboidRegion) selector.getRegion();
+            var delta = BlockVector3.at(moved.minX() - original.minX(), moved.minY() - original.minY(), moved.minZ() - original.minZ());
+            check(r.getPos1().equals(ordered.get(0).add(delta)) && r.getPos2().equals(ordered.get(1).add(delta)), "Shift swapped ordered corners");
+            return null;
+        });
+        select(false); aim(Face.SOUTH, false); tap(); await(() -> editing.active() && editing.draft() != null, "move cancel entry");
+        onClient(() -> {
+            nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 3.0);
+            nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(256, 0, 0));
+            check(!editing.active() && client.gui.screen() == null && client.mouseHandler.isMouseGrabbed(), "Move Escape failed"); return null;
+        });
+        check(serverBounds().equals(original), "Move Escape committed");
+        onServer(() -> {
+            var actor = actor();
+            var shifted = original.translate(new Point(12, 3, -9), 1, -64, 319);
+            var noShift = permissionActor(actor, false, true);
+            var denied = SelectionEditTransaction.commitBounds(noShift, SelectionEditTransaction.read(noShift), shifted);
+            check(!denied.ready() && denied.reason().equals("permission"), "Shift bypassed permission");
+            check(SelectionEditTransaction.read(actor).bounds().equals(original), "Rejected shift partially changed selection");
+            var shiftOnly = permissionActor(actor, true, false);
+            var allowed = SelectionEditTransaction.commitBounds(shiftOnly, SelectionEditTransaction.read(shiftOnly), shifted);
+            check(allowed.ready() && allowed.bounds().equals(shifted), "Shift-only actor unexpectedly needed expand/contract rights");
+            var deniedResize = SelectionEditTransaction.commitBounds(shiftOnly, allowed, shifted.resize(Face.UP, 2, -64, 319));
+            check(!deniedResize.ready() && deniedResize.reason().equals("permission"), "Shift-only actor resized selection");
+            return null;
+        });
+        select(false);
+        chooseMode(SelectionEditMode.RESIZE, false);
+        onClient(() -> {
+            nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(71, 0, 0));
+            nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 0, new KeyEvent(71, 0, 0));
+            check(editing.active() && !editing.radialOpen(), "Fast native tap was lost between client ticks");
+            nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(71, 0, 0));
+            nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 0, new KeyEvent(71, 0, 0));
+            check(!editing.active() && !editing.radialOpen(), "Second fast native tap did not exit");
+            return null;
+        });
+        onClient(() -> { hold.setDown(true); return null; }); await(editing::radialOpen, "menu cancel entry");
+        onClient(() -> { nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(256, 0, 0)); return null; });
+        pause(500); check(!onClient(editing::radialOpen) && !onClient(editing::active), "Esc reopened held menu");
+        onClient(() -> { hold.setDown(false); return null; }); pause(100);
+    }
+    private com.sk89q.worldedit.entity.Player permissionActor(com.sk89q.worldedit.entity.Player actor, boolean shift, boolean resize) {
+        return (com.sk89q.worldedit.entity.Player) java.lang.reflect.Proxy.newProxyInstance(actor.getClass().getClassLoader(),
+                new Class<?>[]{com.sk89q.worldedit.entity.Player.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("hasPermission")) {
+                        if (args[0].equals("worldedit.selection.shift")) return shift;
+                        if (args[0].equals("worldedit.selection.expand") || args[0].equals("worldedit.selection.contract")) return resize;
+                    }
+                    try { return method.invoke(actor, args); }
+                    catch (java.lang.reflect.InvocationTargetException ex) { throw ex.getCause(); }
+                });
+    }
+    private void chooseMode(SelectionEditMode mode, boolean captureScreenshots) {
+        onClient(() -> { nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(71, 0, 0)); return null; });
+        await(editing::radialOpen, "mode menu");
+        for (int scale : captureScreenshots ? new int[]{2, 3, 4} : new int[]{2}) {
+            onClient(() -> {
+                client.options.guiScale().set(scale); client.resizeGui();
+                int radius = (int) call(editing, "menuRadius", client);
+                double dx = radius * 0.65 * (mode == SelectionEditMode.MOVE ? 1 : -1);
+                radialPointer(dx, 0);
+                return null;
+            }); pause(150);
+            if (captureScreenshots) screenshot.accept("selection-edit-radial-x" + scale);
+        }
+        onClient(() -> { nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 0, new KeyEvent(71, 0, 0)); return null; }); pause(150);
+        onClient(() -> { client.options.guiScale().set(2); client.resizeGui(); return null; });
+    }
+    private void radialPointer(double x, double y) {
+        double cursorX = (double) field(editing, "radialMouseX") + (x - (double) field(editing, "radialX"))
+                * client.getWindow().getScreenWidth() / client.getWindow().getGuiScaledWidth();
+        double cursorY = (double) field(editing, "radialMouseY") + (y - (double) field(editing, "radialY"))
+                * client.getWindow().getScreenHeight() / client.getWindow().getGuiScaledHeight();
+        nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), cursorX, cursorY);
     }
     private void checkCornerStep(Corner corner, double distance, int step) {
         Point offset = new Point(distance * corner.face(0).sign, distance * corner.face(1).sign, distance * corner.face(2).sign);
@@ -503,7 +666,8 @@ public final class SelectionEditingChecks {
         Face previous = onClient(editing::target);
         boolean angled = lastAimAngled;
         aim(face, angled, true);
-        onClient(() -> { org.lwjgl.glfw.GLFW.glfwFocusWindow(client.getWindow().handle()); hold.setDown(true); return null; });
+        onClient(() -> { org.lwjgl.glfw.GLFW.glfwFocusWindow(client.getWindow().handle()); return null; });
+        tap();
         await(() -> editing.active() && editing.draft() != null, "enter editing " + face);
         onClient(() -> {
             check(editing.capturesCamera() && !client.mouseHandler.isMouseGrabbed(), "G did not immediately capture camera and release cursor");
@@ -531,7 +695,14 @@ public final class SelectionEditingChecks {
             nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y); return null;
         });
     }
-    private void release() { onClient(() -> { hold.setDown(false); return null; }); pause(150); }
+    private void tap() {
+        onClient(() -> { hold.setDown(true); return null; }); pause(100);
+        onClient(() -> { hold.setDown(false); return null; }); pause(150);
+    }
+    private void release() {
+        if (onClient(editing::active)) tap();
+        else { onClient(() -> { hold.setDown(false); return null; }); pause(150); }
+    }
     private com.sk89q.worldedit.entity.Player actor() { return FabricAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst()); }
     private List<?> history() {
         return List.copyOf((java.util.Collection<?>) field(WorldEdit.getInstance().getSessionManager().get(actor()), "history"));

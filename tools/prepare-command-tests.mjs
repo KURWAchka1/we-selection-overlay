@@ -78,6 +78,7 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('client.gui.getChat().clearMessages(', 'client.inGameHud.getChatHud().clear(')
     .replaceAll('getLanguageManager().setSelected(', 'getLanguageManager().setLanguage(').replaceAll('client.reloadResourcePacks()', 'client.reloadResources()')
     .replaceAll('getGuiScaledWidth()', 'getScaledWidth()')
+    .replaceAll('getGuiScaledHeight()', 'getScaledHeight()')
     // Production Yarn uses intermediary names; reflection strings are not remapped by Loom.
     .replaceAll('"onScroll"', '"method_1598"').replaceAll('"onButton"', '"method_1601"').replaceAll('"onMove"', '"method_1600"').replaceAll('"keyPress"', '"method_1466"')
     .replaceAll('"handleAccumulatedMovement"', '"method_55793"')

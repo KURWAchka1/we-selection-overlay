@@ -112,16 +112,16 @@ Customize how the overlay looks directly in-game:
 
 ## Edit Selection Bounds
 
-Grab corner markers while freely looking/flying, or hold `G` to freeze the camera
-and edit handles/corners with the cursor or wheel. The chosen face stays highlighted and remembered.
-A small HUD shows dimensions, volume, and offsets.
+Grab corners while freely looking/flying, or tap `G` for precise cursor editing.
+Hold `G` briefly to choose **Resize** or **Move** in a radial menu with a bounded
+pointer and an empty cancel center. Move shifts the whole selection, not its blocks.
 
-* One-block steps for free corner grabs; configurable steps in hold mode
-* Shift speeds up hold-mode editing without lowering you in flight
-* In hold mode, finish individual drags with LMB release; release `G` to apply them together
+* Drag any face surface, even up close or from inside the cuboid
+* One-block free corner grabs; configurable steps and Shift acceleration in the editor
+* LMB release finishes a drag; tap `G` again to apply all changes and exit
 * Free corner grabs apply on LMB release and keep normal Shift descent
 * Escape cancels an unfinished edit in either mode
-* Disabled by default; configurable hold key defaults to `G`
+* Disabled by default; configurable edit/menu key defaults to `G`
 
 Requires integrated singleplayer WorldEdit and a complete cuboid or extending
 cuboid. Changes selection bounds only, not world blocks.
@@ -182,7 +182,7 @@ Everything is visual only. Hidden blocks still exist, still collide, and are nev
 * Optional internal selection grid toggle
 * Textured WorldEdit clipboard preview, off by default
 * Live command-result preview while typing in singleplayer
-* Optional in-world cuboid resizing with corner and face handles
+* Optional in-world cuboid resizing and whole-selection movement
 * Full-screen palette editor with live preview
 * Custom colors, transparency, thickness, and presets
 * Adaptive performance for large selections
@@ -217,7 +217,7 @@ Works with everything WorldEdit sends via CUI.
 | `B` | Open block inspection screen |
 | `N` | Run WorldEdit `//deselect` |
 | `F8` | Toggle command-result preview |
-| `G` | Hold to edit cuboid bounds |
+| `G` | Tap to edit/apply; hold for Resize/Move menu |
 | Left Shift | Fast selection-editing step |
 
 All keybinds are configurable.

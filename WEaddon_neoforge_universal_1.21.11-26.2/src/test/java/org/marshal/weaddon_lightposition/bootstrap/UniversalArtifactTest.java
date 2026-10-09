@@ -79,11 +79,28 @@ class UniversalArtifactTest {
             String base = "assets/worldedit_selection_overlay/";
             for (String name : List.of("font/ui.json", "font/manrope.ttf", "font/manrope-ofl.txt",
                     "shaders/core/ui_surface.fsh", "shaders/core/ui_spectrum.fsh",
-                    "textures/gui/ui/surface.png", "textures/gui/ui/lucide-license.txt")) {
+                    "textures/gui/ui/surface.png", "textures/gui/ui/lucide-license.txt",
+                    "textures/gui/ui/radial-left.png", "textures/gui/ui/radial-right.png",
+                    "textures/gui/ui/radial-dot.png", "textures/gui/ui/move.png", "textures/gui/ui/scaling.png")) {
                 assertEquals(1L, jar.stream().filter(entry -> entry.getName().equals(base + name)).count(), name);
             }
-            assertEquals(9L, jar.stream().filter(entry -> entry.getName().startsWith(base + "textures/gui/ui/")
+            assertEquals(14L, jar.stream().filter(entry -> entry.getName().startsWith(base + "textures/gui/ui/")
                     && entry.getName().endsWith(".png") && !entry.getName().endsWith("/surface.png")).count());
+        }
+    }
+
+    @Test
+    void editingToolsAndSilentDeselectArePackagedForEveryRuntime() throws Exception {
+        try (var jar = new JarFile(System.getProperty("universal.jar"))) {
+            for (String id : List.of("mc1_21_11", "mc26_1", "mc26_2")) {
+                String base = "org/marshal/weaddon_lightposition/runtime/" + id + "/";
+                for (String tool : List.of("FaceDrag", "SelectionEditKey", "SelectionEditMode"))
+                    assertNotNull(jar.getEntry(base + "selection/" + tool + ".class"), id + ": " + tool);
+                try (var input = jar.getInputStream(jar.getEntry(base + "client/WorldEditPointOverlayClient.class"))) {
+                    String bytecode = new String(input.readAllBytes(), StandardCharsets.ISO_8859_1);
+                    assertFalse(bytecode.contains("message.worldedit_selection_overlay.deselect_sent"), id);
+                }
+            }
         }
     }
 

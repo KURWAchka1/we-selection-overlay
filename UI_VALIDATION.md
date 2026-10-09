@@ -65,6 +65,18 @@ dragging during flight and the precise face-drag HUD are captured in-world, usin
 the actual camera projection, not a separate UI illustration. NeoForge's HUD
 is registered once per runtime; packaging tests enforce that invariant.
 
+The editing fixture also captures the two-sector Resize/Move ring at requested
+2x/3x/4x. It uses cached anti-aliased bitmap masks and Lucide icons, not a second
+screen or a blur target. The cursor is hidden; a bounded dot supplies selection
+feedback, with an empty cancel center. Short hover fades honor Reduced Motion.
+GLFW captures a hidden virtual cursor; only the dot is clamped, without system
+cursor warps. The ordinary editing HUD pauses while this mode-choice menu is open.
+Screenshot review caught chat drawing over the large-scale ring; Fabric's HUD
+registration now places the editing layer after chat. NeoForge uses its existing
+post-GUI layer. The ring sectors and compact editing HUD use opaque surfaces
+after their short opening fade, so chat cannot show through their labels; the
+center and outside remain unfilled. These are input/layout checks, not a new FPS benchmark.
+
 The same six runs verify palette Ctrl+Z/Y history with native screen events,
 including a focused HEX field, one-step drags, popup/confirmation blocking,
 resets/presets and resize preservation. History adds no new layout widgets or
