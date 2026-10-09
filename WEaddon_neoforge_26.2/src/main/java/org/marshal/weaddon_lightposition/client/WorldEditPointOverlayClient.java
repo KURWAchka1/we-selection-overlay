@@ -966,11 +966,15 @@ public final class WorldEditPointOverlayClient {
     }
 
     public void applyOverlayColorProfile(OverlayColorProfile profile) {
+        applyOverlayColorProfile(profile, 1.0f);
+    }
+
+    public void applyOverlayColorProfile(OverlayColorProfile profile, float globalWidth) {
         if (profile == null) {
             return;
         }
         colorProfile.copyFrom(profile);
-        lineWidthScale = 1.0f;
+        lineWidthScale = clampLineWidthScale(globalWidth);
         OverlayRenderStyle.setColors(colorProfile);
         OverlayRenderStyle.setLineWidthScale(lineWidthScale);
         saveSettings();

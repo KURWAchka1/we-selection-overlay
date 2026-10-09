@@ -27,12 +27,17 @@ not a replacement for the features below. Preserve existing settings and feature
    sample. Vanilla WorldEdit re-rolls on execution, so per-cell equality must
    not be promised. Never silently seed or alter WorldEdit's actual command.
 2. **Interactive Selection Editing** - initial cuboid scope implemented and
-   six-runtime tested in 1.8.0 (2026-10-08). Eight live-camera corner
+   six-runtime tested in 1.8.0 (2026-10-09). Eight live-camera corner
    markers, six clicked/remembered face handles,
    configurable normal/fast steps, dimensions/volume HUD, and actual WorldEdit
    selection synchronization. Leave an extension point for polygon/convex vertices.
    Opt-in, default G hold key, draft/commit/cancel mechanics and tested scope:
    [SELECTION_EDITING_DESIGN.md](SELECTION_EDITING_DESIGN.md).
+   **Hold workflow:** G captures camera/movement immediately; LMB release ends
+   one local drag, G release commits the composed draft, Escape cancels in both
+   held/free modes. Free grabs use one-block steps and normal Shift descent.
+   Palette undo/redo is a separate, local editor improvement, not selection
+   undo or clipboard-placement implementation.
 3. **Advanced Clipboard Placement** - pending. Position, rotate, flip, reset,
    axis lock, grid snap, numeric offsets, origin/pivot, compact HUD, and explicit
    protected paste confirmation. Keep WorldEdit transforms as the source of truth.

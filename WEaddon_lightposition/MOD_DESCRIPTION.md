@@ -73,7 +73,7 @@ Copy something with WorldEdit and preview the clipboard before pasting:
 * Uses capped, cached rendering for large copies
 * Disabled by default; enable it in overlay settings when needed
 
-Clipboard preview requires the WorldEdit mod on the client/integrated server. Server-only CUI data can still show selections, but it does not expose clipboard contents.
+Clipboard preview requires WorldEdit in integrated singleplayer. Remote CUI data still shows selections but does not expose clipboard contents.
 
 ***
 
@@ -106,18 +106,21 @@ Customize how the overlay looks directly in-game:
 * Per-element color, transparency, and line thickness
 * Ready-made presets for different visibility needs
 * Reset controls for one element, thickness, colors, or everything
+* Undo/redo colors, transparency, thickness, resets, and presets with `Ctrl+Z` / `Ctrl+Y`
 
 ***
 
 ## Edit Selection Bounds
 
-Grab corner markers while freely looking/flying, or hold `G` to precisely drag
-a handle/corner or click a face and resize it with the wheel. The chosen face stays highlighted and remembered.
+Grab corner markers while freely looking/flying, or hold `G` to freeze the camera
+and edit handles/corners with the cursor or wheel. The chosen face stays highlighted and remembered.
 A small HUD shows dimensions, volume, and offsets.
 
 * One-block steps for free corner grabs; configurable steps in hold mode
 * Shift speeds up hold-mode editing without lowering you in flight
-* Release to apply; Escape cancels an unfinished edit
+* In hold mode, finish individual drags with LMB release; release `G` to apply them together
+* Free corner grabs apply on LMB release and keep normal Shift descent
+* Escape cancels an unfinished edit in either mode
 * Disabled by default; configurable hold key defaults to `G`
 
 Requires integrated singleplayer WorldEdit and a complete cuboid or extending
@@ -214,7 +217,7 @@ Works with everything WorldEdit sends via CUI.
 | `B` | Open block inspection screen |
 | `N` | Run WorldEdit `//deselect` |
 | `F8` | Toggle command-result preview |
-| Unassigned | Hold to edit cuboid bounds |
+| `G` | Hold to edit cuboid bounds |
 | Left Shift | Fast selection-editing step |
 
 All keybinds are configurable.
@@ -232,7 +235,8 @@ All keybinds are configurable.
 * Better Block Entities compatibility hardening
 
 If the server does not send CUI data or supported WorldEdit selection updates, the overlay cannot know what to render.
-Clipboard preview is available when the local WorldEdit mod exposes its clipboard API.
+Clipboard/command preview and interactive bounds editing require integrated singleplayer WorldEdit.
+Remote Bukkit/Paper/Fabric/NeoForge servers retain CUI visualization, inspection, and local styling.
 
 ***
 

@@ -32,25 +32,31 @@ final class SelectionEditRenderer {
                 client.getWindow().getScreenWidth() / (double) client.getWindow().getScreenHeight(), client.getWindow().getScreenHeight());
     }
     Face handleHit(CuboidDraft bounds, View view) {
+        return handleHit(bounds, view, view.forward);
+    }
+    Face handleHit(CuboidDraft bounds, View view, Point ray) {
         Face hit = null;
         double nearest = Double.POSITIVE_INFINITY;
         for (Face face : FACES) {
             Point center = bounds.center(face), offset = center.subtract(view.eye);
-            double depth = offset.dot(view.forward);
+            double depth = offset.dot(ray);
             if (depth <= 0.05) continue;
-            double distance = offset.subtract(view.forward.scale(depth)).length();
+            double distance = offset.subtract(ray.scale(depth)).length();
             if (distance <= view.radius(center, 12) && depth < nearest) { hit = face; nearest = depth; }
         }
         return hit;
     }
     Corner cornerHit(CuboidDraft bounds, View view) {
+        return cornerHit(bounds, view, view.forward);
+    }
+    Corner cornerHit(CuboidDraft bounds, View view, Point ray) {
         Corner hit = null;
         double nearest = Double.POSITIVE_INFINITY;
         for (Corner corner : CORNERS) {
             Point center = bounds.corner(corner), offset = center.subtract(view.eye);
-            double depth = offset.dot(view.forward);
+            double depth = offset.dot(ray);
             if (depth <= 0.05) continue;
-            double distance = offset.subtract(view.forward.scale(depth)).length();
+            double distance = offset.subtract(ray.scale(depth)).length();
             if (distance <= view.radius(center, 10) && depth < nearest) { hit = corner; nearest = depth; }
         }
         return hit;

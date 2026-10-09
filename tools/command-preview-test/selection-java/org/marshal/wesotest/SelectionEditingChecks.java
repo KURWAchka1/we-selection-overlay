@@ -113,8 +113,25 @@ public final class SelectionEditingChecks {
         pause(300);
         screenshot.accept("selection-edit-drag");
         onClient(() -> { nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0); return null; });
+        pause(150);
+        check(onClient(() -> editing.active() && !editing.dragging() && editing.capturesCamera() && !client.mouseHandler.isMouseGrabbed()),
+                "Held LMB release applied the draft or unlocked the camera");
+        check(serverBounds().equals(original), "Held LMB release committed before G release");
+        cursorAt(dragged.corner(Corner.WEST_UP_NORTH));
+        onClient(() -> {
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+            check(editing.dragging() && field(editing, "lockedCorner") == Corner.WEST_UP_NORTH, "Second held gesture did not grab the corner");
+            check(editing.draft().equals(dragged), "Second held gesture jumped or discarded the first change");
+            nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), client.mouseHandler.xpos() + 80, client.mouseHandler.ypos() - 40);
+            return null;
+        });
+        CuboidDraft composed = onClient(editing::draft);
+        check(!composed.equals(dragged) && composed.maxX() == dragged.maxX(), "Second corner gesture discarded the edited opposite face");
+        onClient(() -> { nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0); return null; });
+        check(serverBounds().equals(original), "Second LMB release committed early");
+        release();
         await(() -> !editing.pending(), "drag commit");
-        check(serverBounds().equals(dragged), "Drag release did not commit");
+        check(serverBounds().equals(composed), "G release did not commit all changed faces");
         await(() -> !editing.waitingForCui(), "CUI acknowledgement");
         check(onClient(() -> ((Set<?>) field(overlay, "isolatedBlockIds")).equals(Set.of("minecraft:stone"))), "Resize cleared isolation types");
         check(onClient(() -> call(call(clipboardSource, "snapshot"), "blocks")) == cachedClipboard, "Editing discarded clipboard geometry cache");
@@ -134,13 +151,29 @@ public final class SelectionEditingChecks {
         select(false); aim(Face.EAST, true); start(Face.EAST);
         onClient(() -> { nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1); return null; });
         check(onClient(editing::dragging), "Cancel probe could not drag");
+        onClient(() -> { nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(256, 0, 0)); return null; });
         release(); await(() -> !editing.active(), "drag cancellation");
         onClient(() -> {
             nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
             check(!client.options.keyAttack.isDown(), "Cancelled drag attacked on exit");
             check(client.mouseHandler.isMouseGrabbed(), "Cancelled drag did not restore cursor"); return null;
         });
-        check(serverBounds().equals(original), "Releasing hold during drag committed");
+        check(serverBounds().equals(original), "Escape during held drag committed");
+
+        select(false); aim(Face.EAST, true); start(Face.EAST);
+        onClient(() -> {
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+            nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), client.mouseHandler.xpos() + 70, client.mouseHandler.ypos() + 50);
+            return null;
+        });
+        CuboidDraft keyReleasedDraft = onClient(editing::draft);
+        check(!keyReleasedDraft.equals(original), "G release probe did not move the face");
+        release(); await(() -> !editing.pending(), "G release with mouse held");
+        check(serverBounds().equals(keyReleasedDraft), "G release while LMB held lost the final draft");
+        onClient(() -> {
+            nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+            check(client.mouseHandler.isMouseGrabbed() && !client.options.keyAttack.isDown(), "G release leaked attack or failed cursor restoration"); return null;
+        });
 
         select(false); aim(Face.UP, false); start(Face.UP);
         onClient(() -> { nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 1.0); return null; });
@@ -167,9 +200,12 @@ public final class SelectionEditingChecks {
             check(region.getPos1().equals(p1), "Reversed Pos1 lost identity");
             check(region.getPos2().equals(p2.add(-2, 0, 0)), "Reversed Pos2 lost identity"); return null;
         });
-        select(false); aim(Face.EAST, false); start(Face.EAST);
+        select(false);
         Point preciseCorner = original.corner(Corner.EAST_UP_SOUTH);
         aimAt(preciseCorner.add(new Point(9, 7, 11)), preciseCorner);
+        onClient(() -> { hold.setDown(true); return null; });
+        await(() -> editing.active() && editing.draft() != null, "precise corner entry");
+        cursorAt(preciseCorner);
         onClient(() -> {
             nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
             check(editing.cursorDrag() && !client.mouseHandler.isMouseGrabbed(), "Held corner did not preserve precise cursor dragging");
@@ -239,12 +275,12 @@ public final class SelectionEditingChecks {
             if (corner == Corner.EAST_UP_SOUTH) {
                 double height = onClient(() -> client.player.getY());
                 onClient(() -> { fast.setDown(true); client.options.keyShift.setDown(true); hold.setDown(true); return null; });
-                pause(250);
+                pause(500);
                 onClient(() -> {
                     check(!editing.cursorDrag() && client.mouseHandler.isMouseGrabbed(), "Pressing hold key during free drag locked camera");
-                    check(!client.player.input.keyPresses.shift(), "Free corner Shift retained sneak input");
-                    check(client.player.getY() >= height - 0.05,
-                            "Free corner Shift lowered flying player: before=" + height + " after=" + client.player.getY());
+                    check(client.player.input.keyPresses.shift(), "Free corner suppressed normal Shift input");
+                    check(client.player.getY() < height - 0.05,
+                            "Free corner Shift did not descend: before=" + height + " after=" + client.player.getY());
                     fast.setDown(false); client.options.keyShift.setDown(false); hold.setDown(false); return null;
                 });
                 pause(100);
@@ -257,15 +293,19 @@ public final class SelectionEditingChecks {
                 onClient(() -> { client.gui.hud.getChat().clearMessages(false); return null; });
                 pause(200); screenshot.accept("selection-edit-corner");
             }
-            onClient(() -> { nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0); return null; });
+            CuboidDraft releasedDraft = onClient(() -> {
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+                return editing.draft();
+            });
             await(() -> !editing.pending(), "corner commit " + corner);
-            check(serverBounds().equals(cornerDraft), "Corner commit failed: " + corner);
+            check(releasedDraft != null && serverBounds().equals(releasedDraft), "Corner commit failed: " + corner
+                    + " expected=" + releasedDraft + " actual=" + serverBounds());
             onServer(() -> {
                 var selector = WorldEdit.getInstance().getSessionManager().get(actor()).getRegionSelector(actor().getWorld());
                 check(selector.getClass() == (corner.ordinal() % 2 == 0 ? ExtendingCuboidRegionSelector.class : CuboidRegionSelector.class), "Corner replaced selector type");
                 var region = (CuboidRegion) selector.getRegion();
-                check(region.getPos1().equals(movedPoint(ordered.get(0), cornerDraft)), "Corner changed Pos1 ordering: " + corner);
-                check(region.getPos2().equals(movedPoint(ordered.get(1), cornerDraft)), "Corner changed Pos2 ordering: " + corner);
+                check(region.getPos1().equals(movedPoint(ordered.get(0), releasedDraft)), "Corner changed Pos1 ordering: " + corner);
+                check(region.getPos2().equals(movedPoint(ordered.get(1), releasedDraft)), "Corner changed Pos2 ordering: " + corner);
                 return null;
             });
         }
@@ -305,6 +345,7 @@ public final class SelectionEditingChecks {
         });
         check(onServer(this::history).equals(historyBefore), "Selection editing changed WorldEdit history");
         check(onServer(this::worldBlocks).equals(blocksBefore), "Selection editing changed world blocks");
+        paletteHistory();
         for (String language : new String[]{"en_us", "ru_ru"}) {
             var reload = onClient(() -> { client.getLanguageManager().setSelected(language); return client.reloadResourcePacks(); });
             await(reload::isDone, "language reload");
@@ -354,7 +395,7 @@ public final class SelectionEditingChecks {
         await(reload::isDone, "restore language");
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
-        System.out.println("SELECTION EDIT VERIFY PASS: default G, six clicked/remembered faces, eight live-camera flying corners with fixed one-block steps, configurable precise held steps, flight Shift, cancel, stale, extending, isolation, clipboard, unchanged blocks/history");
+        System.out.println("SELECTION EDIT VERIFY PASS: G captures camera, LMB retains composed draft, G commits all faces, eight free-camera one-block corners, free Shift descent, held steps, Escape, stale, isolation, clipboard, unchanged blocks/history");
     }
     private void checkCornerStep(Corner corner, double distance, int step) {
         Point offset = new Point(distance * corner.face(0).sign, distance * corner.face(1).sign, distance * corner.face(2).sign);
@@ -362,6 +403,75 @@ public final class SelectionEditingChecks {
         call(editing, "updateCorner", start.add(offset));
         check(editing.draft().equals(original.moveCorner(corner, offset, step, -64, 319)),
                 "Wrong corner step: " + corner + " expected=" + step + " fast=" + fast.isDown() + " hold=" + hold.isDown());
+    }
+    private void paletteHistory() {
+        onClient(() -> {
+            float legacyWidth = (float) call(overlay, "lineWidthScale");
+            call(overlay, "previewLineWidthScale", 1.35f);
+            Object screen = Class.forName("org.marshal.weaddon_lightposition.runtime.mc26_2.client.screen.OverlayColorSettingsScreen")
+                    .getConstructors()[0].newInstance(overlay, null);
+            client.gui.setScreen((net.minecraft.client.gui.screens.Screen) screen);
+            Object baseline = call(screen, "paletteState");
+            double x = ((Number) call(screen, "spectrumX")).doubleValue(), y = ((Number) call(screen, "spectrumY")).doubleValue();
+            client.gui.screen().mouseClicked(new net.minecraft.client.input.MouseButtonEvent(x + 20, y + 20, new MouseButtonInfo(0, 0)), false);
+            client.gui.screen().mouseClicked(new net.minecraft.client.input.MouseButtonEvent(x + 20, y + 20, new MouseButtonInfo(1, 0)), false);
+            client.gui.screen().mouseReleased(new net.minecraft.client.input.MouseButtonEvent(x + 20, y + 20, new MouseButtonInfo(1, 0)));
+            for (int i = 0; i < 100; i++) call(screen, "updateSpectrum", x + 20 + i, y + 25, false);
+            client.gui.screen().mouseReleased(new net.minecraft.client.input.MouseButtonEvent(x + 119, y + 25, new MouseButtonInfo(0, 0)));
+            Object dragged = call(screen, "paletteState");
+            check(!dragged.equals(baseline) && ((java.util.Collection<?>) field(screen, "undoStates")).size() == 1, "Palette drag did not create one history step");
+            paletteKey(90, 2); check(call(screen, "paletteState").equals(baseline), "Palette Ctrl+Z did not undo the complete drag");
+            call(screen, "beginPaletteEdit"); call(screen, "finishPaletteEdit");
+            paletteKey(89, 2); check(call(screen, "paletteState").equals(dragged), "Palette no-op destroyed redo or Ctrl+Y failed");
+
+            if ((boolean) call(screen, "stackedLayout")) client.gui.screen().mouseScrolled(20, 80, 0, -100);
+            double fieldX = ((Number) call(screen, "controlsX")).doubleValue() + 40;
+            double fieldY = ((Number) call(screen, "fieldsY")).doubleValue() + 5;
+            client.gui.screen().mouseClicked(new net.minecraft.client.input.MouseButtonEvent(fieldX, fieldY, new MouseButtonInfo(0, 0)), false);
+            check(client.gui.screen().getFocused() == field(screen, "hexField"), "Palette HEX field did not receive focus");
+            call(screen, "onHexChanged", "#70123456"); call(screen, "onHexChanged", "#80345678");
+            paletteKey(90, 2); check(call(screen, "paletteState").equals(dragged), "Numeric entry was not coalesced or opacity was lost");
+            paletteKey(90, 3); Object typed = call(screen, "paletteState");
+            check(!typed.equals(dragged), "Palette Ctrl+Shift+Z did not redo");
+            paletteKey(90, 2);
+            call(screen, "updateAlpha", x + 35, false); call(screen, "finishPaletteEdit");
+            Object branched = call(screen, "paletteState"); paletteKey(89, 2);
+            check(call(screen, "paletteState").equals(branched) && ((java.util.Collection<?>) field(screen, "redoStates")).isEmpty(), "Palette new edit retained old redo branch");
+
+            setField(screen, "templateMenuOpen", true); paletteKey(90, 2);
+            check(call(screen, "paletteState").equals(branched), "Palette undo leaked behind a popup");
+            setField(screen, "templateMenuOpen", false);
+            Class<?> presets = java.util.Arrays.stream(screen.getClass().getDeclaredClasses()).filter(t -> t.getSimpleName().equals("OverlayPreset")).findFirst().orElseThrow();
+            setField(screen, "pendingPreset", presets.getEnumConstants()[1]);
+            paletteKey(89, 2); check(call(screen, "paletteState").equals(branched), "Palette redo applied a pending preset");
+            call(screen, "clickPresetConfirmation", ((Number) call(screen, "confirmApplyX")).doubleValue() + 5,
+                    ((Number) call(screen, "confirmButtonsY")).doubleValue() + 5);
+            Object preset = call(screen, "paletteState");
+            paletteKey(90, 2); check(call(screen, "paletteState").equals(branched), "Preset undo failed to restore all colors/widths");
+            paletteKey(89, 2); check(call(screen, "paletteState").equals(preset), "Preset redo failed");
+
+            Class<?> resets = java.util.Arrays.stream(screen.getClass().getDeclaredClasses()).filter(t -> t.getSimpleName().equals("ResetAction")).findFirst().orElseThrow();
+            for (Object reset : resets.getEnumConstants()) {
+                setField(screen, "resetMenuOpen", true);
+                call(screen, "tryClickResetMenu", ((Number) call(screen, "resetMenuX")).doubleValue() + 8,
+                        ((Number) call(screen, "resetMenuItemY", reset)).doubleValue() + 5);
+                paletteKey(90, 2); check(call(screen, "paletteState").equals(preset), "Palette reset was not atomic: " + reset);
+            }
+            Object beforeResize = call(screen, "paletteState");
+            int count = ((java.util.Collection<?>) field(screen, "undoStates")).size();
+            client.resizeGui();
+            check(call(screen, "paletteState").equals(beforeResize) && ((java.util.Collection<?>) field(screen, "undoStates")).size() == count, "Palette resize lost history");
+            call(screen, "applyPaletteState", baseline);
+            check((float) call(overlay, "lineWidthScale") == 1.35f, "Palette history lost legacy global thickness");
+            call(overlay, "setLineWidthScale", legacyWidth);
+            System.out.println("PALETTE HISTORY VERIFY PASS: native Ctrl+Z/Y, grouped drag/input, alpha/widths, presets/resets, redo branch, popups, resize");
+            return null;
+        });
+        pause(200); screenshot.accept("palette-history");
+        onClient(() -> { client.gui.setScreen(null); return null; });
+    }
+    private void paletteKey(int key, int modifiers) {
+        check(client.gui.screen().keyPressed(new KeyEvent(key, 0, modifiers)), "Palette shortcut was not consumed");
     }
     private void select(boolean extending) {
         onServer(() -> {
@@ -392,10 +502,15 @@ public final class SelectionEditingChecks {
     private void start(Face face) {
         Face previous = onClient(editing::target);
         boolean angled = lastAimAngled;
-        aim(face, false, true);
+        aim(face, angled, true);
         onClient(() -> { org.lwjgl.glfw.GLFW.glfwFocusWindow(client.getWindow().handle()); hold.setDown(true); return null; });
         await(() -> editing.active() && editing.draft() != null, "enter editing " + face);
         onClient(() -> {
+            check(editing.capturesCamera() && !client.mouseHandler.isMouseGrabbed(), "G did not immediately capture camera and release cursor");
+            client.options.keyRight.setDown(true); client.player.input.tick();
+            check(!client.player.input.keyPresses.right(), "G retained movement before dragging");
+            client.options.keyRight.setDown(false);
+            nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), client.getWindow().getScreenWidth() / 2.0, client.getWindow().getScreenHeight() / 2.0);
             check(editing.target() == previous, "Looking at a new face changed remembered choice");
             nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
             check(!editing.dragging(), "Whole face click unexpectedly dragged handle");
@@ -403,7 +518,18 @@ public final class SelectionEditingChecks {
             check(editing.target() == face, "Distance face click did not select " + face);
             return null;
         });
-        aim(face, angled);
+        cursorAt(original.center(face));
+    }
+    private void cursorAt(Point point) {
+        onClient(() -> {
+            Object view = field(editing, "editView");
+            Point offset = point.subtract((Point) call(view, "eye"));
+            double depth = offset.dot((Point) call(view, "forward")), tangent = (double) call(view, "tangent"), aspect = (double) call(view, "aspect");
+            check(depth > 0.05, "Cursor target behind captured camera");
+            double x = (0.5 + offset.dot((Point) call(view, "right")) / (2 * depth * tangent * aspect)) * client.getWindow().getScreenWidth();
+            double y = (0.5 - offset.dot((Point) call(view, "up")) / (2 * depth * tangent)) * client.getWindow().getScreenHeight();
+            nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x, y); return null;
+        });
     }
     private void release() { onClient(() -> { hold.setDown(false); return null; }); pause(150); }
     private com.sk89q.worldedit.entity.Player actor() { return FabricAdapter.get().fromNativePlayer(client.getSingleplayerServer().getPlayerList().getPlayers().getFirst()); }

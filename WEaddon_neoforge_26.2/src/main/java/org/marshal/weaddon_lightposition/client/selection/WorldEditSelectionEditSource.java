@@ -49,8 +49,7 @@ public final class WorldEditSelectionEditSource implements SelectionEditSource {
             try {
                 var nativePlayer = context.server.getPlayerList().getPlayer(context.player);
                 value = nativePlayer == null || nativePlayer.level() != context.nativeLevel ? SelectionEditSnapshot.unavailable("stale")
-                        : corner == null ? SelectionEditTransaction.commit(NeoForgeAdapter.get().fromNativePlayer(nativePlayer), context.selection, draft, face)
-                        : SelectionEditTransaction.commitCorner(NeoForgeAdapter.get().fromNativePlayer(nativePlayer), context.selection, draft, corner);
+                        : SelectionEditTransaction.commitBounds(NeoForgeAdapter.get().fromNativePlayer(nativePlayer), context.selection, draft);
             } catch (RuntimeException | LinkageError ex) {
                 org.slf4j.LoggerFactory.getLogger("worldedit_selection_overlay/selection-edit").warn("Selection adjustment failed.", ex);
                 value = SelectionEditSnapshot.unavailable("failed");

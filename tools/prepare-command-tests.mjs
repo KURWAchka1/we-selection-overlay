@@ -55,6 +55,7 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('net.minecraft.client.Minecraft', 'net.minecraft.client.MinecraftClient').replace(/\bMinecraft\b/g, 'MinecraftClient')
     .replaceAll('net.minecraft.client.KeyMapping', 'net.minecraft.client.option.KeyBinding').replaceAll('KeyMapping', 'KeyBinding')
     .replaceAll('net.minecraft.client.input.KeyEvent', 'net.minecraft.client.input.KeyInput').replaceAll('KeyEvent', 'KeyInput')
+    .replaceAll('net.minecraft.client.input.MouseButtonEvent', 'net.minecraft.client.gui.Click')
     .replaceAll('net.minecraft.client.input.MouseButtonInfo', 'net.minecraft.client.input.MouseInput').replaceAll('MouseButtonInfo', 'MouseInput')
     .replace(/(?<![.\w])client\.screen\b/g, 'client.currentScreen').replaceAll('getSingleplayerServer()', 'getServer()').replaceAll('getPlayerList()', 'getPlayerManager()').replaceAll('getPlayers()', 'getPlayerList()')
     .replaceAll('FabricAdapter.get().fromNativePlayer(', 'FabricAdapter.adaptPlayer(')

@@ -33,6 +33,10 @@ public final class OverlayColorSettingsScreen extends UiScreen {
 
     private final WorldEditPointOverlayClient overlayClient;
     private final Screen parent;
+    private final java.util.ArrayDeque<PaletteState> undoStates = new java.util.ArrayDeque<>();
+    private final java.util.ArrayDeque<PaletteState> redoStates = new java.util.ArrayDeque<>();
+    private PaletteState paletteEditStart;
+    private Object fieldEditTarget;
     private final ArrayList<Button> groupButtons = new ArrayList<>();
     private final UiMotion.Hover[] slotHovers = UiMotion.Hover.states(OverlayColorSlot.values().length);
     private final UiMotion.Hover[] slotResetHovers = UiMotion.Hover.states(OverlayColorSlot.values().length);
@@ -82,12 +86,15 @@ public final class OverlayColorSettingsScreen extends UiScreen {
 
     @Override
     protected void init() {
+        clearPaletteDrag();
+        finishPaletteEdit();
         groupButtons.clear();
         int groupX = stackedLayout() ? MARGIN : slotRowX();
         int groupY = topBarHeight() + MARGIN;
         for (ColorGroup group : ColorGroup.values()) {
             Button button = addRenderableWidget(
                     UiButton.styled(groupButtonText(group), ignored -> {
+                        finishPaletteEdit();
                         selectedGroup = group;
                         selectedSlot = group.slots()[0];
                         syncHsvFromSelectedColor();
@@ -194,6 +201,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
     @Override
     public boolean mouseClicked(MouseButtonEvent click, boolean doubleClick) {
         if (isClosing()) return true;
+        if (!paletteDragging()) finishPaletteEdit();
         if (click.button() == 0) {
             if (pendingPreset != null) {
                 return clickPresetConfirmation(click.x(), click.y());
@@ -288,6 +296,13 @@ public final class OverlayColorSettingsScreen extends UiScreen {
     @Override
     public boolean keyPressed(KeyEvent input) {
         if (isClosing()) return true;
+        if (!popupBlocksWidgetHover() && (input.modifiers() & GLFW.GLFW_MOD_CONTROL) != 0
+                && (input.modifiers() & GLFW.GLFW_MOD_ALT) == 0
+                && (input.key() == GLFW.GLFW_KEY_Z || input.key() == GLFW.GLFW_KEY_Y)) {
+            replayPaletteEdit(input.key() == GLFW.GLFW_KEY_Y || (input.modifiers() & GLFW.GLFW_MOD_SHIFT) != 0);
+            return true;
+        }
+        if (input.key() == GLFW.GLFW_KEY_TAB || input.key() == GLFW.GLFW_KEY_ENTER) finishPaletteEdit();
         if (input.key() == GLFW.GLFW_KEY_ESCAPE) {
             if (pendingPreset != null) {
                 pendingPreset = null;
@@ -364,29 +379,14 @@ public final class OverlayColorSettingsScreen extends UiScreen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent click) {
+        if (click.button() != 0) return super.mouseReleased(click);
+        if (paletteDragging()) {
+            clearPaletteDrag();
+            finishPaletteEdit();
+            return true;
+        }
         if (draggingPreview) {
             draggingPreview = false;
-            return true;
-        }
-        if (draggingLineWidth) {
-            draggingLineWidth = false;
-            overlayClient.setOverlayLineWidthScale(selectedSlot, overlayClient.overlayLineWidthScale(selectedSlot));
-            return true;
-        }
-        if (draggingGlobalLineWidth) {
-            draggingGlobalLineWidth = false;
-            overlayClient.setAllOverlayLineWidthScale(overlayClient.commonOverlayLineWidthScale());
-            return true;
-        }
-        if (draggingSpectrum || draggingHue || draggingAlpha || draggingRed || draggingGreen || draggingBlue || draggingAlphaChannel) {
-            draggingSpectrum = false;
-            draggingHue = false;
-            draggingAlpha = false;
-            draggingRed = false;
-            draggingGreen = false;
-            draggingBlue = false;
-            draggingAlphaChannel = false;
-            overlayClient.setOverlayColor(selectedSlot, selectedColor());
             return true;
         }
         return super.mouseReleased(click);
@@ -416,7 +416,86 @@ public final class OverlayColorSettingsScreen extends UiScreen {
 
     @Override
     public void onClose() {
+        clearPaletteDrag();
+        finishPaletteEdit();
         closeAnimated(() -> { if (minecraft != null) minecraft.gui.setScreen(parent); });
+    }
+
+    private record PaletteState(List<Integer> colors, List<Float> widths, float globalWidth) { }
+
+    private PaletteState paletteState() {
+        ArrayList<Integer> colors = new ArrayList<>();
+        ArrayList<Float> widths = new ArrayList<>();
+        for (OverlayColorSlot slot : OverlayColorSlot.values()) {
+            colors.add(overlayClient.overlayColor(slot));
+            widths.add(overlayClient.overlayLineWidthScale(slot));
+        }
+        return new PaletteState(List.copyOf(colors), List.copyOf(widths), overlayClient.lineWidthScale());
+    }
+
+    private void beginPaletteEdit() {
+        if (paletteEditStart == null) paletteEditStart = paletteState();
+    }
+
+    private void beginFieldEdit() {
+        if (paletteEditStart != null && fieldEditTarget != getFocused()) finishPaletteEdit();
+        fieldEditTarget = getFocused();
+        beginPaletteEdit();
+    }
+
+    private void finishPaletteEdit() {
+        if (paletteEditStart == null) return;
+        PaletteState current = paletteState();
+        if (!current.equals(paletteEditStart)) {
+            undoStates.addLast(paletteEditStart);
+            if (undoStates.size() > 128) undoStates.removeFirst();
+            redoStates.clear();
+            applyPaletteState(current);
+        }
+        paletteEditStart = null;
+        fieldEditTarget = null;
+    }
+
+    private void applyPaletteState(PaletteState state) {
+        OverlayColorProfile profile = OverlayColorProfile.defaults();
+        OverlayColorSlot[] slots = OverlayColorSlot.values();
+        for (int i = 0; i < slots.length; i++) {
+            profile.setColor(slots[i], state.colors().get(i));
+            profile.setLineWidthScale(slots[i], state.widths().get(i));
+        }
+        overlayClient.applyOverlayColorProfile(profile, state.globalWidth());
+        syncHsvFromSelectedColor();
+        syncFields();
+    }
+
+    private boolean paletteDragging() {
+        return draggingSpectrum || draggingHue || draggingAlpha || draggingRed || draggingGreen || draggingBlue
+                || draggingAlphaChannel || draggingLineWidth || draggingGlobalLineWidth;
+    }
+
+    private void clearPaletteDrag() {
+        draggingSpectrum = draggingHue = draggingAlpha = draggingRed = draggingGreen = draggingBlue =
+                draggingAlphaChannel = draggingLineWidth = draggingGlobalLineWidth = false;
+    }
+
+    private void replayPaletteEdit(boolean redo) {
+        clearPaletteDrag();
+        finishPaletteEdit();
+        java.util.ArrayDeque<PaletteState> from = redo ? redoStates : undoStates;
+        java.util.ArrayDeque<PaletteState> to = redo ? undoStates : redoStates;
+        if (!from.isEmpty()) {
+            to.addLast(paletteState());
+            applyPaletteState(from.removeLast());
+        } else {
+            syncFields();
+        }
+    }
+
+    @Override
+    public void removed() {
+        clearPaletteDrag();
+        finishPaletteEdit();
+        super.removed();
     }
 
     private EditBox channelField(int x, int y, java.util.function.Consumer<String> listener) {
@@ -820,7 +899,9 @@ public final class OverlayColorSettingsScreen extends UiScreen {
         int y = slotListY();
         for (OverlayColorSlot slot : selectedGroup.slots()) {
             if (isInsideSlotResetButton(y, mouseX, mouseY)) {
+                beginPaletteEdit();
                 overlayClient.resetOverlayColor(slot);
+                finishPaletteEdit();
                 if (slot == selectedSlot) {
                     syncHsvFromSelectedColor();
                     syncFields();
@@ -838,11 +919,13 @@ public final class OverlayColorSettingsScreen extends UiScreen {
         }
         for (ResetAction action : ResetAction.values()) {
             if (isInside(resetMenuX(), resetMenuItemY(action), resetMenuWidth(), resetMenuItemHeight(), mouseX, mouseY)) {
+                beginPaletteEdit();
                 switch (action) {
                     case COLORS -> overlayClient.resetAllOverlayColors();
                     case WIDTHS -> overlayClient.resetAllOverlayLineWidths();
                     case ALL -> overlayClient.resetAllOverlayElementSettings();
                 }
+                finishPaletteEdit();
                 resetMenuOpen = false;
                 syncHsvFromSelectedColor();
                 syncFields();
@@ -869,7 +952,9 @@ public final class OverlayColorSettingsScreen extends UiScreen {
 
     private boolean clickPresetConfirmation(double mouseX, double mouseY) {
         if (isInsideConfirmApply(mouseX, mouseY)) {
+            beginPaletteEdit();
             overlayClient.applyOverlayColorProfile(pendingPreset.profile());
+            finishPaletteEdit();
             pendingPreset = null;
             syncHsvFromSelectedColor();
             syncFields();
@@ -914,6 +999,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
     }
 
     private void updateLineWidthScale(double mouseX, boolean save) {
+        beginPaletteEdit();
         int sliderWidth = Math.max(80, controlsWidth() - 18);
         float value = clamp01((float) ((mouseX - (redSliderX() + 18)) / (double) sliderWidth));
         float scale = 0.5f + value * 1.5f;
@@ -925,6 +1011,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
     }
 
     private void updateGlobalLineWidthScale(double mouseX, boolean save) {
+        beginPaletteEdit();
         int sliderWidth = globalLineWidthSliderWidth();
         float value = clamp01((float) ((mouseX - globalLineWidthSliderX()) / (double) sliderWidth));
         float scale = 0.5f + value * 1.5f;
@@ -936,6 +1023,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
     }
 
     private void applySelectedColor(int color, boolean save) {
+        beginPaletteEdit();
         if (save) {
             overlayClient.setOverlayColor(selectedSlot, color);
         } else {
@@ -949,9 +1037,10 @@ public final class OverlayColorSettingsScreen extends UiScreen {
         if (updatingFields) {
             return;
         }
+        beginFieldEdit();
         Integer color = OverlayColorProfile.parseColor(value);
         if (color != null) {
-            applySelectedColor(color, true);
+            applySelectedColor(color, false);
         }
     }
 
@@ -959,6 +1048,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
         if (updatingFields) {
             return;
         }
+        beginFieldEdit();
         Integer r = parseChannel(redField.getValue());
         Integer g = parseChannel(greenField.getValue());
         Integer b = parseChannel(blueField.getValue());
@@ -966,7 +1056,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
         if (r == null || g == null || b == null || a == null) {
             return;
         }
-        applySelectedColor(argb(a, r, g, b), true);
+        applySelectedColor(argb(a, r, g, b), false);
     }
 
     private void syncFields() {

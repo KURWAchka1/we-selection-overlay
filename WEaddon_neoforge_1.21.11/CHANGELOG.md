@@ -14,10 +14,15 @@
 - Configurable hold key, normal step and fast step. Editing starts disabled
   with G as the default hold key; the fast modifier defaults to Left Shift.
   Existing custom bindings remain unchanged.
-- Shift accelerates hold-mode editing without lowering the player in flight. Normal
-  Shift behavior returns outside editing.
+- Hold G to freeze the camera and edit with the cursor. LMB release finishes
+  a local drag; releasing G applies all accumulated changes together.
+- Shift accelerates hold-mode editing without lowering the player in flight.
+  Free corner dragging retains normal flight descent and one-block steps.
 - One authoritative selection adjustment on release, Escape/interruption
   cancellation and stale-selection protection through WorldEdit's public API.
+- Palette editor undo/redo with Ctrl+Z / Ctrl+Y (also Ctrl+Shift+Z), including
+  colors, transparency, thickness, resets and confirmed presets. Each slider
+  drag or numeric-field edit is one step; preview-camera motion is not recorded.
 - Standard and extending cuboids retain their selector type and ordered corners.
   Local drafts do not write blocks, scan the selection or add undo entries.
 - Live in-world command preview while typing `//set`, `//replace`, `//walls`,
@@ -52,8 +57,9 @@
 - NeoForge CUI packaging no longer collides with WorldEdit's shared protocol.
 - NeoForge 26.x clipboard access uses its official NeoForge player/block adapter.
 
-Command-result preview requires integrated singleplayer WorldEdit. Remote
-server CUI continues to support selection visualization, not command simulation.
+Clipboard/command preview requires integrated singleplayer WorldEdit. Remote
+server CUI continues to support selection visualization, not command simulation
+or clipboard access.
 Preview never edits the world or history; Enter executes the unchanged command.
 Interactive editing also requires integrated WorldEdit and currently supports
 complete cuboid/extending-cuboid selections only.

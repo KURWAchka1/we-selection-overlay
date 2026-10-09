@@ -47,6 +47,10 @@ public final class SelectionEditTransaction {
         return commitAxes(actor, original, draft, new CuboidDraft.Face[]{corner.face(0), corner.face(1), corner.face(2)});
     }
 
+    public static SelectionEditSnapshot commitBounds(Player actor, SelectionEditSnapshot original, CuboidDraft draft) {
+        return commitAxes(actor, original, draft, CuboidDraft.Face.values());
+    }
+
     private static SelectionEditSnapshot commitAxes(Player actor, SelectionEditSnapshot original, CuboidDraft draft, CuboidDraft.Face[] faces) {
         SelectionEditSnapshot current = read(actor);
         if (!same(original, current)) return SelectionEditSnapshot.unavailable("stale");
@@ -54,7 +58,11 @@ public final class SelectionEditTransaction {
         for (CuboidDraft.Face face : faces) {
             long delta = ((long) draft.boundary(face) - original.bounds().boundary(face)) * face.sign;
             if (delta != 0 && (delta > 0 ? !current.expand() : !current.contract())) return SelectionEditSnapshot.unavailable("permission");
-            validated = validated.resize(face, delta, current.minY(), current.maxY());
+        }
+        // Expand before contracting so a translated/shrunken box never crosses an old opposite face.
+        for (boolean expanding : new boolean[]{true, false}) for (CuboidDraft.Face face : faces) {
+            long delta = ((long) draft.boundary(face) - original.bounds().boundary(face)) * face.sign;
+            if (delta != 0 && (delta > 0) == expanding) validated = validated.resize(face, delta, current.minY(), current.maxY());
         }
         if (!validated.equals(draft)) return SelectionEditSnapshot.unavailable("invalid");
         if (draft.equals(original.bounds())) return current;
@@ -72,9 +80,9 @@ public final class SelectionEditTransaction {
     }
 
     private static void applyAxes(CuboidRegion region, CuboidDraft original, CuboidDraft draft, CuboidDraft.Face[] faces) {
-        for (CuboidDraft.Face face : faces) {
+        for (boolean expanding : new boolean[]{true, false}) for (CuboidDraft.Face face : faces) {
             long delta = ((long) draft.boundary(face) - original.boundary(face)) * face.sign;
-            if (delta != 0) apply(region, face, delta);
+            if (delta != 0 && (delta > 0) == expanding) apply(region, face, delta);
         }
     }
 

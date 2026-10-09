@@ -1,6 +1,6 @@
 # Verification
 
-Current source verification: 1.8.0, 2026-10-08. The test worlds, generated
+Current source verification: 1.8.0, 2026-10-09. The test worlds, generated
 fixtures, screenshots, and logs are local data and are not committed.
 
 ## Release build
@@ -11,7 +11,7 @@ boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
 1.4 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,442,406 bytes (Fabric) and 1,414,029 bytes
+The archived release outputs are 1,453,178 bytes (Fabric) and 1,424,775 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
@@ -196,7 +196,12 @@ The command/editing matrix loads the production universal JARs on the same six
 WorldEdit-enabled targets listed above. Each runtime checks all six cuboid faces
 through distant native LMB selection and wheel input. UP is the initial choice;
 re-entry remembers the clicked face, and looking around does not retarget it.
-Native handle dragging and release commit remain available.
+Holding G immediately releases the cursor and freezes camera/movement, even
+before a drag. Native distant face clicks and projected cursor picking use that
+captured view. LMB release leaves a composed local draft active; a second corner
+drag starts from the current draft without jumping or losing the first face edit.
+The server bounds remain unchanged between these drags. G release applies all
+changed sides once and restores camera/cursor control, also when LMB is still held.
 All eight corners additionally drag/commit without a hold key, with alternating
 standard/extending selectors. Native mouse motion changes camera yaw, sideways
 movement and upward flight remain available, and the live draft follows the
@@ -214,14 +219,17 @@ The server's region stays unchanged during drafting. Fast contraction
 stops at one block, preserves ExtendingCuboidRegionSelector, and a native
 transaction retains the identity of reversed primary/secondary corners.
 
-The default Shift modifier clears the native sneak input during editing; the
-flying fixture's height stays unchanged. Outside editing, vanilla sneak input
-is retained. A free corner gesture also checks Shift after flight and verifies
-that pressing the hold key halfway through does not switch gesture modes.
+The default Shift modifier clears native sneak input only in held editing; the
+flying fixture's height stays unchanged. In free corner dragging, the fixture
+checks native Shift input and an actual height decrease after upward flight,
+even with the hold key pressed midway. This does not switch gesture modes or
+change one-block snapping. Free commit checks use the final release-time draft,
+not an earlier frame's position while the camera/player is still moving.
 Corner Escape cancels without leaking an attack or committing.
-Native Escape cancels without opening the pause menu. Releasing the editing key
-during a drag restores the captured cursor without applying the draft or leaking
-an attack. Opening chat cancels. Replacing the selector with an identical-looking
+Native Escape cancels in both held/free modes without opening the pause menu,
+applying the draft or leaking an attack. Releasing the editing key during a held
+drag applies it and restores the captured cursor without leaking an attack.
+Opening chat cancels. Replacing the selector with an identical-looking
 one rejects the obsolete transaction instead of overwriting it. Isolation's
 selected material IDs and the clipboard geometry-list identity/preference survive
 an acknowledged resize. The fixture compares 1,000 full block states and the
@@ -264,6 +272,26 @@ are fixed-size work, independent of selection volume; it does not scan blocks.
 Live focus loss, disconnect during a pending commit, third-person camera changes,
 custom mouse/controller bindings, modpacks, and remote-server editing still need
 separate manual review. Remote CUI selection display is not remote editing.
+
+## Palette History
+
+All six WorldEdit-enabled native fixtures additionally open the production
+palette editor and dispatch its native mouse/key events. A 100-update color drag,
+including a second mouse button press/release, creates exactly one undo step.
+Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z restore full palette states, including alpha and
+all individual widths. Numeric edits are coalesced with the HEX field focused;
+the fixture scrolls to reach that field in the small stacked layout.
+New edits discard redo, while an unchanged edit does not. Popup/confirmation
+states block shortcuts from changing the palette behind them. Confirmed presets
+and each global reset are atomic undo steps; resize retains state/history.
+A non-default legacy global width multiplier is restored too. Each runtime
+captures the actual editor after the sequence. These are history/input checks,
+not a new editor performance benchmark or a complete IME/paste-input matrix.
+
+History is local to one editor instance, capped at 128 small immutable states;
+the capture code runs on edit boundaries, not per rendered frame. It does not
+intercept WorldEdit undo or record preview-camera movements. Palette edits and
+history need no WorldEdit permission; remote CUI styling remains a local feature.
 
 ## In-world isolation regression
 

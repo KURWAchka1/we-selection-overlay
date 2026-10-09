@@ -53,6 +53,7 @@ function yarn(code) {
     .replaceAll('client.options.save()', 'client.options.write()').replaceAll('MinecraftClient.getInstance().options.save()', 'MinecraftClient.getInstance().options.write()')
     .replaceAll('client.options.getCameraType()', 'client.options.getPerspective()')
     .replaceAll('client.mouseHandler', 'client.mouse').replaceAll('.releaseMouse()', '.unlockCursor()').replaceAll('.grabMouse()', '.lockCursor()')
+    .replaceAll('client.mouse.xpos()', 'client.mouse.getX()').replaceAll('client.mouse.ypos()', 'client.mouse.getY()')
     .replaceAll('client.options.keyAttack', 'client.options.attackKey').replaceAll('client.options.keyUse', 'client.options.useKey').replaceAll('client.options.keyPickItem', 'client.options.pickItemKey')
     .replaceAll('client.player.setDeltaMovement(', 'client.player.setVelocity(').replaceAll('client.player.displayClientMessage(', 'client.player.sendMessage(')
     .replaceAll('client.isWindowActive()', 'client.isWindowFocused()').replaceAll('getWindow().handle()', 'getWindow().getHandle()')

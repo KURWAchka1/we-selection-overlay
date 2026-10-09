@@ -1,6 +1,6 @@
 # UI validation
 
-Latest layout-only check: 2026-10-08. The earlier full UI profile and
+Latest layout-only check: 2026-10-09. The earlier full UI profile and
 six-runtime isolation checks remain recorded below; user visual acceptance
 is pending.
 
@@ -49,7 +49,7 @@ as documented in `TESTING.md`. Logs are written to `build/ui-validation/`.
 
 ## Verification Results
 
-The 2026-10-08 layout-only rerun passed with the final 1.8.0 Fabric universal
+The 2026-10-09 layout-only rerun passed with the final 1.8.0 Fabric universal
 artifact and no installed WorldEdit. It includes the new selection-editing
 row, which is unavailable without local WorldEdit, alongside the existing
 42-screenshot matrix. The dedicated editing settings screen is checked in
@@ -58,12 +58,18 @@ the command/editing fixture; see TESTING.md. Its controls stay inside the
 compact panel and use matching horizontal insets. These are layout checks,
 not new FPS measurements.
 
-The 2026-10-08 editing runs also capture the real native keybind menu in EN/RU
+The 2026-10-09 editing runs also capture the real native keybind menu in EN/RU
 at requested 2x/3x/4x on all six targets. The shorter face-edit/fast-step names
 do not overlap the assignment buttons. Passive corner markers, free-camera corner
 dragging during flight and the precise face-drag HUD are captured in-world, using native gizmos and
 the actual camera projection, not a separate UI illustration. NeoForge's HUD
 is registered once per runtime; packaging tests enforce that invariant.
+
+The same six runs verify palette Ctrl+Z/Y history with native screen events,
+including a focused HEX field, one-step drags, popup/confirmation blocking,
+resets/presets and resize preservation. History adds no new layout widgets or
+preview-camera recording. See TESTING.md for exact coverage; neither these
+checks nor the no-WorldEdit layout rerun are new FPS measurements.
 
 The 1.8.0 layout-only rerun includes the new Command Preview settings row,
 actual on/off clicks, styled label translations, and the existing 42-screenshot

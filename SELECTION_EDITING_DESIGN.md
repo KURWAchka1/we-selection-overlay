@@ -1,7 +1,7 @@
 # Interactive selection editing
 
 Status: implemented and six-runtime tested for the 1.8.0 development line,
-2026-10-08. Milestone 2 of
+2026-10-09. Milestone 2 of
 [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md). See TESTING.md for verified coverage
 and remaining integration checks.
 
@@ -18,6 +18,12 @@ and Pos1/Pos2 identities. Do not convert another shape to a cuboid implicitly.
 Polygon and convex vertex editing are future work, not placeholder controls.
 Remote CUI-only sessions remain visualization-only: this phase adds no server
 plugin, custom editing protocol or automatic chat-command fallback.
+This applies equally to Bukkit/Paper and dedicated Fabric/NeoForge servers.
+Installing WorldEdit on a remote client/server is not an integrated-server
+capability. Palette edits/history, block inspection/isolation and CUI selection
+display remain local visual features and do not require edit permissions.
+Any future remote editing adapter must validate WorldEdit permissions and
+authoritative session state on the server; CUI is not an authorization protocol.
 
 ## Interaction
 
@@ -32,13 +38,13 @@ fast modifier; default steps are 1 and 8 blocks.
 | Feature disabled | No markers, HUD, selection reads or mouse interception. |
 | Enabled, key not held | Show eight corner markers for a ready cuboid. Coalesce authoritative reads; intercept LMB only on a marker. No extra HUD or hotbar-wheel capture. |
 | Left-drag a corner without the edit key | Aim at a marker and hold LMB. Keep normal camera/flight controls; the corner follows the live view ray at its original grab distance, with the initial off-center offset retained. Always snap by one block, ignoring configured normal/fast steps and modifier keys; keep the opposite corner fixed. Release LMB to commit once. |
-| Hold edit key | Show face handles and a small dimensions HUD. Start with the previously clicked face (UP initially). Movement/look remain available until a drag begins. |
+| Hold edit key | Immediately freeze movement/look and release the cursor. Show face handles and a small dimensions HUD. Start with the previously clicked face (UP initially). Keep this captured view until the key is released or the draft is cancelled. |
 | Click a face | Select that side at any visible distance before resizing. Accent its perimeter/handle. Camera movement alone never changes the remembered choice. Intersection works even when the center handle is outside the viewport. |
 | Mouse wheel | Outward/inward resize of the targeted face by the normal step. Lock that face for the gesture. Update only the local draft. Release the edit key to commit once. |
-| Fast modifier | Use the configurable fast step only for gestures started in hold mode. Free corner grabs retain one-block snapping. Shift does not sneak or lower a flying player while serving as the active modifier in either mode; vanilla behavior returns on exit. |
-| Left-drag a handle/corner while holding the edit key | Capture one face axis or the corner's view plane, temporarily release the cursor and freeze camera rotation/movement. Release LMB to commit once; restore mouse state without a camera jump. |
+| Fast modifier | Use the configurable fast step only in hold mode, without lowering a flying player. Free corner grabs retain one-block snapping and normal Shift descent, even if G is pressed midway. |
+| Left-drag a handle/corner while holding the edit key | Use the fixed captured view to move one face axis or the corner's view plane. Release LMB to finish only that local drag. Continue with other corners/faces in the same draft, without applying it or restoring the camera yet. |
 | Escape | Cancel an uncommitted draft immediately, hide the gesture HUD/face handles, and require key release before hold-mode re-entry. Enabled corner markers remain available. |
-| Release edit key during a hold-mode drag | Cancel the incomplete drag. Direct corner drags do not require that key. Do not forward a still-held mouse button into an attack. |
+| Release edit key | Finalize any current hold-mode drag and commit the complete composed draft once, including when LMB is still held. Restore cursor/camera control without forwarding a held button into an attack. Direct/free corner drags still apply on LMB release instead. |
 | Chat/menu, lost focus, disconnect, changed world or changed authoritative selection | Cancel the draft; never treat these interruptions as a commit. |
 | Commit pending | Permit only one outstanding request. Do not queue further gestures against an unconfirmed selection. |
 
@@ -55,6 +61,8 @@ axes. Corner dragging changes its three adjoining sides together; the opposite
 corner stays fixed. Hold-mode coordinates snap to the configured block step;
 free corner grabs always use one block, even if G or Shift is pressed afterwards.
 The face cannot cross the opposite face: the minimum dimension is one block.
+Each new drag starts from the current draft, while the original authoritative
+snapshot remains unchanged for stale-state checks and cancellation.
 Wheel direction is always outward/inward, independent of camera orientation.
 Precise hold-mode dragging uses the captured world axis and camera projection,
 not camera yaw heuristics. Free corner dragging instead uses the current camera
@@ -114,9 +122,11 @@ integer draft bounds. WorldEdit remains the source of truth.
 4. On commit, reacquire and compare the authoritative origin and permissions.
    Reject stale requests rather than overwriting an axe/command selection change.
    Identical CUI resends alone are not evidence of a changed selection.
-5. Apply the one-axis face delta or three-axis corner deltas with the public
-   CuboidRegion expansion/contraction route, after prevalidating the entire
-   change on a clone. Check every delta's appropriate
+5. Validate every changed face in the final composed bounds with the public
+   CuboidRegion expansion/contraction route, before mutating the real region.
+   Apply expansions before contractions on both a draft and a region clone, then
+   on the real region. This permits a valid translation across an old opposite
+   face without an invalid intermediate shrink. Check every delta's appropriate
    `worldedit.selection.expand` / `worldedit.selection.contract` permission.
    Do not recreate an extending selector or shrink it using selectSecondary.
 6. Follow WorldEdit's selection-adjustment lifecycle: learnChanges(), then
@@ -149,6 +159,12 @@ were checked for each version; real packaged-runtime tests exercise these hooks.
   clear the chosen IDs halfway through an acknowledged edit.
 - The inspector can rescan after a committed change, not during each local step.
   The palette editor is unrelated and retains its current projection controls.
+  Ctrl+Z / Ctrl+Y (also Ctrl+Shift+Z) restore color/alpha, individual/global
+  widths, resets and confirmed presets, not camera movement. One slider drag or
+  numeric-field edit is one undo step. A changed edit clears redo; no-ops do not.
+  Preserve history across resize within the same editor instance, save completed
+  changes, and finalize pending edits on close/removal. At most 128 immutable
+  palette snapshots are retained; no history snapshots are created per frame.
 
 ## Performance contract
 
@@ -193,6 +209,8 @@ Do not add release notes or mark the milestone complete based only on compilatio
 
 ## Primary references
 
+- [WorldEdit permissions](https://worldedit.enginehub.org/en/latest/permissions/):
+  selection expansion/contraction permissions, independently of operator status.
 - [Axiom gizmos](https://axiomdocs.moulberry.com/editor/gizmos.html): axis-specific
   manipulation and wheel nudging. Adapt the interaction principle, not its code.
 - [Axiom Box Select](https://axiomdocs.moulberry.com/tools/selection/boxselect.html):
@@ -219,8 +237,9 @@ Do not add release notes or mark the milestone complete based only on compilatio
   The source's weak snapshot cache cannot keep a closed world alive; changed
   player/world identity clears pending draft references and invalidates callbacks.
 - Outside hold mode, only a marker hit captures LMB for a live-camera corner
-  gesture. Hold-mode dragging captures the camera projection, stops movement
-  and releases the cursor. The gesture type is fixed at capture, so pressing G
+  gesture. Entering hold mode captures the camera projection, stops movement
+  and releases the cursor immediately; LMB release leaves that mode active.
+  The gesture type is fixed at capture, so pressing G
   halfway through a free drag does not unexpectedly lock the camera. Resize/camera-mode changes
   also cancel the draft. Minecraft's early-return first mouse event is handled.
 - Both universal packagers register the hooks explicitly. Artifact tests check

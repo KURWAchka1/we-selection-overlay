@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class SelectionEditMovementMixin extends Input {
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void weso$freeze(CallbackInfo ci) {
-        if (!SelectionEditController.instance().cursorDrag()) return;
+        if (!SelectionEditController.instance().capturesCamera()) return;
         playerInput = PlayerInput.DEFAULT; movementVector = Vec2f.ZERO; ci.cancel();
     }
 
