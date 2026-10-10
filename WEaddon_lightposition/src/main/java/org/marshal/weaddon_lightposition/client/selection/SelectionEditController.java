@@ -42,7 +42,7 @@ public final class SelectionEditController {
     private boolean active, dragging, directCorner, pending, reading, radialOpen, dragArmed;
     private double pressX, pressY, radialX, radialY, radialMouseX, radialMouseY;
     private long menuAppeared;
-    private int blockedButtons, ticks, epoch, ackTicks, commitSerial, lastReadTick = -4;
+    private int blockedButtons, ownedAxisKeys, ticks, epoch, ackTicks, commitSerial, lastReadTick = -4;
     private Object level, player;
     private long appeared;
     private int dragWidth, dragHeight;
@@ -137,7 +137,6 @@ public final class SelectionEditController {
         pollKey(client);
         if (pending) return;
         if (!reading && ticks - lastReadTick >= 4) read(client);
-        followCarry();
         if (capturesCamera()) client.player.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
     }
 
@@ -146,6 +145,36 @@ public final class SelectionEditController {
         Minecraft client = Minecraft.getInstance();
         if (usable(client)) pollKey(client);
         else keyGesture.cancel(editKey != null && editKey.isDown());
+    }
+    public boolean axisKey(int action, net.minecraft.client.input.KeyEvent event) {
+        int axis = switch (event.key()) {
+            case GLFW.GLFW_KEY_X -> 0;
+            case GLFW.GLFW_KEY_Y -> 1;
+            case GLFW.GLFW_KEY_Z -> 2;
+            default -> -1;
+        };
+        if (axis < 0) return false;
+        int bit = 1 << axis;
+        if (action == GLFW.GLFW_RELEASE) {
+            boolean owned = (ownedAxisKeys & bit) != 0;
+            ownedAxisKeys &= ~bit;
+            return owned;
+        }
+        if (action == GLFW.GLFW_REPEAT) return (ownedAxisKeys & bit) != 0;
+        if (action != GLFW.GLFW_PRESS) return false;
+        // A fresh press also recovers from a release missed while the window was unfocused.
+        ownedAxisKeys &= ~bit;
+        Minecraft client = Minecraft.getInstance();
+        if (!active || pending || radialOpen || directCorner || !dragging || carry == null
+                || mode != SelectionEditMode.MOVE || !usable(client)
+                || (event.modifiers() & (GLFW.GLFW_MOD_CONTROL | GLFW.GLFW_MOD_ALT | GLFW.GLFW_MOD_SUPER)) != 0) return false;
+        for (KeyMapping key : new KeyMapping[]{editKey, fastKey, client.options.keyUp, client.options.keyDown,
+                client.options.keyLeft, client.options.keyRight, client.options.keyJump, client.options.keyShift, client.options.keySprint}) {
+            if (key != null && key.matches(event)) return false;
+        }
+        carry.selectAxis(axis);
+        ownedAxisKeys |= bit;
+        return true;
     }
     private void pollKey(Minecraft client) {
         boolean held = editKey != null && editKey.isDown();
@@ -156,7 +185,6 @@ public final class SelectionEditController {
             case CLOSE_MENU -> closeMenu(client);
             case TOGGLE -> {
                 if (active) {
-                    followCarry();
                     if (cursorDrag()) move(client.mouseHandler.xpos(), client.mouseHandler.ypos());
                     dragging = dragArmed = false; restoreCursor(); submit();
                 } else begin(client, false);
@@ -228,7 +256,6 @@ public final class SelectionEditController {
         if (!inputActive()) return false;
         if (active && !radialOpen && !pending && mode == SelectionEditMode.MOVE) {
             if (carry == null || !dragging) return false;
-            followCarry();
             draft = carry.scroll(amount, options.step());
             return true;
         }
@@ -252,7 +279,6 @@ public final class SelectionEditController {
         if (action == GLFW.GLFW_RELEASE) {
             blockedButtons &= ~bit;
             if (button == 0 && (dragging || dragArmed)) {
-                followCarry();
                 if (directCorner) followCorner(renderer.view(Minecraft.getInstance()));
                 boolean direct = directCorner;
                 dragging = dragArmed = false; faceDrag = null; carry = null; carryAnchor = null;
@@ -288,7 +314,7 @@ public final class SelectionEditController {
             if (!origin.shift()) return;
             Point anchor = renderer.moveHit(draft, view);
             if (anchor == null) return;
-            try { carry = new SelectionCarry(draft, playerRoot(client), view.forward(), origin.minY(), origin.maxY()); }
+            try { carry = new SelectionCarry(draft, view.forward(), origin.minY(), origin.maxY()); }
             catch (IllegalArgumentException ex) { return; }
             carryAnchor = anchor.subtract(new Point(draft.minX(), draft.minY(), draft.minZ()));
             locked = null; lockedCorner = null; faceDrag = null; dragOrigin = draft;
@@ -378,12 +404,6 @@ public final class SelectionEditController {
         }
         draft = next;
     }
-    private static Point playerRoot(Minecraft client) {
-        return new Point(client.player.getX(), client.player.getY(), client.player.getZ());
-    }
-    private void followCarry() {
-        if (carry != null && dragging && active()) draft = carry.follow(playerRoot(Minecraft.getInstance()));
-    }
     private void followCorner(SelectionEditRenderer.View view) {
         updateCorner(CuboidDraft.rayPoint(view.eye(), view.forward(), dragStart));
     }
@@ -456,7 +476,6 @@ public final class SelectionEditController {
         if (!visible()) return;
         Minecraft client = Minecraft.getInstance();
         SelectionEditRenderer.View view = capturesCamera() ? editView : renderer.view(client);
-        followCarry();
         if (dragging && directCorner) followCorner(view);
         if (active() && draft != null) renderer.world(origin.bounds(), draft, lockedCorner == null ? target() : null,
                 lockedCorner != null ? lockedCorner : renderer.cornerHit(draft, view, editingRay(view)), view, appeared, pending,

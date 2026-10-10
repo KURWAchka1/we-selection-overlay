@@ -9,15 +9,15 @@ The root README build command completed for all six runtimes and both universal
 packagers. Packager tests checked metadata, version selection, Java bytecode
 boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
-1.4 MiB; neither bundles
+1.5 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,528,934 bytes (Fabric) and 1,500,092 bytes
+The archived release outputs are 1,534,728 bytes (Fabric) and 1,505,858 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
 previous test results.
-The current packager suites pass 91 Fabric-side and 8 NeoForge-side executions;
-the 80 shared selection-domain cases run on the Fabric side, not twice.
+The current packager suites pass 90 Fabric-side and 8 NeoForge-side executions;
+the 79 shared selection-domain cases run on the Fabric side, not twice.
 NeoForge tests additionally reject exported EngineHub and Architectury injection
 packages, and check the private official CUI codecs. Actual WorldEdit launches
 exercise its installed protocol; no-WorldEdit launches exercise the optional
@@ -224,7 +224,7 @@ center cancellation, Escape while held and cursor
 restoration. Actual ring screenshots cover requested scales 2x/3x/4x. Opening
 and cancelling the menu during editing must leave the composed draft unchanged;
 choosing a mode must not enter editing or apply a draft automatically.
-Move checks root-displacement carry and grip-locked cardinal wheel nudges, unchanged
+Move checks independent XYZ wheel nudges without player-displacement carry, unchanged
 dimensions, reversed ordered corners and ExtendingCuboidRegionSelector identity.
 Separate native transactions reject a missing shift permission, allow a
 shift-only actor to move and deny that actor a resize. Both tools remain local
@@ -279,7 +279,7 @@ The existing command regressions run alongside these checks, including large
 grass replacement and incremental chunk arrival; no command-engine changes were
 needed for editing. Tests and temporary configs are confined to disposable worlds.
 
-The shared domain suite passes 80 cases covering face signs, inside/outside rays,
+The shared domain suite passes 79 cases covering face signs, inside/outside rays,
 zero-depth face intersections, axis dragging from either camera side, world boundaries,
 minimum size, integer overflow, large volume, configuration defaults/clamps,
 all corner signs/opposite-point preservation, step snapping, captured plane
@@ -302,7 +302,53 @@ Live focus loss, disconnect during a pending commit, third-person camera changes
 custom mouse/controller bindings, modpacks, and remote-server editing still need
 separate manual review. Remote CUI selection display is not remote editing.
 
+### Independent Move Axes
+
+On 2026-10-10, the final independent-axis revision passed the complete native
+command/editing/palette fixture on Fabric and NeoForge for 1.21.11, 26.1 and
+26.2. All 18 requested-scale compass captures passed the color, letter-center
+and stroke-center checks, against both sky and stone backgrounds. The largest
+measured stem-centroid deviation was 0.134 logical pixels; no frame-time or
+general modpack-compatibility claim follows from this visual check.
+
+The current native matrix requires `MOVE AXES VERIFY PASS:` on every target.
+Its Creative fixture parks the player over a solid floor, grips Move, and
+switches X/Y/Z without releasing LMB. Y wheel input moves the selection through
+the floor without moving the player. Fractional X input survives a Y/Z switch;
+axis selection alone does not transform the draft. Navigation, flight and
+mouse look must leave it unchanged. A translation at unchanged camera heading
+must not rotate the compass. Six cardinal and three oblique camera directions,
+including straight up/down, must match the actual native camera basis while
+preserving the chosen grip axis and draft. Only camera rotation changes the
+miniature's viewpoint; a new grip captures a new initial direction.
+
+Native keyboard probes verify press/release ownership, held-key repeats after
+switching axes, cancellation with a key still down, an edit key rebound to X,
+and a fast modifier rebound to Y. Modifier combinations and native edit,
+movement and fast bindings retain priority. G taps use native callbacks, not
+short synthetic key-state pulses that can fall between ticks during a hitch.
+Existing G/Escape, ordered-corner, permission, isolation, clipboard and unchanged
+world/history assertions still run alongside the new checks.
+
+Actual compass captures cover requested scales 2x/3x/4x at 1280x720. Minecraft
+clamps requested 4x to effective 3x at this viewport; this is not a 4K test.
+The bottom-right 84 x 84 logical-pixel area stays above the hotbar and clear of
+top-right tutorial toasts. The pixel check requires all three axis colors and
+colored label pixels in that area; it is not OCR. Three depth-ordered thin arms
+and cached regular/bold labels reuse existing GUI rendering, without endpoint
+circles or backplates. Separate letter regions reject filled endpoint discs.
+Stem-color centroids must stay within 0.3 logical pixels of their projected
+centerlines; the earlier half-pixel-offset strokes fail this regression check.
+Colored letter bounds separately check their optical center, rejecting the
+old half-pixel leading offset even when the stroke itself is centered.
+Coordinate changes do not scan the
+selection or depend on its volume. No new controlled frame-time benchmark is
+claimed.
+
 ### Move Carry Regression
+
+Historical baseline: the 2026-10-10 independent-axis revision supersedes root
+carry. These older results describe the previous interaction, not current behavior.
 
 On 2026-10-09, all six production-artifact command/editing/palette runs passed
 after the first [task-first Move slice](SELECTION_WORKFLOW_DECISION.md). Native

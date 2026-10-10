@@ -116,11 +116,12 @@ Customize how the overlay looks directly in-game:
 Grab corners while freely looking/flying, or tap `G` for selection editing.
 Hold `G` briefly to choose **Resize** or **Move** in a radial menu with a bounded
 pointer and an empty cancel center. In Move, grab the boundary or center marker
-and walk/fly with the selection; looking around alone does not move it or its blocks.
+and use the wheel to shift it; `X` / `Y` / `Z` switches axes without re-grabbing.
+Walking and flying do not move the selection or its blocks.
 
 * Drag any face surface, even up close or from inside the cuboid
 * One-block free corner grabs; configurable steps and Shift acceleration in Resize
-* Move keeps normal camera/flight controls; wheel nudges precisely while grabbed
+* Move keeps normal camera/flight controls; a corner axis indicator follows the camera while grabbed
 * LMB release finishes a drag; tap `G` again to apply all changes and exit
 * Free corner grabs apply on LMB release and keep normal Shift descent
 * Escape cancels an unfinished edit in either mode

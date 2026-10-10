@@ -11,9 +11,13 @@
 - Grab a corner without the edit key and move it while freely looking/flying.
   Free grabs always use one-block steps; the explicit editor uses configurable steps.
 - Move the whole selection without resizing it or moving world blocks, with
-  free-camera walking/flight carry, one-block snapping and grip-locked cardinal
-  wheel nudges. Looking around alone does not move the box. The boundary or
-  center marker can be grabbed; idle wheel retains native hotbar behavior.
+  independent cardinal wheel nudges and one-block snapping. While gripping the
+  boundary or center marker, X/Y/Z immediately chooses the wheel axis, including
+  vertical movement through terrain. Walking, flying and looking around never
+  move the box; idle wheel retains native hotbar behavior.
+- A compact axis triad appears in the corner during a Move grip. Thin lines and
+  palette-colored X/Y/Z letters follow the camera orientation while grip
+  directions stay fixed; the selected letter is emphasized without circles.
 - Tap G to enter the chosen tool; tap again to apply the complete draft and exit.
   Hold G for 0.4 seconds to choose Resize or Move in a centered radial menu.
   Icon-only sectors show their names in the center; a bounded pointer replaces

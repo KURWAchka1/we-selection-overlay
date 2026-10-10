@@ -127,6 +127,34 @@ metadata, supported version selection, runtime mixins, isolation invalidation,
 and Java 21/25 bytecode boundaries. Font, shader, and icon resources are shared
 once per universal artifact, not duplicated for each game version.
 
+## Move Axis Compass
+
+The 2026-10-10 Move revision adds a small unframed compass only during an LMB
+grip. It occupies a safely inset 84 x 84 logical-pixel bottom-right area above
+the hotbar, clear of vanilla tutorial/advancement toasts, with fixed
+label sizes, thin arms and palette-colored XYZ letters. Only the active letter
+is bold; there are no circles, dots, rings or backplates. The grip establishes
+its directions once; the current camera orientation determines their screen
+projection. Translation without turning does not rotate the miniature, and
+looking around does not redefine the grip directions or move the selection.
+Existing GUI submissions render three depth-ordered arms and cached labels,
+without a second scene.
+One-pixel strokes are centered before rotation, including their rounded caps;
+their directions use the same rounded endpoints as the letters. This avoids
+half-pixel offsets between the junction, arms and labels at GUI scales 2x/3x.
+Uppercase letters are centered by their seven-pixel cap height, not the
+nine-pixel line box; half-pixel text origins preserve alignment at odd widths.
+
+The command/editing fixture captures `selection-edit-axes-x2/x3/x4.png`, not
+the separate 42-image layout-only fixture. `check-selection-pixels.ps1` verifies
+all three axis colors, actual colored glyph pixels and centered thin strokes
+within the corner area. Filled endpoint discs and the old half-pixel stroke
+offset fail its region/centroid checks.
+The colored glyph bounds also check the optical center against the endpoint,
+independently of the stem centroid, excluding the native text shadow.
+Native-game coverage/results are recorded in TESTING.md. This addition has no
+new controlled CPU/GPU frame-time benchmark.
+
 ## Performance Method
 
 CPU measurement is opt-in (`-Dweso.ui.profile=true`); release play does not

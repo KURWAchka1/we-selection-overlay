@@ -25,6 +25,13 @@ final class SelectionEditRenderer {
     private static final Corner[] CORNERS = Corner.values();
     private final float[] menuHover = new float[2];
     private long menuStart, menuFrame;
+    private final int[] compassOrder = {0, 1, 2};
+    private final double[] compassX = new double[3], compassY = new double[3], compassDepth = new double[3];
+    private static final Component[] AXIS_LABELS = {Component.literal("X"), Component.literal("Y"), Component.literal("Z")};
+    private static final Component[] ACTIVE_AXIS_LABELS = {
+            Component.literal("X").withStyle(style -> style.withBold(true)),
+            Component.literal("Y").withStyle(style -> style.withBold(true)),
+            Component.literal("Z").withStyle(style -> style.withBold(true))};
     record View(Point eye, Point forward, Point right, Point up, double tangent, double aspect, int pixelsHigh) {
         Point ray(double x, double y) { return forward.add(right.scale((x * 2 - 1) * tangent * aspect)).add(up.scale((1 - y * 2) * tangent)).normalized(); }
         double radius(Point p, double pixels) { return p.subtract(eye).dot(forward) * 2 * tangent * pixels / pixelsHigh; }
@@ -186,6 +193,57 @@ final class SelectionEditRenderer {
         for (var line : titleLines) { UiChrome.text(graphics, client.font, line, x + 10, lineY, tint(style.text, alpha), false); lineY += 11; }
         for (var line : detailLines) { UiChrome.text(graphics, client.font, line, x + 10, lineY, tint(style.secondaryText, alpha), false); lineY += 11; }
         graphics.disableScissor();
+        if (moving && wheelAxis != null && !pending) axisCompass(graphics, wheelAxis, appeared);
+    }
+    private void axisCompass(GuiGraphicsExtractor graphics, Face wheelAxis, long appeared) {
+        Minecraft client = Minecraft.getInstance();
+        View view = view(client);
+        int screenWidth = client.getWindow().getGuiScaledWidth(), screenHeight = client.getWindow().getGuiScaledHeight();
+        int cx = screenWidth - 42, cy = screenHeight - 66;
+        float alpha = fade(appeared);
+        // Project the grip's fixed world axes, not a new look-at direction toward the selection.
+        for (int axis = 0; axis < 3; axis++) {
+            compassX[axis] = view.right().at(axis) * 23;
+            compassY[axis] = -view.up().at(axis) * 23;
+            compassDepth[axis] = view.forward().at(axis);
+            compassOrder[axis] = axis;
+        }
+        for (int i = 1; i < 3; i++) {
+            int next = compassOrder[i], j = i;
+            while (j > 0 && compassDepth[compassOrder[j - 1]] < compassDepth[next]) {
+                compassOrder[j] = compassOrder[j - 1]; j--;
+            }
+            compassOrder[j] = next;
+        }
+        graphics.enableScissor(screenWidth - 84, screenHeight - 108, screenWidth, screenHeight - 24);
+        try {
+            for (int index : compassOrder) {
+                int color = tint(OverlayRenderStyle.color(SelectionEditStyle.axisSlot(index)), alpha * 0.65f);
+                double dx = Math.round(compassX[index]), dy = Math.round(compassY[index]), length = Math.hypot(dx, dy);
+                if (length <= 7) continue;
+                var matrices = graphics.pose();
+                matrices.pushMatrix();
+                try {
+                    matrices.translate(cx, cy);
+                    matrices.rotate((float) Math.atan2(dy, dx));
+                    // Center the one-pixel stroke/caps on the same origin and endpoint as the label.
+                    matrices.translate(-0.5f, -0.5f);
+                    UiChrome.fillRounded(graphics, 0, 0, (int) Math.round(length - 7) + 1, 1, color);
+                } finally { matrices.popMatrix(); }
+            }
+            for (int index : compassOrder) {
+                int x = cx + (int) Math.round(compassX[index]), y = cy + (int) Math.round(compassY[index]);
+                int color = tint(OverlayRenderStyle.color(SelectionEditStyle.axisSlot(index)), alpha);
+                Component label = UiChrome.label((index == wheelAxis.axis ? ACTIVE_AXIS_LABELS : AXIS_LABELS)[index]);
+                var matrices = graphics.pose();
+                matrices.pushMatrix();
+                try {
+                    // Center uppercase ink, excluding two pixels of line leading; retain half-pixel precision.
+                    matrices.translate(x - client.font.width(label) / 2.0f, y - (client.font.lineHeight - 2) / 2.0f);
+                    UiChrome.text(graphics, client.font, label, 0, 0, color, true);
+                } finally { matrices.popMatrix(); }
+            }
+        } finally { graphics.disableScissor(); }
     }
     void menu(GuiGraphicsExtractor graphics, double dx, double dy, int radius, SelectionEditMode current, long appeared) {
         Minecraft client = Minecraft.getInstance();

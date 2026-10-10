@@ -3,103 +3,96 @@ package org.marshal.weaddon_lightposition.selection;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Face;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Point;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SelectionCarryTest {
     private final CuboidDraft box = new CuboidDraft(-20, 60, -30, -5, 75, -1);
-    private final Point root = new Point(-10.2, 80, 3.9), forward = new Point(0, 0, 1);
-    private SelectionCarry carry(CuboidDraft origin) { return new SelectionCarry(origin, root, forward, -64, 319); }
+    private SelectionCarry grip(CuboidDraft origin) { return new SelectionCarry(origin, new Point(0, 0, 1), -64, 319); }
 
-    @Test void pickupAndRepeatedStationarySamplesNeverChangeTheBox() {
-        var grip = carry(box);
-        for (int i = 0; i < 1000; i++) assertEquals(box, grip.follow(root));
-    }
-    @Test void actualRootTranslationPreservesDimensionsAndIsReversible() {
-        var grip = carry(box);
-        Point offset = new Point(10000, 3, -20000);
-        var moved = grip.follow(root.add(offset));
-        assertEquals(box.translate(offset, 1, -64, 319), moved);
-        for (int axis = 0; axis < 3; axis++) assertEquals(box.size(axis), moved.size(axis));
-        assertEquals(box, grip.follow(root));
-    }
-    @Test void subBlockMotionDoesNotRoundAwayAtEveryFrame() {
-        var grip = carry(box);
-        for (int i = 1; i <= 1000; i++) grip.follow(root.add(new Point(i / 1000.0, 0, 0)));
-        assertEquals(box.translate(new Point(1, 0, 0), 1, -64, 319), grip.follow(root.add(new Point(1, 0, 0))));
-    }
     @ParameterizedTest @EnumSource(Face.class)
-    void wheelUsesOneCapturedSignedCardinalAxis(Face face) {
+    void wheelInitiallyUsesOneCapturedSignedCardinalAxis(Face face) {
         Point direction = new Point(face.axis == 0 ? face.sign : 0.1, face.axis == 1 ? face.sign : 0.1,
                 face.axis == 2 ? face.sign : 0.1);
-        var grip = new SelectionCarry(box, root, direction, -64, 319);
+        var grip = new SelectionCarry(box, direction, -64, 319);
         assertEquals(face, grip.wheelAxis());
         Point delta = new Point(face.axis == 0 ? face.sign * 3 : 0, face.axis == 1 ? face.sign * 3 : 0,
                 face.axis == 2 ? face.sign * 3 : 0);
         assertEquals(box.translate(delta, 1, -64, 319), grip.scroll(1, 3));
         assertEquals(box, grip.scroll(-1, 3));
     }
-    @Test void fractionalWheelAndPlayerMotionComposeWithoutRotatingOrRoundingLoss() {
-        var grip = carry(box);
-        assertEquals(box, grip.scroll(0.2, 1));
-        grip.follow(root.add(new Point(4, 2, 0)));
-        grip.scroll(0.2, 1); grip.scroll(0.2, 1); grip.scroll(0.2, 1);
-        assertEquals(box.translate(new Point(4, 2, 1), 1, -64, 319), grip.scroll(0.2, 1));
-        assertEquals(box.translate(new Point(4, 2, 0), 1, -64, 319), grip.scroll(-1, 1));
+    @Test void axisChangesDoNotMoveOrRotateAccumulatedFractions() {
+        var grip = grip(box);
+        assertEquals(box, grip.scroll(0.25, 1));
+        grip.selectAxis(1);
+        assertEquals(Face.UP, grip.wheelAxis());
+        assertEquals(box, grip.scroll(0, 1));
+        assertEquals(box.translate(new Point(0, -3, 0), 1, -64, 319), grip.scroll(-3, 1));
+        grip.selectAxis(0);
+        assertEquals(box.translate(new Point(2, -3, 0), 1, -64, 319), grip.scroll(2, 1));
+        grip.selectAxis(2);
+        assertEquals(box.translate(new Point(2, -3, 1), 1, -64, 319), grip.scroll(0.75, 1));
+        assertEquals(box.translate(new Point(2, -3, 0), 1, -64, 319), grip.scroll(-1, 1));
+    }
+    @ParameterizedTest @ValueSource(ints = {0, 1, 2})
+    void explicitAxesAlwaysUseWorldPositiveDirectionsAndPreserveDimensions(int axis) {
+        var grip = new SelectionCarry(box, new Point(-1, -1, -1), -64, 319);
+        grip.selectAxis(axis);
+        assertEquals(1, grip.wheelAxis().sign);
+        var moved = grip.scroll(1, 4);
+        for (int a = 0; a < 3; a++) {
+            assertEquals(box.size(a), moved.size(a));
+            assertEquals(box.min(a) + (a == axis ? 4 : 0), moved.min(a));
+        }
+        assertEquals(box, grip.scroll(-1, 4));
     }
     @Test void aNewGripStartsAtTheRetainedDraftWithoutAJump() {
-        var first = carry(box);
-        Point nextRoot = root.add(new Point(12, 3, -9));
-        var moved = first.follow(nextRoot);
-        var second = new SelectionCarry(moved, nextRoot, new Point(-1, 0, 0), -64, 319);
-        assertEquals(moved, second.follow(nextRoot));
-        assertEquals(moved.translate(new Point(-1, 0, 0), 1, -64, 319), second.scroll(1, 1));
+        var moved = grip(box).scroll(12, 1);
+        var next = new SelectionCarry(moved, new Point(-1, 0, 0), -64, 319);
+        assertEquals(moved, next.scroll(0, 1));
+        assertEquals(moved.translate(new Point(-1, 0, 0), 1, -64, 319), next.scroll(1, 1));
     }
     @ParameterizedTest @EnumSource(Face.class)
     void coordinateAndHeightLimitsDoNotStoreDeadReverseTravel(Face face) {
-        var grip = carry(box);
-        Point overshoot = new Point(face.axis == 0 ? face.sign * 1e9 : 0,
-                face.axis == 1 ? face.sign * 1e9 : 0, face.axis == 2 ? face.sign * 1e9 : 0);
-        var limit = grip.follow(root.add(overshoot));
+        var grip = grip(box);
+        grip.selectAxis(face.axis);
+        var limit = grip.scroll(face.sign * 1e9, 1);
         assertEquals(face.axis == 1 ? face.sign > 0 ? 319 : -64 : face.sign > 0 ? 29_999_999 : -30_000_000, limit.boundary(face));
         Point reverse = new Point(face.axis == 0 ? -face.sign : 0, face.axis == 1 ? -face.sign : 0, face.axis == 2 ? -face.sign : 0);
-        var reversed = grip.follow(root.add(overshoot).add(reverse));
-        assertEquals(limit.translate(reverse, 1, -64, 319), reversed);
-        for (int axis = 0; axis < 3; axis++) assertEquals(box.size(axis), reversed.size(axis));
+        assertEquals(limit.translate(reverse, 1, -64, 319), grip.scroll(-face.sign, 1));
+        for (int axis = 0; axis < 3; axis++) assertEquals(box.size(axis), limit.size(axis));
     }
-    @Test void saturationOnOneAxisDoesNotDiscardValidMovementOnAnother() {
-        var grip = carry(box);
-        var moved = grip.follow(root.add(new Point(1e9, 2, 3)));
-        assertEquals(29_999_999, moved.maxX());
-        assertEquals(box.minY() + 2, moved.minY()); assertEquals(box.minZ() + 3, moved.minZ());
-        var reversed = grip.follow(root.add(new Point(1e9 - 1, 3, 4)));
-        assertEquals(moved.minX() - 1, reversed.minX()); assertEquals(moved.minY() + 1, reversed.minY());
-    }
-    @Test void wheelSaturationReversesImmediatelyAndCannotOverflow() {
-        var grip = carry(box);
+    @Test void saturatingOneAxisDoesNotBlockAnother() {
+        var grip = grip(box);
+        grip.selectAxis(0);
         var limit = grip.scroll(Double.MAX_VALUE, 512);
-        assertEquals(29_999_999, limit.maxZ());
-        assertEquals(limit.translate(new Point(0, 0, -1), 1, -64, 319), grip.scroll(-1, 1));
+        assertEquals(29_999_999, limit.maxX());
+        grip.selectAxis(1);
+        assertEquals(limit.translate(new Point(0, 2, 0), 1, -64, 319), grip.scroll(2, 1));
+        grip.selectAxis(0);
+        assertEquals(limit.translate(new Point(-1, 2, 0), 1, -64, 319), grip.scroll(-1, 1));
     }
-    @Test void nonfiniteEventsCannotPoisonTheNextValidSample() {
-        var grip = carry(box);
-        for (double invalid : new double[]{Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
-            assertEquals(box, grip.follow(new Point(invalid, 0, 0)));
-            assertEquals(box, grip.scroll(invalid, 1));
-        }
-        assertEquals(box.translate(new Point(3, 0, 0), 1, -64, 319), grip.follow(root.add(new Point(3, 0, 0))));
+    @Test void invalidEventsCannotPoisonTheNextValidSample() {
+        var grip = grip(box);
+        for (double invalid : new double[]{Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) assertEquals(box, grip.scroll(invalid, 1));
+        assertThrows(IllegalArgumentException.class, () -> grip.selectAxis(-1));
+        assertThrows(IllegalArgumentException.class, () -> grip.selectAxis(3));
+        assertEquals(Face.SOUTH, grip.wheelAxis());
+        assertEquals(box.translate(new Point(0, 0, 3), 1, -64, 319), grip.scroll(3, 1));
         assertThrows(IllegalArgumentException.class, () -> grip.scroll(1, 0));
     }
     @Test void hugeSelectionsAreOnlyCoordinateTransforms() {
         var huge = new CuboidDraft(-20_000_000, -64, -20_000_000, 20_000_000, 319, 20_000_000);
-        var moved = carry(huge).follow(root.add(new Point(20, 10, -30)));
-        assertEquals(huge.translate(new Point(20, 0, -30), 1, -64, 319), moved);
+        var grip = grip(huge); grip.selectAxis(0);
+        var moved = grip.scroll(20, 1);
+        assertEquals(huge.translate(new Point(20, 0, 0), 1, -64, 319), moved);
         assertEquals(huge.volume(), moved.volume());
     }
     @Test void invalidOriginIsRejectedBeforeAnInteractiveGrip() {
-        assertThrows(IllegalArgumentException.class, () -> carry(new CuboidDraft(0, -65, 0, 1, 10, 1)));
-        assertThrows(IllegalArgumentException.class, () -> new SelectionCarry(box, root, new Point(0, 0, 0), -64, 319));
-        assertThrows(IllegalArgumentException.class, () -> new SelectionCarry(box, new Point(Double.NaN, 0, 0), forward, -64, 319));
+        assertThrows(IllegalArgumentException.class, () -> grip(new CuboidDraft(0, -65, 0, 1, 10, 1)));
+        assertThrows(IllegalArgumentException.class, () -> new SelectionCarry(box, new Point(0, 0, 0), -64, 319));
+        assertThrows(IllegalArgumentException.class, () -> new SelectionCarry(box, new Point(Double.NaN, 0, 0), -64, 319));
     }
 }

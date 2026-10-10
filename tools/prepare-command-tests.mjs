@@ -66,6 +66,7 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('client.player.setPos(', 'client.player.setPosition(')
     .replaceAll('getWindow().handle()', 'getWindow().getHandle()').replaceAll('getScreenWidth()', 'getWidth()').replaceAll('getScreenHeight()', 'getHeight()')
     .replaceAll('.setDown(', '.setPressed(').replaceAll('.isDown()', '.isPressed()').replaceAll('isMouseGrabbed()', 'isCursorLocked()')
+    .replaceAll('.consumeClick()', '.wasPressed()').replaceAll('KeyBinding.resetMapping()', 'KeyBinding.updateKeysByCode()')
     .replaceAll('client.options.keyAttack', 'client.options.attackKey')
     .replaceAll('client.isWindowActive()', 'client.isWindowFocused()')
     .replaceAll('client.options.keyRight', 'client.options.rightKey').replaceAll('client.options.keyJump', 'client.options.jumpKey')

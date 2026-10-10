@@ -419,7 +419,7 @@ public final class SelectionEditingChecks {
         await(reload::isDone, "restore language");
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
-        System.out.println("SELECTION EDIT VERIFY PASS: G tap toggle, close/inside six-face dragging, hidden-cursor radial/dead zone, root carry/look/Shift/fractional wheel/near-inside-far grips, LMB retains draft, eight free-camera one-block corners, crosshair lifecycle, Escape, stale, isolation, clipboard, unchanged blocks/history");
+        System.out.println("SELECTION EDIT VERIFY PASS: G tap toggle, close/inside six-face dragging, hidden-cursor radial/dead zone, independent XYZ wheel/flight/compass, LMB retains draft, eight free-camera one-block corners, crosshair lifecycle, Escape, stale, isolation, clipboard, unchanged blocks/history");
     }
     private void closeFacesAndModes() {
         for (Face face : Face.values()) for (int side : new int[]{1, -1}) {
@@ -508,6 +508,7 @@ public final class SelectionEditingChecks {
         pause(350);
         onClient(() -> {
             check(client.player.getY() < flightY - 0.1 && editing.dragging(), "Shift did not descend during carry");
+            check(editing.draft().equals(original), "Flight moved the selection without wheel input");
             client.options.keyShift.setDown(false);
             return null;
         });
@@ -544,22 +545,20 @@ public final class SelectionEditingChecks {
             nativeCall(client.mouseHandler, "onMove", client.getWindow().handle(), x + 100, y - 80);
             nativeCall(client.mouseHandler, "handleAccumulatedMovement");
             check(Math.abs(client.player.getYRot() - yaw) > 0.05, "Carry did not retain native mouse look");
-            call(editing, "followCarry");
             check(editing.draft().equals(original), "Stationary look translated the selection");
             client.options.keyRight.setDown(true); client.options.keyShift.setDown(true); client.player.input.tick();
             check(client.player.input.keyPresses.right() && client.player.input.keyPresses.shift() && !editing.suppressSneak(), "Carry suppressed flight/Shift input");
             client.options.keyRight.setDown(false); client.options.keyShift.setDown(false); client.player.input.tick();
-            // Same native root delta at any grab distance; no captured screen-plane dependency.
+            // Player translation is navigation only, never an input to the Move draft.
             client.player.setPos(client.player.getX() + 12, client.player.getY() + 3, client.player.getZ() - 9);
-            call(editing, "followCarry");
-            check(editing.draft().equals(original.translate(new Point(12, 3, -9), 1, -64, 319)), "Carry did not follow root displacement");
+            check(editing.draft().equals(original), "Player movement translated the selection");
             Face wheel = (Face) call(field(editing, "carry"), "wheelAxis");
             nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.25);
             nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.25);
             nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.25);
             nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.25);
             Point nudge = new Point(wheel.axis == 0 ? wheel.sign : 0, wheel.axis == 1 ? wheel.sign : 0, wheel.axis == 2 ? wheel.sign : 0);
-            check(editing.draft().equals(original.translate(new Point(12, 3, -9).add(nudge), 1, -64, 319)), "Fractional carry wheel lost its captured axis");
+            check(editing.draft().equals(original.translate(nudge, 1, -64, 319)), "Fractional Move wheel lost its captured axis");
             for (int axis = 0; axis < 3; axis++) check(editing.draft().size(axis) == original.size(axis), "Move resized box");
             nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
             check(editing.active() && !editing.dragging() && client.mouseHandler.isMouseGrabbed(), "Carry release committed or captured camera");
@@ -599,6 +598,7 @@ public final class SelectionEditingChecks {
             check(!editing.active() && client.gui.screen() == null && client.mouseHandler.isMouseGrabbed(), "Move Escape failed"); return null;
         });
         check(serverBounds().equals(original), "Move Escape committed");
+        moveAxes();
         onServer(() -> {
             var actor = actor();
             var shifted = original.translate(new Point(12, 3, -9), 1, -64, 319);
@@ -628,6 +628,143 @@ public final class SelectionEditingChecks {
         onClient(() -> { nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(256, 0, 0)); return null; });
         pause(500); check(!onClient(editing::radialOpen) && !onClient(editing::active), "Esc reopened held menu");
         onClient(() -> { hold.setDown(false); return null; }); pause(100);
+    }
+    private void moveAxes() {
+        crosshairGameMode("creative");
+        var floor = BlockVector3.at(-6, 65, -6);
+        var previous = onServer(() -> actor().getWorld().getFullBlock(floor));
+        onServer(() -> {
+            actor().getWorld().setBlock(floor, com.sk89q.worldedit.world.block.BlockTypes.STONE.getDefaultState());
+            client.getSingleplayerServer().getPlayerList().getPlayers().getFirst().getAbilities().flying = false;
+            return null;
+        });
+        try {
+            select(false);
+            onClient(() -> { client.player.getAbilities().flying = false; return null; });
+            aimAt(new Point(-5.5, 67.62, -5.5), original.center(Face.SOUTH));
+            tap(); await(() -> editing.active() && editing.draft() != null, "independent axis entry");
+            onClient(() -> {
+                check(client.player.getY() > 65.99 && client.player.getY() < 66.01, "Axis test player is not parked on its solid floor");
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+                check(editing.dragging(), "Axis test missed Move grip");
+                var probe = new KeyMapping("key.weso.axis_probe", 88, hold.getCategory());
+                KeyMapping.resetMapping();
+                axisKey(88, 1);
+                check(!probe.isDown() && !probe.consumeClick(), "Owned X leaked into a native key binding");
+                check(editing.draft().equals(original) && wheelAxis() == Face.EAST, "Selecting X moved the draft");
+                nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.25);
+                axisKey(89, 1); axisKey(89, 0);
+                check(editing.draft().equals(original) && wheelAxis() == Face.UP, "Selecting Y rotated the X fraction");
+                axisKey(88, 2);
+                check(wheelAxis() == Face.UP && !probe.isDown() && !probe.consumeClick(), "Held X repeat stole the chosen axis");
+                axisKey(88, 0);
+                nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, -4.0);
+                check(editing.draft().equals(original.translate(new Point(0, -4, 0), 1, -64, 319)), "Y wheel failed to move through the solid floor");
+                check(client.player.getY() > 65.99 && client.player.getY() < 66.01, "Y wheel moved the parked player");
+                axisKey(90, 1); axisKey(90, 0);
+                nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 2.0);
+                axisKey(88, 1); axisKey(88, 0);
+                nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 0.75);
+                check(editing.draft().equals(original.translate(new Point(1, -4, 2), 1, -64, 319)), "XYZ wheel lost displacement across switches");
+                call(editing, "bind", true, new KeyEvent(89, 0, 0));
+                axisKey(89, 1);
+                check(fast.isDown() && wheelAxis() == Face.EAST, "Axis shortcut overrode the rebound modifier");
+                axisKey(89, 0); call(editing, "bind", true, new KeyEvent(340, 0, 0));
+                check(!(boolean) call(editing, "axisKey", 1, new KeyEvent(90, 0, 2)), "Ctrl+Z was stolen by Move");
+                return null;
+            });
+            CuboidDraft beforeTravel = onClient(editing::draft);
+            onClient(() -> { client.player.getAbilities().flying = true; return null; });
+            onServer(() -> { client.getSingleplayerServer().getPlayerList().getPlayers().getFirst().getAbilities().flying = true; return null; });
+            pause(150);
+            Object renderer = field(editing, "renderer");
+            double[] oldProjection = onClient(() -> ((double[]) field(renderer, "compassX")).clone());
+            Point eye = onClient(() -> (Point) call(call(renderer, "view", client), "eye"));
+            Point forward = onClient(() -> (Point) call(call(renderer, "view", client), "forward"));
+            Point travel = new Point(7, 3, -5);
+            aimAt(eye.add(travel), eye.add(travel).add(forward.scale(10)));
+            onClient(() -> {
+                check(editing.draft().equals(beforeTravel), "Navigation moved the held Move draft");
+                double[] projection = (double[]) field(renderer, "compassX");
+                for (int axis = 0; axis < 3; axis++) check(Math.abs(oldProjection[axis] - projection[axis]) < 0.001,
+                        "Translation without turning rotated the compass");
+                check(wheelAxis() == Face.EAST, "Navigation reselected the grip axis");
+                return null;
+            });
+            Point anchor = onClient(() -> ((Point) field(editing, "carryAnchor"))
+                    .add(new Point(editing.draft().minX(), editing.draft().minY(), editing.draft().minZ())));
+            Point orbitEye = anchor.add(new Point(9, 4, 11));
+            for (Point direction : new Point[]{new Point(0, 0, 1), new Point(0, 0, -1), new Point(1, 0, 0),
+                    new Point(-1, 0, 0), new Point(0, 1, 0), new Point(0, -1, 0), new Point(1, 1, 1),
+                    new Point(-1, 1, 1), new Point(1, -1, -1)}) {
+                aimAt(orbitEye, orbitEye.add(direction.scale(10)));
+                onClient(() -> {
+                    Object view = call(renderer, "view", client);
+                    Point right = (Point) call(view, "right"), up = (Point) call(view, "up"), facing = (Point) call(view, "forward");
+                    double[] x = (double[]) field(renderer, "compassX"), y = (double[]) field(renderer, "compassY"), depth = (double[]) field(renderer, "compassDepth");
+                    check(x.length == 3 && y.length == 3 && depth.length == 3, "Compass must contain only three positive axes");
+                    for (int axis = 0; axis < 3; axis++) {
+                        check(Double.isFinite(x[axis]) && Double.isFinite(y[axis]) && Double.isFinite(depth[axis]), "Non-finite compass projection");
+                        check(Math.abs(x[axis] - right.at(axis) * 23) < 0.001 && Math.abs(y[axis] + up.at(axis) * 23) < 0.001
+                                && Math.abs(depth[axis] - facing.at(axis)) < 0.001, "Compass does not match the actual camera: " + direction);
+                    }
+                    check(wheelAxis() == Face.EAST && editing.draft().equals(beforeTravel), "Camera turn changed the grip axes or draft");
+                    return null;
+                });
+            }
+            aimAt(anchor.add(new Point(9, 4, 11)), anchor);
+            pause(200);
+            onClient(() -> {
+                check(editing.draft().equals(beforeTravel), "Navigation moved the held Move draft");
+                check(!java.util.Arrays.equals(oldProjection, (double[]) field(renderer, "compassX")), "Compass ignored camera rotation");
+                return null;
+            });
+            for (int scale : new int[]{2, 3, 4}) {
+                onClient(() -> { client.options.guiScale().set(scale); client.resizeGui(); return null; });
+                // Re-enter if a native display resize cancelled the old gesture.
+                if (!onClient(editing::active)) {
+                    select(false); aim(Face.EAST, true); tap(); await(editing::active, "compass scale entry");
+                    onClient(() -> { nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1); return null; });
+                }
+                onClient(() -> { axisKey(89, 1); axisKey(89, 0); client.gui.hud.getChat().clearMessages(false); return null; });
+                pause(250); screenshot.accept("selection-edit-axes-x" + scale);
+            }
+            onClient(() -> { editing.cancel(); nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0); return null; });
+            select(false); aimAt(new Point(-5, 70, -5), original.center(Face.SOUTH)); tap(); await(editing::active, "axis ownership entry");
+            onClient(() -> {
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+                check(editing.dragging() && field(editing, "carry") != null, "Ownership test missed its Move grip");
+                axisKey(88, 1);
+                check((int) field(editing, "ownedAxisKeys") == 1, "Move X press was not owned before cancellation");
+                editing.cancel();
+                check((boolean) call(editing, "axisKey", 2, new KeyEvent(88, 0, 0)), "Cancel forwarded a consumed held key repeat");
+                axisKey(88, 0);
+                check((int) field(editing, "ownedAxisKeys") == 0 && !(boolean) call(editing, "axisKey", 1, new KeyEvent(89, 0, 0)), "Idle editor retained axis ownership");
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+                return null;
+            });
+            select(false); aimAt(new Point(-5, 70, -5), original.center(Face.SOUTH)); tap(); await(editing::active, "rebound edit entry");
+            onClient(() -> {
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
+                check(editing.dragging(), "Rebound key test missed its Move grip");
+                call(editing, "bind", false, new KeyEvent(88, 0, 0));
+                axisKey(88, 1); axisKey(88, 0);
+                check(!editing.active(), "X axis swallowed the rebound edit/apply key");
+                call(editing, "bind", false, new KeyEvent(71, 0, 0));
+                nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+                client.options.guiScale().set(2); client.resizeGui(); return null;
+            });
+            check(serverBounds().equals(original), "Axis cancellation or no-op rebound apply changed the real selection");
+        } finally {
+            onClient(() -> { editing.cancel(); call(editing, "bind", false, new KeyEvent(71, 0, 0)); call(editing, "bind", true, new KeyEvent(340, 0, 0)); return null; });
+            onServer(() -> { actor().getWorld().setBlock(floor, previous); return null; });
+            crosshairGameMode("spectator");
+        }
+        System.out.println("MOVE AXES VERIFY PASS: XYZ without re-grab, stationary floor penetration, fractional ownership, no flight carry, key-repeat/rebind/cancel, fixed grip axes with camera-only compass rotation, scales 2/3/4");
+    }
+    private Face wheelAxis() { return (Face) call(field(editing, "carry"), "wheelAxis"); }
+    private void axisKey(int key, int action) {
+        nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), action, new KeyEvent(key, 0, 0));
     }
     private void checkCrosshair(boolean hidden, String context) {
         check(editing.hidesCrosshair() == hidden, "Wrong crosshair suppression: " + context);
@@ -966,8 +1103,8 @@ public final class SelectionEditingChecks {
         });
     }
     private void tap() {
-        onClient(() -> { hold.setDown(true); return null; }); pause(100);
-        onClient(() -> { hold.setDown(false); return null; }); pause(150);
+        await(() -> client.isWindowActive() && (editing.active() || field(editing, "shown") != null), "ready for G tap");
+        onClient(() -> { axisKey(71, 1); axisKey(71, 0); return null; }); pause(150);
     }
     private void release() {
         if (onClient(editing::active)) tap();

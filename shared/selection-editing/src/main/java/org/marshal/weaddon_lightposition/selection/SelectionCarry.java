@@ -3,21 +3,20 @@ package org.marshal.weaddon_lightposition.selection;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Face;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Point;
 
-/** One root-displacement grip. Camera rotation is deliberately not an update input. */
+/** Independent wheel displacement. Player motion and camera turns are not transform inputs. */
 public final class SelectionCarry {
     private final CuboidDraft origin;
     private final int minY, maxY;
-    private final Face wheelAxis;
-    private Point lastRoot, displacement = new Point(0, 0, 0);
+    private Face wheelAxis;
+    private Point displacement = new Point(0, 0, 0);
     private CuboidDraft draft;
 
-    public SelectionCarry(CuboidDraft origin, Point root, Point forward, int minY, int maxY) {
-        if (origin == null || !finite(root) || !finite(forward) || forward.length() < 1e-12
+    public SelectionCarry(CuboidDraft origin, Point forward, int minY, int maxY) {
+        if (origin == null || !finite(forward) || forward.length() < 1e-12
                 || origin.minX() < -30_000_000 || origin.maxX() > 29_999_999
                 || origin.minZ() < -30_000_000 || origin.maxZ() > 29_999_999
                 || origin.minY() < minY || origin.maxY() > maxY) throw new IllegalArgumentException("Invalid carry origin");
         this.origin = this.draft = origin;
-        this.lastRoot = root;
         this.minY = minY; this.maxY = maxY;
         int axis = Math.abs(forward.x()) >= Math.abs(forward.y()) && Math.abs(forward.x()) >= Math.abs(forward.z()) ? 0
                 : Math.abs(forward.y()) >= Math.abs(forward.z()) ? 1 : 2;
@@ -27,12 +26,13 @@ public final class SelectionCarry {
 
     public Face wheelAxis() { return wheelAxis; }
 
-    public CuboidDraft follow(Point root) {
-        if (!finite(root) || root.equals(lastRoot)) return draft;
-        Point change = root.subtract(lastRoot);
-        if (!finite(change)) return draft;
-        lastRoot = root;
-        return advance(change);
+    public void selectAxis(int axis) {
+        wheelAxis = switch (axis) {
+            case 0 -> Face.EAST;
+            case 1 -> Face.UP;
+            case 2 -> Face.SOUTH;
+            default -> throw new IllegalArgumentException("Invalid move axis");
+        };
     }
 
     public CuboidDraft scroll(double amount, int step) {

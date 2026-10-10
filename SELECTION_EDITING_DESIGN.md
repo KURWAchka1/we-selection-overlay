@@ -1,14 +1,14 @@
 # Interactive selection editing
 
 Status: implemented and six-runtime tested for the 1.8.0 development line,
-2026-10-09. Milestone 2 of
+2026-10-10. Milestone 2 of
 [FEATURE_ROADMAP.md](FEATURE_ROADMAP.md). See TESTING.md for verified coverage
 and remaining integration checks.
 
 Proposed two-tool revision: [Move and Resize audit](SELECTION_INTERACTION_AUDIT.md),
 with a shorter [free-camera transportation proposal](SELECTION_MOVEMENT_REDESIGN.md).
 The [task-first decision](SELECTION_WORKFLOW_DECISION.md) refines those proposals.
-Its first Move carry slice is implemented below; subsequent Resize, numeric,
+Its independent-axis Move revision is implemented below; subsequent Resize, numeric,
 local history and mixed-operation revisions are still proposals, not features.
 
 ## Goal and scope
@@ -47,10 +47,11 @@ fast modifier; default steps are 1 and 8 blocks.
 | Tap edit key | Toggle the explicit editor. Resize captures movement/look and releases the cursor; Move retains native camera and movement. The next tap commits and exits. The remembered tool/face is retained (Resize/UP initially). A ready authoritative origin is required before entry. |
 | Hold edit key for 400 ms | Open a compact centered two-sector Resize/Move ring, not a new Screen. Sectors contain only icons; the center names the hovered tool or shows Cancel in neutral areas. Hide the cursor and constrain its replacement dot within the ring. Release over a sector to select that tool; the center and seams cancel the menu without changing the tool/draft. A long hold never applies a draft. |
 | Click a face | Select that side at any visible distance before resizing. Accent its perimeter/handle. Camera movement alone never changes the remembered choice. Intersection works even when the center handle is outside the viewport. |
-| Mouse wheel | Resize the targeted face outward/inward in Resize. In Move, capture wheel only during an LMB grip and nudge along the signed cardinal axis captured at pickup, using the regular step; idle wheel stays native. Update only the local draft. |
+| Mouse wheel | Resize the targeted face outward/inward in Resize. In Move, capture wheel only during an LMB grip and nudge along the initial signed cardinal axis or the explicitly selected X/Y/Z axis, using the regular step; idle wheel stays native. Update only the local draft. |
+| X/Y/Z during a Move grip | Select the world-positive wheel axis without releasing LMB or moving the box. Y always means world up, independent of the camera. Contextual shortcuts yield to edit/fast and native movement bindings; Ctrl/Alt/Super combinations stay native. |
 | Fast modifier | Use the configurable fast step only in explicit Resize, without lowering a flying player. Move keeps the regular wheel step and native Shift descent. Free corner grabs retain one-block snapping and normal Shift descent, even if G is pressed midway. |
 | Left-drag in Resize | Grab a face handle, corner or any face surface. Surface grabs require four physical pixels of motion, so ordinary selection clicks do not resize. Release LMB to finish only that local drag. Compose further drags against the current draft. |
-| Left-drag in Move | Grab the indicated boundary or center marker and walk/fly with the box, snapping actual player-root displacement by one block. Mouse look, FOV and eye height are not transform inputs. Keep native flight/Shift. Release retains the local draft; G applies once. All dimensions and both ordered corners stay unchanged relative to each other. |
+| Left-drag in Move | Grab the indicated boundary or center marker and nudge with the wheel along X/Y/Z. Walking, flying and looking around do not move the box. Keep native flight/Shift. Release retains the local draft; G applies once. All dimensions and both ordered corners stay unchanged relative to each other. |
 | Escape | Cancel the complete draft immediately, including in Move and while the radial menu is open. A still-held key must be released before re-entry. Enabled free corner markers remain available. |
 | Second short tap | Finalize a current cursor drag and commit the complete composed draft once, including when LMB is still held. Restore cursor/camera without forwarding an attack. Direct/free corner drags still apply on LMB release. |
 | Chat/menu, lost focus, disconnect, changed world or changed authoritative selection | Cancel the draft; never treat these interruptions as a commit. |
@@ -72,13 +73,13 @@ free corner grabs always use one block, even if G or Shift is pressed afterwards
 The face cannot cross the opposite face: the minimum dimension is one block.
 Each new drag starts from the current draft, while the original authoritative
 snapshot remains unchanged for stale-state checks and cancellation.
-Move uses shared `SelectionCarry` math. It preserves fractional root/wheel
+Move uses shared `SelectionCarry` math. It preserves fractional wheel
 displacement and rejects only overshoot at each coordinate/height limit, so
 reversing does not require undoing invisible travel. Its wheel axis is locked
-for one grip and shown in the HUD; release/re-grab to choose another direction.
-Normal gravity/knockback remain actual movement during a held carry. A camera
-entity/type change cancels a grip; teleport/correction-specific handling remains
-a follow-up integration gate. No distance threshold masquerades as detection.
+at pickup and shown in the HUD; X/Y/Z selects a positive world axis immediately.
+Switching does not translate the box or reassign previous fractional input.
+No player-root position enters the movement math: gravity, knockback and flight
+affect only the player. A camera entity/type change cancels a grip.
 Resize wheel direction is always outward/inward, independent of camera orientation.
 Precise face dragging uses a fixed screen projection of the captured world axis,
 not camera yaw heuristics. Free corner dragging instead uses the current camera
@@ -106,8 +107,15 @@ sidebar, persistent toolbar, luminous wall or filled selection volume.
   targets. Inactive handles are quiet neutral tones.
 - Move uses one small wire-cube grab marker, not three independent axis arrows.
   The indicated boundary can be grabbed when the center is outside the view.
-  During carrying, the anchored marker and its wheel-axis constraint move with
+  During a wheel grip, the anchored marker and its wheel-axis constraint move with
   the box. No selection-volume mesh or new framebuffer is needed.
+- An 84-pixel bottom-right safe area above the hotbar contains an axis compass only while a
+  Move grip is held. The grip establishes its movement directions once; camera
+  rotation changes only their on-screen projection, never the movement basis.
+  Translation at an unchanged heading does not rotate the miniature. Three thin
+  positive-axis arms and palette-colored X/Y/Z labels reuse existing GUI/font
+  submissions. Only the active letter is bold; there are no circles, endpoint
+  dots, rings, backplates, another scene or framebuffer.
 - Only the targeted/captured handle and face perimeter receive a clear accent.
   Reuse the current UI theme and overlay line-width/color settings where relevant.
   Do not brighten the complete cuboid or add a second full grid.
@@ -264,7 +272,7 @@ Do not add release notes or mark the milestone complete based only on compilatio
 
 - The overlay palette has an Editing group for the shared editing contour and
   X/Y/Z colors, including alpha and per-element stroke scales. Selected corner
-  edges show their world axes; selected faces and the carry wheel indicator use
+  edges show their world axes; selected faces and the Move wheel indicator use
   the same axis colors. Markers use the common contour color. HUD/radial chrome
   remains a UI-theme concern, not a world-overlay color setting.
 - Editing strokes use the existing global/per-slot width calculation. Presets,
@@ -286,7 +294,7 @@ Do not add release notes or mark the milestone complete based only on compilatio
 - Outside the explicit editor, only a marker hit captures LMB for a live-camera corner
   gesture. Entering explicit Resize captures the camera projection, stops movement
   and releases the cursor immediately. Move retains native mouse capture and
-  movement in both idle and carrying states. LMB release leaves either tool active.
+  movement in both idle and gripping states. LMB release leaves either tool active.
   The gesture type is fixed at capture, so pressing G
   halfway through a free drag does not unexpectedly lock the camera. Resize/camera-mode changes
   also cancel the draft. Minecraft's early-return first mouse event is handled.

@@ -17,10 +17,12 @@ public abstract class SelectionEditKeyboardMixin {
         if (window == MinecraftClient.getInstance().getWindow().getHandle()) SelectionEditController.instance().keyEvent();
     }
     @Inject(method = "onKey", at = @At("HEAD"), cancellable = true)
-    private void weso$escape(long window, int action, KeyInput event, CallbackInfo ci) {
-        if (window == MinecraftClient.getInstance().getWindow().getHandle() && event.key() == GLFW.GLFW_KEY_ESCAPE
-                && action == GLFW.GLFW_PRESS && SelectionEditController.instance().inputActive() && !SelectionEditController.instance().pending()) {
-            SelectionEditController.instance().cancel(); ci.cancel();
+    private void weso$shortcut(long window, int action, KeyInput event, CallbackInfo ci) {
+        if (window != MinecraftClient.getInstance().getWindow().getHandle()) return;
+        SelectionEditController editing = SelectionEditController.instance();
+        if (editing.axisKey(action, event)) { ci.cancel(); return; }
+        if (event.key() == GLFW.GLFW_KEY_ESCAPE && action == GLFW.GLFW_PRESS && editing.inputActive() && !editing.pending()) {
+            editing.cancel(); ci.cancel();
         }
     }
 }
