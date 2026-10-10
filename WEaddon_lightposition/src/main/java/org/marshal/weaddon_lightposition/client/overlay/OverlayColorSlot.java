@@ -20,7 +20,11 @@ public enum OverlayColorSlot {
     RULER_ARROW("rulerArrow", 0xFFFFEAA8),
     RULER_TEXT("rulerText", 0xFFFFFFFF),
     RULER_LABEL_BACKGROUND("rulerLabelBackground", 0xD0000000),
-    RULER_LABEL_BORDER("rulerLabelBorder", 0x90383838);
+    RULER_LABEL_BORDER("rulerLabelBorder", 0x90383838),
+    EDIT_BOUNDARY("editBoundary", 0xFF8FD7C1),
+    EDIT_AXIS_X("editAxisX", 0xFFFF6B6B),
+    EDIT_AXIS_Y("editAxisY", 0xFF8FE3A1),
+    EDIT_AXIS_Z("editAxisZ", 0xFF78A9FF);
 
     private final String configKey;
     private final int defaultColor;

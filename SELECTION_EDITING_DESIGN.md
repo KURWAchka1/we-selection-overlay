@@ -45,7 +45,7 @@ fast modifier; default steps are 1 and 8 blocks.
 | Enabled, editor inactive | Show eight corner markers for a ready cuboid. Coalesce authoritative reads; intercept LMB only on a marker. No extra HUD or hotbar-wheel capture. |
 | Left-drag a corner without the edit key | Aim at a marker and hold LMB. Keep normal camera/flight controls; the corner follows the live view ray at its original grab distance, with the initial off-center offset retained. Always snap by one block, ignoring configured normal/fast steps and modifier keys; keep the opposite corner fixed. Release LMB to commit once. |
 | Tap edit key | Toggle the explicit editor. Resize captures movement/look and releases the cursor; Move retains native camera and movement. The next tap commits and exits. The remembered tool/face is retained (Resize/UP initially). A ready authoritative origin is required before entry. |
-| Hold edit key for 400 ms | Open a centered two-sector Resize/Move ring, not a new Screen. Hide the cursor and constrain its replacement dot within the ring. Release over a sector to select that tool; the empty center and seams cancel the menu without changing the tool/draft. A long hold never applies a draft. |
+| Hold edit key for 400 ms | Open a compact centered two-sector Resize/Move ring, not a new Screen. Sectors contain only icons; the center names the hovered tool or shows Cancel in neutral areas. Hide the cursor and constrain its replacement dot within the ring. Release over a sector to select that tool; the center and seams cancel the menu without changing the tool/draft. A long hold never applies a draft. |
 | Click a face | Select that side at any visible distance before resizing. Accent its perimeter/handle. Camera movement alone never changes the remembered choice. Intersection works even when the center handle is outside the viewport. |
 | Mouse wheel | Resize the targeted face outward/inward in Resize. In Move, capture wheel only during an LMB grip and nudge along the signed cardinal axis captured at pickup, using the regular step; idle wheel stays native. Update only the local draft. |
 | Fast modifier | Use the configurable fast step only in explicit Resize, without lowering a flying player. Move keeps the regular wheel step and native Shift descent. Free corner grabs retain one-block snapping and normal Shift descent, even if G is pressed midway. |
@@ -262,6 +262,17 @@ Do not add release notes or mark the milestone complete based only on compilatio
 
 ## Implementation notes
 
+- The overlay palette has an Editing group for the shared editing contour and
+  X/Y/Z colors, including alpha and per-element stroke scales. Selected corner
+  edges show their world axes; selected faces and the carry wheel indicator use
+  the same axis colors. Markers use the common contour color. HUD/radial chrome
+  remains a UI-theme concern, not a world-overlay color setting.
+- Editing strokes use the existing global/per-slot width calculation. Presets,
+  per-element/all resets, persistence and palette undo/redo include them. The
+  palette's cached 15-segment editing sample shares stroke roles and axis
+  endpoints with the native world renderer; changing width does not regenerate
+  its geometry. Adding the group raises the responsive sidebar height threshold.
+
 - Shared drafting, inclusive coordinates, hit testing and transaction code live
   in `shared/selection-editing`; the canonical native adapter is Fabric 26.2.
   `tools/sync-selection-editing.mjs` maps it to the other five native runtimes.
@@ -289,9 +300,22 @@ Do not add release notes or mark the milestone complete based only on compilatio
   replacement dot is clamped; the mod never warps/recenters the system cursor
   per event. Reversing at the ring edge responds immediately without backtracking.
   Closing restores the native cursor for other menus. The editing HUD is hidden
-  while the ring is open so its cancel center stays empty.
+  while the ring is open so the center is reserved for its context hint. Fit the
+  entire translated caption inside the center without breaking words. The hint
+  replaces the pointer inside the dead zone; outside it the bounded pointer
+  remains visible, including over neutral seams. Sector labels are not drawn.
   Short hover fades respect Reduced Motion. The HUD is registered above chat
   without replacing chat or changing its position.
+- Crosshair suppression is a frame-local predicate of an active tool/free corner
+  grab or radial plus the live enabled/local-player/world/focus/no-screen context.
+  Pending commits and passive markers do not suppress it. Fabric wraps the existing
+  CROSSHAIR element and delegates unchanged when idle; NeoForge cancels only the
+  vanilla CROSSHAIR layer's Pre event. No hide-GUI option, persistent visibility
+  flag, replacement crosshair texture or new mixin is involved. Context loss
+  stops suppression even before the next editor cancellation tick. Native F1,
+  perspective and spectator rules still determine whether the restored layer draws.
+  See [Fabric HUD registry](https://github.com/FabricMC/fabric/blob/26.2/fabric-rendering-v1/src/client/java/net/fabricmc/fabric/api/client/rendering/v1/hud/HudElementRegistry.java)
+  and [NeoForge layer event](https://github.com/neoforged/NeoForge/blob/26.2.x/src/client/java/net/neoforged/neoforge/client/event/RenderGuiLayerEvent.java).
 - Pure translations are clone-validated and applied with Region.shift on the
   server thread using the shift permission. Both ordered corners and selector
   identity are preserved. The whole box clamps at world borders/height without

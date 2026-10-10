@@ -12,11 +12,15 @@ const targets = [
   ['WEaddon_neoforge_1.21.11', '1.21.11', true], ['WEaddon_fabric_1.21.11', 'yarn', false]
 ];
 const files = ['client/selection/SelectionEditController.java', 'client/selection/SelectionEditRenderer.java',
+  'client/overlay/OverlayColorSlot.java', 'client/overlay/SelectionEditStyle.java',
   'client/selection/SelectionEditSource.java', 'client/selection/WorldEditSelectionEditSource.java',
   'client/screen/SelectionEditSettingsScreen.java', 'mixin/SelectionEditMouseMixin.java',
   'mixin/SelectionEditKeyboardMixin.java', 'mixin/SelectionEditMovementMixin.java', 'mixin/SelectionEditPlayerMixin.java'];
 const copies = new Map();
 for (const file of files) copies.set(file, await fs.readFile(path.join(root, canonical, java, file), 'utf8'));
+const crosshair = `        net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.replaceElement(
+                net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.CROSSHAIR,
+                original -> (graphics, delta) -> { if (!hidesCrosshair()) original.extractRenderState(graphics, delta); });`;
 const hud = `        net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.attachElementAfter(
                 net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.CHAT,
                 net.minecraft.resources.Identifier.fromNamespaceAndPath("worldedit_selection_overlay", "selection_edit"), (graphics, delta) -> renderHud(graphics));`;
@@ -64,7 +68,9 @@ function yarn(code) {
     .replaceAll('GizmoDrawing.rect(', 'GizmoDrawing.quad(')
     .replaceAll('DrawStyle.stroke(', 'DrawStyle.stroked(')
     .replaceAll('point(camera.getCameraPos())', 'point(camera.getCameraPos())').replaceAll('v.x()', 'v.x').replaceAll('v.y()', 'v.y').replaceAll('v.z()', 'v.z')
-    .replaceAll('client.font', 'client.textRenderer').replaceAll('client.textRenderer.width(', 'client.textRenderer.getWidth(').replaceAll('client.textRenderer.split(', 'client.textRenderer.wrapLines(')
+    .replaceAll('graphics.pose()', 'graphics.getMatrices()')
+    .replaceAll('client.font', 'client.textRenderer').replaceAll('client.textRenderer.lineHeight', 'client.textRenderer.fontHeight')
+    .replaceAll('client.textRenderer.width(', 'client.textRenderer.getWidth(').replaceAll('client.textRenderer.split(', 'client.textRenderer.wrapLines(')
     .replaceAll('addRenderableWidget(', 'addDrawableChild(').replaceAll(').bounds(', ').dimensions(').replace(/^(\s*)\.bounds\(/gm, '$1.dimensions(')
     .replaceAll('minecraft != null', 'client != null').replaceAll('minecraft.setScreen(', 'client.setScreen(').replaceAll('minecraft.gui.setScreen(', 'client.setScreen(')
     .replaceAll('onClose()', 'close()').replaceAll('isPauseScreen()', 'shouldPause()')
@@ -78,6 +84,9 @@ function yarn(code) {
 for (const [name, version, neo] of targets) {
   for (const file of files) {
     let code = copies.get(file);
+    if (neo) code = code.replace(crosshair, `        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderGuiLayerEvent.Pre event) -> {
+            if (net.neoforged.neoforge.client.gui.VanillaGuiLayers.CROSSHAIR.equals(event.getName()) && hidesCrosshair()) event.setCanceled(true);
+        });`);
     if (neo) code = code.replace(hud, '        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.client.event.RenderGuiEvent.Post event) -> renderHud(event.getGuiGraphics()));');
     if (version !== '26.2') code = code.replaceAll('client.gui.screen()', 'client.screen').replaceAll('minecraft.gui.setScreen(', 'minecraft.setScreen(')
       .replaceAll('Minecraft.getInstance().gui.hud.setOverlayMessage(', 'Minecraft.getInstance().gui.setOverlayMessage(')
@@ -90,13 +99,12 @@ for (const [name, version, neo] of targets) {
       .replaceAll('com.sk89q.worldedit.fabric.FabricAdapter', 'com.sk89q.worldedit.neoforge.NeoForgeAdapter').replaceAll('FabricAdapter', 'NeoForgeAdapter');
     if (version === '1.21.11' || version === 'yarn') {
       code = code.replaceAll('camera.getFov()', '((org.marshal.weaddon_lightposition.mixin.SelectionEditFovAccessor) client.gameRenderer).weso$editFov(camera, 1.0f, true)')
-        .replaceAll('GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.28f), 1), true)', 'GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.28f), 1))')
-        .replaceAll('GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.65f), 1), true)', 'GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.65f), 1))');
-      code = code.replaceAll('GizmoStyle.stroke(color, 1.5f), true)', 'GizmoStyle.stroke(color, 1.5f))');
+        .replaceAll('), true).setAlwaysOnTop()', ')).setAlwaysOnTop()');
       if (neo) code = code.replaceAll('NeoForgeAdapter.get().fromNativePlayer(', 'NeoForgeAdapter.adaptPlayer(');
     }
     if (version === '1.21.11') code = code.replaceAll('GuiGraphicsExtractor', 'GuiGraphics').replaceAll('extractWidgetRenderState', 'renderWidget');
     if (version === 'yarn') {
+      code = code.replaceAll('original.extractRenderState(graphics, delta)', 'original.render(graphics, delta)');
       code = yarn(code).replaceAll('client.gameRenderer.getMainCamera()', 'client.gameRenderer.getCamera()');
       // JOML vectors retain accessors; only native Vec3d has public coordinate fields.
       code = code.replace('point(Vector3f v) { return new Point(v.x, v.y, v.z); }', 'point(Vector3f v) { return new Point(v.x(), v.y(), v.z()); }');

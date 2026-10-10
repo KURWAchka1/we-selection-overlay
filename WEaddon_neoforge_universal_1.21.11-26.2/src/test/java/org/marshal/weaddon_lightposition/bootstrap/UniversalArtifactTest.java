@@ -15,10 +15,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class UniversalArtifactTest {
     @Test
-    void editingHudIsRegisteredOncePerRuntime() throws Exception {
+    void editingHudAndCrosshairHooksAreRegisteredOncePerRuntime() throws Exception {
         try (var jar = new JarFile(System.getProperty("universal.jar"))) {
             for (String id : List.of("mc1_21_11", "mc26_1", "mc26_2")) {
                 var registered = new java.util.concurrent.atomic.AtomicInteger();
+                var events = new java.util.HashMap<String, Integer>();
                 var entry = jar.getEntry("org/marshal/weaddon_lightposition/runtime/" + id + "/client/selection/SelectionEditController.class");
                 assertNotNull(entry);
                 try (var input = jar.getInputStream(entry)) {
@@ -29,11 +30,20 @@ class UniversalArtifactTest {
                                 @Override public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
                                     if (owner.equals("net/neoforged/bus/api/IEventBus") && name.equals("addListener")) registered.incrementAndGet();
                                 }
+                                @Override public void visitInvokeDynamicInsn(String name, String descriptor, org.objectweb.asm.Handle bootstrap, Object... arguments) {
+                                    for (Object argument : arguments) if (argument instanceof org.objectweb.asm.Type type
+                                            && type.getSort() == org.objectweb.asm.Type.METHOD && type.getArgumentTypes().length == 1) {
+                                        String parameter = type.getArgumentTypes()[0].getInternalName();
+                                        if (parameter.startsWith("net/neoforged/neoforge/client/event/")) events.merge(parameter, 1, Integer::sum);
+                                    }
+                                }
                             };
                         }
                     }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
                 }
-                assertEquals(1, registered.get(), id + ": duplicated editing HUD");
+                assertEquals(2, registered.get(), id + ": expected one HUD and one crosshair hook");
+                assertEquals(java.util.Map.of("net/neoforged/neoforge/client/event/RenderGuiEvent$Post", 1,
+                        "net/neoforged/neoforge/client/event/RenderGuiLayerEvent$Pre", 1), events, id);
             }
         }
     }

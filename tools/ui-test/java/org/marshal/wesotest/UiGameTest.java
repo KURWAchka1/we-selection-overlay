@@ -162,6 +162,7 @@ public final class UiGameTest implements FabricClientGameTest {
                 reload.set(client.reloadResourcePacks());
             });
             context.waitFor(client -> reload.get().isDone());
+            context.waitFor(client -> client.gui.overlay() == null);
             for (int[] size : new int[][]{{1920, 1080}, {1280, 720}}) {
             context.runOnClient(client -> client.getWindow().setWindowed(size[0], size[1]));
             context.waitFor(client -> client.getWindow().getWidth() == size[0] && client.getWindow().getHeight() == size[1]);

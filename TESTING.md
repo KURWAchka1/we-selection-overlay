@@ -1,6 +1,6 @@
 # Verification
 
-Current source verification: 1.8.0, 2026-10-09. The test worlds, generated
+Current source verification: 1.8.0, 2026-10-10. The test worlds, generated
 fixtures, screenshots, and logs are local data and are not committed.
 
 ## Release build
@@ -11,11 +11,13 @@ boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
 1.4 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,515,587 bytes (Fabric) and 1,486,889 bytes
+The archived release outputs are 1,528,934 bytes (Fabric) and 1,500,092 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
 previous test results.
+The current packager suites pass 91 Fabric-side and 8 NeoForge-side executions;
+the 80 shared selection-domain cases run on the Fabric side, not twice.
 NeoForge tests additionally reject exported EngineHub and Architectury injection
 packages, and check the private official CUI codecs. Actual WorldEdit launches
 exercise its installed protocol; no-WorldEdit launches exercise the optional
@@ -88,7 +90,8 @@ launch to verify defaults. No player save or normal Minecraft config is used.
 Editing fixtures explicitly bind G in their disposable profile: prior keybind
 screen checks may have left it unassigned. Production never overwrites saved
 assignments. The matrix requires the command, editing and palette-history
-completion markers in the fresh game log, not just a zero process exit code.
+completion markers, including crosshair and editing-palette checks, in the fresh
+game log, not just a zero process exit code.
 
 ### Complete results and scheduling regression
 
@@ -354,6 +357,53 @@ and each global reset are atomic undo steps; resize retains state/history.
 A non-default legacy global width multiplier is restored too. Each runtime
 captures the actual editor after the sequence. These are history/input checks,
 not a new editor performance benchmark or a complete IME/paste-input matrix.
+
+### Editing Palette and Crosshair Checks
+
+On 2026-10-10, all six production-artifact runs completed the command, editing,
+crosshair, history and editing-palette checks. All six center-pixel checks found
+68 visible / 0 hidden / 68 restored crosshair pixels. The two-channel contrast
+predicate rejects moving cloud rims; screenshots were also visually inspected.
+The default Java 21 NeoForge packager build was restored after version overrides.
+
+The native fixtures additionally exercise the four editing stroke roles:
+common contour and X/Y/Z. Atomic color/alpha/width edits round-trip through the
+profile properties and native Ctrl+Z/Y. All five presets set editing colors
+and widths; per-element reset restores both without resetting another axis.
+The common width includes the new roles and becomes unavailable for mixed
+widths. The fixed 15-segment preview shares world stroke roles and endpoints;
+all eight corner/three-axis combinations are checked. Width changes retain
+the segment list, while color changes invalidate its cached colors.
+
+Editing-preview and scrolled controls are captured at requested 2x/3x/4x.
+Classic's appearance popup has three theme choices and a 103-pixel logical
+height; modern styles retain five controls and a 155-pixel height. Switching
+themes preserves the saved blur and motion preferences.
+
+Crosshair assertions cover explicit Resize/Move, radial choice, all eight free
+corner grips, LMB/G release, Escape, chat, disabled/re-enabled editing and
+changed stored world identity. A controlled native focus-field probe checks
+both immediate suppression release and cancellation on the next editor tick;
+this is not an OS Alt-Tab/modpack-focus test. Creative screenshots look into
+empty sky before, during and after editing. The separate center-pixel check
+requires the real crosshair before/after and at most four contrast pixels during editing.
+Pending commits and passive markers keep the normal vanilla behavior.
+
+Both packagers inspect the actual relocated runtime bytecode. Fabric requires
+one crosshair wrapper and one editing HUD registration. NeoForge requires
+exactly one listener of each type, not just an aggregate listener count.
+The compact radial's icon-only sectors, contextual center/cancel hint and
+bounded pointer are captured for both modes and neutral center in EN/RU at
+requested 2x/3x/4x. Center/seam cancellation retains the tool and draft.
+These are functional/layout checks, not a new uncapped FPS benchmark.
+
+An earlier Fabric 26.2 run passed its assertions but stalled in the game-test
+API's phased world teardown; it is excluded from the completed-run claim.
+The fixture now disables its own editing/clipboard reads before closing and
+allows five test ticks for outstanding work. The final rerun saved its world
+and exited successfully. The focus-loss fixture also waits for the fresh
+authoritative snapshot before testing re-entry; no production input delay or
+weakened assertion was introduced.
 
 History is local to one editor instance, capped at 128 small immutable states;
 the capture code runs on edit boundaries, not per rendered frame. It does not

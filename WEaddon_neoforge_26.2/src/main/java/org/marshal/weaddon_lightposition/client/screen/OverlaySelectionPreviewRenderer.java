@@ -7,6 +7,7 @@ import org.marshal.weaddon_lightposition.client.overlay.Point2i;
 import org.marshal.weaddon_lightposition.client.overlay.RegionShape;
 import org.marshal.weaddon_lightposition.client.overlay.RenderMode;
 import org.marshal.weaddon_lightposition.client.overlay.SelectionRegion;
+import org.marshal.weaddon_lightposition.client.overlay.SelectionEditStyle;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +47,9 @@ final class OverlaySelectionPreviewRenderer {
         if (group == OverlayColorSettingsScreen.ColorGroup.RULER) {
             renderRulerPreview(context, x, y, width, height);
         }
+        if (group == OverlayColorSettingsScreen.ColorGroup.EDITING) {
+            renderSegments(context, SelectionEditStyle.previewSegments(), x, y, width, height, yaw, pitch, zoom);
+        }
         if (UiStyle.current() == UiStyle.LEGACY) drawOutline(context, x, y, width, height, 0xFF2E3B4D);
     }
 
@@ -62,6 +66,11 @@ final class OverlaySelectionPreviewRenderer {
             RenderMode renderMode
     ) {
         List<LineSegment> segments = region.previewSegments(renderMode == null ? RenderMode.BLOCKY : renderMode, false);
+        renderSegments(context, segments, x, y, width, height, yaw, pitch, zoom);
+    }
+
+    private static void renderSegments(GuiGraphicsExtractor context, List<LineSegment> segments,
+            int x, int y, int width, int height, float yaw, float pitch, float zoom) {
         if (segments.isEmpty()) {
             return;
         }
@@ -196,7 +205,7 @@ final class OverlaySelectionPreviewRenderer {
             case ELLIPSOID -> ELLIPSOID_REGION;
             case CYLINDER -> CYLINDER_REGION;
             case POLYHEDRON -> POLYHEDRON_REGION;
-            case RULER -> null;
+            case RULER, EDITING -> null;
         };
     }
 

@@ -68,6 +68,7 @@ public final class SelectionEditController {
     }
     public SelectionEditMode mode() { return mode; }
     public boolean radialOpen() { return radialOpen; }
+    public boolean hidesCrosshair() { return (active || radialOpen) && usable(Minecraft.getInstance()); }
     public boolean visible() { return usable(Minecraft.getInstance()) && (active() || shown != null); }
     public boolean suppressSneak() { return capturesCamera() && fastKey != null && fastKey.isDown(); }
     public boolean pending() { return pending; }
@@ -83,6 +84,9 @@ public final class SelectionEditController {
     }
 
     public void initialize(Path directory) {
+        net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.replaceElement(
+                net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.CROSSHAIR,
+                original -> (graphics, delta) -> { if (!hidesCrosshair()) original.extractRenderState(graphics, delta); });
         net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.attachElementAfter(
                 net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.CHAT,
                 net.minecraft.resources.Identifier.fromNamespaceAndPath("worldedit_selection_overlay", "selection_edit"), (graphics, delta) -> renderHud(graphics));
@@ -183,7 +187,7 @@ public final class SelectionEditController {
         else { editView = null; restoreCursor(); }
     }
     private static int menuRadius(Minecraft client) {
-        return Math.max(16, Math.min(92, Math.min(client.getWindow().getGuiScaledWidth(), client.getWindow().getGuiScaledHeight()) / 2 - 10));
+        return Math.max(16, Math.min(76, Math.min(client.getWindow().getGuiScaledWidth(), client.getWindow().getGuiScaledHeight()) / 2 - 10));
     }
 
     private boolean usable(Minecraft client) {

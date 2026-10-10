@@ -1460,7 +1460,9 @@ public final class OverlayColorSettingsScreen extends UiScreen {
     }
 
     private boolean stackedLayout() {
-        return width < 700 || height < 420;
+        int sidebarHeight = TOP_BAR_HEIGHT + MARGIN + ColorGroup.values().length * (BUTTON_HEIGHT + 6)
+                + 18 + 5 * SLOT_ROW_HEIGHT + 22;
+        return width < 700 || height < Math.max(420, sidebarHeight);
     }
 
     private int topBarHeight() {
@@ -1881,6 +1883,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
             profile.setColor(OverlayColorSlot.RULER_TEXT, 0xFFFFFFFF);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BACKGROUND, 0xD8000000);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BORDER, 0xA0FFD166);
+            setEditingColors(profile, 0xFF8FD7C1, 0xFFFF7A85, 0xFF79D9A0, 0xFF78A9FF);
             setAllWidths(profile, 1.0f);
             setWidth(profile, 0.76f, OverlayColorSlot.CUBOID_GRID, OverlayColorSlot.POLYGON_GRID, OverlayColorSlot.CYLINDER_GRID);
             setWidth(profile, 1.18f, OverlayColorSlot.POS1, OverlayColorSlot.POS2, OverlayColorSlot.POLYGON_POINT, OverlayColorSlot.ELLIPSOID_CENTER, OverlayColorSlot.CYLINDER_CENTER, OverlayColorSlot.POLYHEDRON_POINT);
@@ -1907,6 +1910,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
             profile.setColor(OverlayColorSlot.RULER_TEXT, 0xFFFFFFFF);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BACKGROUND, 0xE0000000);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BORDER, 0xD8FFFFFF);
+            setEditingColors(profile, 0xFFFFFFFF, 0xFFFF7AE5, 0xFFFFFF66, 0xFF78F7FF);
             setAllWidths(profile, 1.22f);
             setWidth(profile, 0.95f, OverlayColorSlot.CUBOID_GRID, OverlayColorSlot.POLYGON_GRID, OverlayColorSlot.CYLINDER_GRID);
             setWidth(profile, 1.45f, OverlayColorSlot.POS1, OverlayColorSlot.POS2, OverlayColorSlot.POLYGON_POINT, OverlayColorSlot.ELLIPSOID_CENTER, OverlayColorSlot.CYLINDER_CENTER, OverlayColorSlot.POLYHEDRON_POINT);
@@ -1933,6 +1937,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
             profile.setColor(OverlayColorSlot.RULER_TEXT, 0xEAF8FAFF);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BACKGROUND, 0xB0000000);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BORDER, 0x705B6678);
+            setEditingColors(profile, 0xCCB5D9CE, 0xD8FF8596, 0xD896D9AE, 0xD89CB8FF);
             setAllWidths(profile, 0.78f);
             setWidth(profile, 0.62f, OverlayColorSlot.CUBOID_GRID, OverlayColorSlot.POLYGON_GRID, OverlayColorSlot.CYLINDER_GRID);
             setWidth(profile, 0.95f, OverlayColorSlot.POS1, OverlayColorSlot.POS2, OverlayColorSlot.POLYGON_POINT, OverlayColorSlot.ELLIPSOID_CENTER, OverlayColorSlot.CYLINDER_CENTER, OverlayColorSlot.POLYHEDRON_POINT);
@@ -1959,6 +1964,7 @@ public final class OverlayColorSettingsScreen extends UiScreen {
             profile.setColor(OverlayColorSlot.RULER_TEXT, 0xFFFFFFFF);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BACKGROUND, 0xD0000000);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BORDER, 0xA0FFD166);
+            setEditingColors(profile, 0xFFEAF0FA, 0xFFFF6B6B, 0xFF63E6A6, 0xFF78A9FF);
             setAllWidths(profile, 0.86f);
             setWidth(profile, 0.62f, OverlayColorSlot.CUBOID_GRID, OverlayColorSlot.POLYGON_GRID, OverlayColorSlot.CYLINDER_GRID);
             setWidth(profile, 1.05f, OverlayColorSlot.POS1, OverlayColorSlot.POS2, OverlayColorSlot.POLYGON_POINT, OverlayColorSlot.ELLIPSOID_CENTER, OverlayColorSlot.CYLINDER_CENTER, OverlayColorSlot.POLYHEDRON_POINT);
@@ -1985,9 +1991,17 @@ public final class OverlayColorSettingsScreen extends UiScreen {
             profile.setColor(OverlayColorSlot.RULER_TEXT, 0xFFFFFFFF);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BACKGROUND, 0xD8000000);
             profile.setColor(OverlayColorSlot.RULER_LABEL_BORDER, 0xB8FFD166);
+            setEditingColors(profile, 0xFF5FF0FF, 0xFFFF7A85, 0xFF73F7AD, 0xFF78A9FF);
             setAllWidths(profile, 1.35f);
             setWidth(profile, 0.78f, OverlayColorSlot.CUBOID_GRID, OverlayColorSlot.POLYGON_GRID, OverlayColorSlot.CYLINDER_GRID);
             setWidth(profile, 1.65f, OverlayColorSlot.POS1, OverlayColorSlot.POS2, OverlayColorSlot.POLYGON_POINT, OverlayColorSlot.ELLIPSOID_CENTER, OverlayColorSlot.CYLINDER_CENTER, OverlayColorSlot.POLYHEDRON_POINT);
+        }
+
+        private static void setEditingColors(OverlayColorProfile profile, int boundary, int x, int y, int z) {
+            profile.setColor(OverlayColorSlot.EDIT_BOUNDARY, boundary);
+            profile.setColor(OverlayColorSlot.EDIT_AXIS_X, x);
+            profile.setColor(OverlayColorSlot.EDIT_AXIS_Y, y);
+            profile.setColor(OverlayColorSlot.EDIT_AXIS_Z, z);
         }
 
         private static void setAllWidths(OverlayColorProfile profile, float scale) {
@@ -2027,7 +2041,8 @@ public final class OverlayColorSettingsScreen extends UiScreen {
         ELLIPSOID("ellipsoid", OverlayColorSlot.ELLIPSOID_EDGE, OverlayColorSlot.ELLIPSOID_CENTER),
         CYLINDER("cylinder", OverlayColorSlot.CYLINDER_EDGE, OverlayColorSlot.CYLINDER_GRID, OverlayColorSlot.CYLINDER_CENTER),
         POLYHEDRON("polyhedron", OverlayColorSlot.POS1, OverlayColorSlot.POLYHEDRON_EDGE, OverlayColorSlot.POLYHEDRON_POINT),
-        RULER("ruler", OverlayColorSlot.RULER_LINE, OverlayColorSlot.RULER_ARROW, OverlayColorSlot.RULER_TEXT, OverlayColorSlot.RULER_LABEL_BACKGROUND, OverlayColorSlot.RULER_LABEL_BORDER);
+        RULER("ruler", OverlayColorSlot.RULER_LINE, OverlayColorSlot.RULER_ARROW, OverlayColorSlot.RULER_TEXT, OverlayColorSlot.RULER_LABEL_BACKGROUND, OverlayColorSlot.RULER_LABEL_BORDER),
+        EDITING("editing", OverlayColorSlot.EDIT_BOUNDARY, OverlayColorSlot.EDIT_AXIS_X, OverlayColorSlot.EDIT_AXIS_Y, OverlayColorSlot.EDIT_AXIS_Z);
 
         private final String key;
         private final OverlayColorSlot[] slots;

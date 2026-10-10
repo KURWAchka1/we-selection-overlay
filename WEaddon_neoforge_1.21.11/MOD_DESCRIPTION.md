@@ -104,6 +104,7 @@ Customize how the overlay looks directly in-game:
 
 * Full-screen color editor with live selection preview
 * Per-element color, transparency, and line thickness
+* Editing outlines and X/Y/Z colors, linked to global thickness and presets
 * Ready-made presets for different visibility needs
 * Reset controls for one element, thickness, colors, or everything
 * Undo/redo colors, transparency, thickness, resets, and presets with `Ctrl+Z` / `Ctrl+Y`

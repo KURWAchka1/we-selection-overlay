@@ -322,6 +322,12 @@ public final class CommandGameTest implements FabricClientGameTest {
                 public <T> T server(Callable<T> task) { return onServer(world.getServer(), task); }
                 public void pause(long millis) { context.waitTicks(Math.max(1, (int) (millis / 50))); }
             });
+            // Finish fixture-owned server reads before the game-test world's phased shutdown.
+            context.runOnClient(client -> {
+                org.marshal.weaddon_lightposition.runtime.mc26_2.client.selection.SelectionEditController.instance().configure(false, 1, 8);
+                call(overlay, "setClipboardPreviewEnabled", false);
+            });
+            context.waitTicks(5);
         }
     }
 

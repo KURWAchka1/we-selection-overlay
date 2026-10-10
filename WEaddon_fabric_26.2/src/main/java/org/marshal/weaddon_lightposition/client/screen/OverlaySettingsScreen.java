@@ -88,12 +88,14 @@ public final class OverlaySettingsScreen extends UiScreen {
             menuControls.add(choice);
             my += 23;
         }
-        menuControls.add(addRenderableWidget(UiButton.styled(key("reduced_motion"), button ->
-                overlayClient.setReducedMotion(!overlayClient.reducedMotion()))
-                .toggle(overlayClient::reducedMotion, key("reduced_motion")).bounds(mx, my + 3, menuWidth() - 16, 22).build()));
-        menuControls.add(addRenderableWidget(UiButton.styled(key("blur"), button ->
-                overlayClient.setUiBlur(!overlayClient.uiBlur()))
-                .toggle(overlayClient::uiBlur, key("blur")).bounds(mx, my + 27, menuWidth() - 16, 22).build()));
+        if (UiStyle.current() != UiStyle.LEGACY) {
+            menuControls.add(addRenderableWidget(UiButton.styled(key("reduced_motion"), button ->
+                    overlayClient.setReducedMotion(!overlayClient.reducedMotion()))
+                    .toggle(overlayClient::reducedMotion, key("reduced_motion")).bounds(mx, my + 3, menuWidth() - 16, 22).build()));
+            menuControls.add(addRenderableWidget(UiButton.styled(key("blur"), button ->
+                    overlayClient.setUiBlur(!overlayClient.uiBlur()))
+                    .toggle(overlayClient::uiBlur, key("blur")).bounds(mx, my + 27, menuWidth() - 16, 22).build()));
+        }
         layoutControls();
         setMenuOpen(false);
     }
@@ -207,7 +209,7 @@ public final class OverlaySettingsScreen extends UiScreen {
         renderWidgets(graphics, menuOpen ? Integer.MIN_VALUE : mouseX, menuOpen ? Integer.MIN_VALUE : mouseY, delta);
         for (Button button : menuControls) button.visible = menuOpen;
         if (menuOpen) {
-            UiChrome.popup(graphics, menuX(), menuY(), menuWidth(), 155, style);
+            UiChrome.popup(graphics, menuX(), menuY(), menuWidth(), menuHeight(), style);
             UiChrome.text(graphics, font, key("ui_options"), menuX() + 10, menuY() + 10, style.text, false);
             for (Button button : menuControls) button.extractRenderState(graphics, mouseX, mouseY, delta);
         }
@@ -225,7 +227,7 @@ public final class OverlaySettingsScreen extends UiScreen {
         if (menuOpen) {
             for (Button button : menuControls) if (button.mouseClicked(click, doubleClick)) return true;
             if (themeButton.mouseClicked(click, doubleClick)) return true;
-            if (click.x() < menuX() || click.x() >= menuX() + menuWidth() || click.y() < menuY() || click.y() >= menuY() + 155) setMenuOpen(false);
+            if (click.x() < menuX() || click.x() >= menuX() + menuWidth() || click.y() < menuY() || click.y() >= menuY() + menuHeight()) setMenuOpen(false);
             return true;
         }
         return super.mouseClicked(click, doubleClick);
@@ -257,5 +259,6 @@ public final class OverlaySettingsScreen extends UiScreen {
     private int panelY() { return (height - panelHeight()) / 2; }
     private int menuWidth() { return Math.min(182, panelWidth() - 16); }
     private int menuX() { return panelX() + panelWidth() - menuWidth() - 8; }
-    private int menuY() { return Math.max(4, Math.min(panelY() + 39, height - 159)); }
+    private int menuHeight() { return UiStyle.current() == UiStyle.LEGACY ? 103 : 155; }
+    private int menuY() { return Math.max(4, Math.min(panelY() + 39, height - menuHeight() - 4)); }
 }

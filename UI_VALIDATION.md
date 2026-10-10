@@ -1,6 +1,6 @@
 # UI validation
 
-Latest layout-only check: 2026-10-09. The earlier full UI profile and
+Latest layout-only check: 2026-10-10. The earlier full UI profile and
 six-runtime isolation checks remain recorded below; user visual acceptance
 is pending.
 
@@ -49,16 +49,20 @@ as documented in `TESTING.md`. Logs are written to `build/ui-validation/`.
 
 ## Verification Results
 
-The 2026-10-09 layout-only rerun passed with the final 1.8.0 Fabric universal
+The 2026-10-10 layout-only rerun passed with the final 1.8.0 Fabric universal
 artifact and no installed WorldEdit. It includes the new selection-editing
 row, which is unavailable without local WorldEdit, alongside the existing
 42-screenshot matrix. The dedicated editing settings screen is checked in
 both languages at requested 2x/3x/4x on all six WorldEdit-enabled runtimes by
 the command/editing fixture; see TESTING.md. Its controls stay inside the
 compact panel and use matching horizontal insets. These are layout checks,
-not new FPS measurements.
+not new FPS measurements. The new Editing palette group participates in the
+sidebar's minimum-height calculation, with stacked/scrolling layout at smaller
+logical sizes. The rerun captures 42 images; after a locale reload it waits for
+the native resource-loading overlay to disappear, not just for its future to
+complete. Screenshot review includes the additional group and Russian controls.
 
-The 2026-10-09 editing runs also capture the real native keybind menu in EN/RU
+The 2026-10-10 editing runs also capture the real native keybind menu in EN/RU
 at requested 2x/3x/4x on all six targets. The shorter face-edit/fast-step names
 do not overlap the assignment buttons. Passive corner markers, free-camera corner
 dragging during flight and the precise face-drag HUD are captured in-world, using native gizmos and
@@ -68,14 +72,27 @@ is registered once per runtime; packaging tests enforce that invariant.
 The editing fixture also captures the two-sector Resize/Move ring at requested
 2x/3x/4x. It uses cached anti-aliased bitmap masks and Lucide icons, not a second
 screen or a blur target. The cursor is hidden; a bounded dot supplies selection
-feedback, with an empty cancel center. Short hover fades honor Reduced Motion.
+feedback outside the center. Sectors contain only icons; the center displays the
+hovered tool name, or Cancel for the neutral center/seams. Translated captions
+fit without breaking words. The pointer yields to the hint inside the dead zone.
+Short hover fades honor Reduced Motion.
 GLFW captures a hidden virtual cursor; only the dot is clamped, without system
 cursor warps. The ordinary editing HUD pauses while this mode-choice menu is open.
 Screenshot review caught chat drawing over the large-scale ring; Fabric's HUD
 registration now places the editing layer after chat. NeoForge uses its existing
 post-GUI layer. The ring sectors and compact editing HUD use opaque surfaces
-after their short opening fade, so chat cannot show through their labels; the
-center and outside remain unfilled. These are input/layout checks, not a new FPS benchmark.
+after their short opening fade. The center and outside remain unfilled; the
+central caption uses native text shadow for contrast against the world. These
+are input/layout checks, not a new FPS benchmark.
+
+The compact ring is capped at a 76-pixel logical radius rather than 92. Both
+tool hints and neutral Cancel are captured in EN/RU at requested 2x/3x/4x on
+all six WorldEdit-enabled runtimes. The editing-palette preview/controls and
+Classic's shorter three-theme appearance popup are also captured and checked.
+The native crosshair remains visible for passive markers and pending applies,
+hides only for active tools/grabs/radial choice, and returns on exit. All six
+Creative screenshot triplets pass the separate 68/0/68 center-pixel check.
+See TESTING.md for interruption coverage and framework teardown rerun details.
 
 The same six runs verify palette Ctrl+Z/Y history with native screen events,
 including a focused HEX field, one-step drags, popup/confirmation blocking,

@@ -1,4 +1,9 @@
 {
+  "screen.worldedit_selection_overlay.colors.group.editing": "Editing",
+  "screen.worldedit_selection_overlay.colors.slot.editBoundary": "Editing outline",
+  "screen.worldedit_selection_overlay.colors.slot.editAxisX": "X axis",
+  "screen.worldedit_selection_overlay.colors.slot.editAxisY": "Y axis",
+  "screen.worldedit_selection_overlay.colors.slot.editAxisZ": "Z axis",
   "key.worldedit_selection_overlay.selection_edit": "Edit selection",
   "key.worldedit_selection_overlay.selection_edit_fast": "Fast step",
   "screen.worldedit_selection_overlay.settings.selection_edit": "Selection editing: %s",

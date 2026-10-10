@@ -50,6 +50,8 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('client.gui.overlay()', 'client.getOverlay()')
     .replaceAll('client.gui.hud.getChat()', 'client.gui.getChat()');
   if (loader === 'neo' && family === '1.21.11') edit = edit.replaceAll('client.resizeGui()', 'client.resizeDisplay()');
+  if (family === '1.21.11') edit = edit.replaceAll('setField(client.getWindow(), "focused",',
+    loader === 'neo' ? 'setField(client, "windowActive",' : 'setField(client, "field_1695",');
   if (loader === 'neo' && family === '1.21.11') edit = edit.replaceAll('NeoForgeAdapter.get().fromNativePlayer(', 'NeoForgeAdapter.adaptPlayer(');
   if (loader === 'fabric' && family === '1.21.11') edit = edit
     .replaceAll('net.minecraft.client.Minecraft', 'net.minecraft.client.MinecraftClient').replace(/\bMinecraft\b/g, 'MinecraftClient')
@@ -65,6 +67,7 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('getWindow().handle()', 'getWindow().getHandle()').replaceAll('getScreenWidth()', 'getWidth()').replaceAll('getScreenHeight()', 'getHeight()')
     .replaceAll('.setDown(', '.setPressed(').replaceAll('.isDown()', '.isPressed()').replaceAll('isMouseGrabbed()', 'isCursorLocked()')
     .replaceAll('client.options.keyAttack', 'client.options.attackKey')
+    .replaceAll('client.isWindowActive()', 'client.isWindowFocused()')
     .replaceAll('client.options.keyRight', 'client.options.rightKey').replaceAll('client.options.keyJump', 'client.options.jumpKey')
     .replaceAll('.input.keyPresses.right()', '.input.playerInput.right()').replaceAll('.input.keyPresses.jump()', '.input.playerInput.jump()')
     .replaceAll('getYRot()', 'getYaw()').replaceAll('.getDefaultKey().getValue()', '.getDefaultKey().getCode()')
@@ -85,6 +88,6 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('"handleAccumulatedMovement"', '"method_55793"')
     .replaceAll('"getRowTop"', '"method_25337"')
     .replaceAll('"setScrollAmount"', '"method_44382"')
-    .replace('server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),', 'server.getCommandManager().parseAndExecute(server.getCommandSource(),');
+    .replaceAll('server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),', 'server.getCommandManager().parseAndExecute(server.getCommandSource(),');
   await fs.writeFile(path.join(dir, 'SelectionEditingChecks.java'), edit);
 }

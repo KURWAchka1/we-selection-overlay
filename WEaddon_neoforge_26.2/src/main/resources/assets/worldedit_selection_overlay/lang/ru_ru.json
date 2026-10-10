@@ -299,5 +299,10 @@
   "selection_edit.worldedit_selection_overlay.invalid": "Изменение выделения отклонено",
   "selection_edit.worldedit_selection_overlay.failed": "Не удалось изменить выделение",
   "selection_edit.worldedit_selection_overlay.resize": "Размеры",
-  "selection_edit.worldedit_selection_overlay.move": "Перемещение"
+  "selection_edit.worldedit_selection_overlay.move": "Перемещение",
+  "screen.worldedit_selection_overlay.colors.group.editing": "Редактирование",
+  "screen.worldedit_selection_overlay.colors.slot.editBoundary": "Контур редактирования",
+  "screen.worldedit_selection_overlay.colors.slot.editAxisX": "Ось X",
+  "screen.worldedit_selection_overlay.colors.slot.editAxisY": "Ось Y",
+  "screen.worldedit_selection_overlay.colors.slot.editAxisZ": "Ось Z"
 }

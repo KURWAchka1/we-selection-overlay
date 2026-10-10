@@ -8,6 +8,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
+import org.marshal.weaddon_lightposition.client.overlay.OverlayColorSlot;
+import org.marshal.weaddon_lightposition.client.overlay.OverlayRenderStyle;
+import org.marshal.weaddon_lightposition.client.overlay.SelectionEditStyle;
 import org.marshal.weaddon_lightposition.client.screen.UiChrome;
 import org.marshal.weaddon_lightposition.client.screen.UiStyle;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft;
@@ -80,17 +83,19 @@ final class SelectionEditRenderer {
         return view.eye().add(view.forward().scale(Math.max(0, distance)));
     }
     void moveGrip(CuboidDraft bounds, View view, Point anchor, Face wheelAxis, long appeared) {
-        UiStyle style = UiStyle.current();
         Point hover = anchor == null ? moveHit(bounds, view) : null;
         Point point = anchor != null ? anchor : hover != null ? hover : center(bounds);
         if (point.subtract(view.eye()).dot(view.forward()) <= 0.05) return;
         double radius = view.radius(point, 5);
-        int color = tint(anchor != null || hover != null ? style.accent : style.text, fade(appeared));
+        int color = tint(OverlayRenderStyle.color(OverlayColorSlot.EDIT_BOUNDARY), fade(appeared) * (anchor != null || hover != null ? 1 : 0.65f));
         Gizmos.cuboid(new AABB(point.x() - radius, point.y() - radius, point.z() - radius,
-                point.x() + radius, point.y() + radius, point.z() + radius), GizmoStyle.stroke(color, 1.5f), true).setAlwaysOnTop();
+                point.x() + radius, point.y() + radius, point.z() + radius), GizmoStyle.stroke(color,
+                OverlayRenderStyle.lineWidth(SelectionEditStyle.HANDLE_WIDTH, OverlayColorSlot.EDIT_BOUNDARY)), true).setAlwaysOnTop();
         if (wheelAxis != null) {
             Point direction = new Point(wheelAxis.axis == 0 ? 1 : 0, wheelAxis.axis == 1 ? 1 : 0, wheelAxis.axis == 2 ? 1 : 0);
-            Gizmos.line(vec(point.subtract(direction.scale(radius * 3))), vec(point.add(direction.scale(radius * 3))), color, 1.5f).setAlwaysOnTop();
+            OverlayColorSlot slot = SelectionEditStyle.axisSlot(wheelAxis.axis);
+            Gizmos.line(vec(point.subtract(direction.scale(radius * 3))), vec(point.add(direction.scale(radius * 3))),
+                    tint(OverlayRenderStyle.color(slot), fade(appeared)), OverlayRenderStyle.lineWidth(SelectionEditStyle.HANDLE_WIDTH, slot)).setAlwaysOnTop();
         }
     }
     void corners(CuboidDraft bounds, Corner target, View view, long appeared, boolean pending) {
@@ -102,29 +107,44 @@ final class SelectionEditRenderer {
             double radius = view.radius(center, corner == target ? 8 : 6);
             Point r = view.right.scale(radius), u = view.up.scale(radius);
             Gizmos.rect(vec(center.subtract(u)), vec(center.add(r)), vec(center.add(u)), vec(center.subtract(r)),
-                    GizmoStyle.strokeAndFill(tint(corner == target ? style.accent : style.text, alpha), 1.5f,
+                    GizmoStyle.strokeAndFill(tint(OverlayRenderStyle.color(OverlayColorSlot.EDIT_BOUNDARY), alpha * (corner == target ? 1 : 0.65f)),
+                            OverlayRenderStyle.lineWidth(SelectionEditStyle.HANDLE_WIDTH, OverlayColorSlot.EDIT_BOUNDARY),
                             tint(style.surface, alpha * 0.95f))).setAlwaysOnTop();
         }
     }
     void world(CuboidDraft original, CuboidDraft draft, Face target, Corner corner, View view, long appeared, boolean pending, boolean moving) {
         float alpha = fade(appeared);
-        UiStyle style = UiStyle.current();
-        if (!original.equals(draft)) Gizmos.cuboid(box(original), GizmoStyle.stroke(tint(style.secondaryText, alpha * 0.28f), 1), true).setAlwaysOnTop();
-        Gizmos.cuboid(box(draft), GizmoStyle.stroke(tint(moving ? style.accent : style.secondaryText, alpha * 0.65f), 1), true).setAlwaysOnTop();
+        int boundary = OverlayRenderStyle.color(OverlayColorSlot.EDIT_BOUNDARY);
+        float width = OverlayRenderStyle.lineWidth(SelectionEditStyle.BOUNDARY_WIDTH, OverlayColorSlot.EDIT_BOUNDARY);
+        if (!original.equals(draft)) Gizmos.cuboid(box(original), GizmoStyle.stroke(tint(boundary, alpha * 0.28f), width), true).setAlwaysOnTop();
+        Gizmos.cuboid(box(draft), GizmoStyle.stroke(tint(boundary, alpha * 0.65f), width), true).setAlwaysOnTop();
         if (moving) return;
         for (Face f : FACES) {
             Point center = draft.center(f);
             if (center.subtract(view.eye).dot(view.forward) <= 0.05) continue;
             double radius = view.radius(center, f == target ? 4.5 : 3.5);
             Point r = view.right.scale(radius), u = view.up.scale(radius);
-            int color = tint(f == target ? style.accent : style.text, alpha * (pending ? 0.45f : f == target ? 1 : 0.65f));
+            OverlayColorSlot slot = f == target ? SelectionEditStyle.axisSlot(f.axis) : OverlayColorSlot.EDIT_BOUNDARY;
+            int color = tint(OverlayRenderStyle.color(slot), alpha * (pending ? 0.45f : f == target ? 1 : 0.65f));
             Gizmos.rect(vec(center.subtract(r).subtract(u)), vec(center.add(r).subtract(u)), vec(center.add(r).add(u)),
-                    vec(center.subtract(r).add(u)), GizmoStyle.strokeAndFill(color, 1, color)).setAlwaysOnTop();
+                    vec(center.subtract(r).add(u)), GizmoStyle.strokeAndFill(color, OverlayRenderStyle.lineWidth(SelectionEditStyle.BOUNDARY_WIDTH, slot), color)).setAlwaysOnTop();
         }
-        if (target != null) face(draft, target, tint(style.accent, alpha));
+        if (target != null) face(draft, target, alpha);
+        if (corner != null) {
+            Point start = draft.corner(corner);
+            for (int axis = 0; axis < 3; axis++) {
+                OverlayColorSlot slot = SelectionEditStyle.axisSlot(axis);
+                Gizmos.line(vec(start), vec(SelectionEditStyle.axisEnd(draft, corner, axis)),
+                        tint(OverlayRenderStyle.color(slot), alpha * (pending ? 0.45f : 1)),
+                        OverlayRenderStyle.lineWidth(SelectionEditStyle.ACTIVE_WIDTH, slot)).setAlwaysOnTop();
+            }
+        }
         corners(draft, corner != null ? corner : cornerHit(draft, view), view, appeared, pending);
     }
-    private void face(CuboidDraft b, Face f, int color) {
+    private void face(CuboidDraft b, Face f, float alpha) {
+        OverlayColorSlot slot = SelectionEditStyle.axisSlot(f.axis);
+        int color = tint(OverlayRenderStyle.color(slot), alpha);
+        float width = OverlayRenderStyle.lineWidth(SelectionEditStyle.ACTIVE_WIDTH, slot);
         int a = (f.axis + 1) % 3, c = (f.axis + 2) % 3;
         Point[] corners = new Point[4];
         for (int i = 0; i < 4; i++) {
@@ -133,7 +153,7 @@ final class SelectionEditRenderer {
             p[c] = i >= 2 ? b.max(c) + 1.0 : b.min(c);
             corners[i] = new Point(p[0], p[1], p[2]);
         }
-        for (int i = 0; i < 4; i++) Gizmos.line(vec(corners[i]), vec(corners[(i + 1) % 4]), color, 1.75f).setAlwaysOnTop();
+        for (int i = 0; i < 4; i++) Gizmos.line(vec(corners[i]), vec(corners[(i + 1) % 4]), color, width).setAlwaysOnTop();
     }
 
     void hud(GuiGraphicsExtractor graphics, CuboidDraft draft, Face face, Corner corner, SelectionEditSnapshot origin, String reason, boolean pending, long appeared, boolean moving, Face wheelAxis) {
@@ -186,18 +206,26 @@ final class SelectionEditRenderer {
             int x = cx + (entry == SelectionEditMode.RESIZE ? -1 : 1) * Math.round(radius * 0.63f);
             int iconSize = Math.min(22, Math.max(12, radius / 4));
             int color = UiChrome.blend(entry == current ? style.text : style.secondaryText, style.accent, menuHover[index]);
-            UiChrome.icon(graphics, entry.icon, x - iconSize / 2, cy - iconSize - 3, iconSize, tint(color, alpha));
-            Component label = UiChrome.label(Component.translatable("selection_edit.worldedit_selection_overlay." + entry.key));
-            var lines = client.font.split(label, Math.max(22, radius - 8));
-            int y = cy + 7;
-            for (var line : lines) {
-                UiChrome.text(graphics, client.font, line, x - client.font.width(line) / 2, y, tint(color, alpha), false);
-                y += 11;
-            }
+            UiChrome.icon(graphics, entry.icon, x - iconSize / 2, cy - iconSize / 2, iconSize, tint(color, alpha));
         }
+        Component hint = UiChrome.label(Component.translatable(hovered == null ? "gui.cancel"
+                : "selection_edit.worldedit_selection_overlay." + hovered.key));
+        int hintWidth = client.font.width(hint);
+        float hintScale = Math.min(1.0f, Math.max(1, radius * 0.72f - 8) / Math.max(1, hintWidth));
+        var matrices = graphics.pose();
+        matrices.pushMatrix();
+        try {
+            matrices.translate(cx, cy);
+            matrices.scale(hintScale, hintScale);
+            UiChrome.text(graphics, client.font, hint, -hintWidth / 2, -client.font.lineHeight / 2,
+                    tint(hovered == null ? style.secondaryText : style.text, alpha), true);
+        } finally { matrices.popMatrix(); }
         double length = Math.hypot(dx, dy), scale = length > radius - 5 ? (radius - 5) / length : 1;
-        UiChrome.icon(graphics, "radial-dot", cx + (int) Math.round(dx * scale) - 3, cy + (int) Math.round(dy * scale) - 3,
-                6, tint(hovered == null ? style.text : style.accent, alpha));
+        // The cancel hint replaces the pointer inside the center so neither obscures the other.
+        if (length >= radius * 0.36) {
+            UiChrome.icon(graphics, "radial-dot", cx + (int) Math.round(dx * scale) - 3, cy + (int) Math.round(dy * scale) - 3,
+                    6, tint(hovered == null ? style.text : style.accent, alpha));
+        }
     }
     private static float fade(long start) { return UiStyle.reducedMotion() ? 1 : Math.min(1, (System.nanoTime() - start) / 120_000_000f); }
     private static String signed(long value) { return (value >= 0 ? "+" : "") + value; }

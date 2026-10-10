@@ -69,6 +69,41 @@ wheel-axis indicator is a constraint, not three draggable axis controls.
 
 ## Subsequent Slices, Not Included In The First
 
+### Independent Height: Next Input Slice (2026-10-10)
+
+Player collision is a real limitation of root carry: a solid floor stops the
+player, so moving down by flying is not a complete placement workflow. The
+selection itself has no terrain collision. Keep root carry, but provide an
+independent precision channel without opening settings or changing game mode.
+
+Proposed, not implemented by the palette change:
+
+- While an LMB Move grip is held, tap X/Y/Z to choose a world-positive wheel
+  axis immediately. Y + wheel raises/lowers the box even through a solid floor;
+  X/Z do the same horizontally. No release, re-grab, radial menu or settings.
+- The axis change must not translate the box, recapture the player baseline or
+  rotate accumulated fractional motion. Only later wheel input uses the axis.
+  Root carry remains independent; this is not a restriction on player movement.
+- Keep a fixed axis indicator and XYZ displacement in the existing compact HUD.
+  Explicit Y means positive world-up, regardless of the camera pitch. Native
+  Space/Shift, movement and look retain their meanings. No world/block raycast,
+  no forced spectator/no-clip and no teleporting the player.
+- Only the active Move grip owns these contextual shortcuts. Screens, chat,
+  Resize, passive corner grips, idle hotbar and pending applies do not. Respect
+  a rebound edit/menu key before an axis shortcut, and track key ownership so
+  held/repeated keys and their releases do not trigger other mod bindings.
+- G applies the entire draft; Escape cancels. Keep world-height/coordinate
+  bounds, dimensions and immediate reversal at saturation. Numeric XYZ entry
+  remains the later route for large exact offsets, not mandatory UI to nudge.
+
+Before implementation, test stationary-player vertical travel below a solid
+floor, all three axis switches within one grip, fractional input, camera turns,
+custom key conflicts, LMB/G/Esc release order, and both loaders. This is our
+adaptation of explicit-axis transformation, not an assertion that Axiom or
+Blender use this exact interaction.
+
+### Other Follow-Ups
+
 1. Resize: capture only during precise gestures, bound screen-to-world gain,
    rebase step changes and remove rejected overshoot. Preserve close/end-on
    behavior and all six face signs with tests before changing input ownership.
@@ -104,6 +139,8 @@ full redesign remains incomplete until its later slices and usability checks.
 - [Axiom gizmos](https://axiomdocs.moulberry.com/editor/gizmos.html): distinct
   center, axis and plane interactions, cardinal nudges and explicit tool context.
   Root-displacement carry is our design decision, not a claimed identical API.
+- [Blender axis locking](https://docs.blender.org/manual/en/5.2/scene_layout/object/editing/transform/control/axis_locking.html):
+  choosing X/Y/Z during an active transformation, without entering settings.
 - [GLFW input guide](https://www.glfw.org/docs/latest/input_guide.html#cursor_mode):
   retain native captured mouse look, not per-event cursor warping.
 

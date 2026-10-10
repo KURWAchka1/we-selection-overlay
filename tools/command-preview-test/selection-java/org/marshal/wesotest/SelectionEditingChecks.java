@@ -11,6 +11,11 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.client.selection.SelectionEditController;
+import org.marshal.weaddon_lightposition.runtime.mc26_2.client.overlay.OverlayColorProfile;
+import org.marshal.weaddon_lightposition.runtime.mc26_2.client.overlay.OverlayColorSlot;
+import org.marshal.weaddon_lightposition.runtime.mc26_2.client.overlay.OverlayRenderStyle;
+import org.marshal.weaddon_lightposition.runtime.mc26_2.client.overlay.SelectionEditStyle;
+import org.marshal.weaddon_lightposition.runtime.mc26_2.client.screen.UiStyle;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft.Face;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.selection.CuboidDraft.Corner;
@@ -50,13 +55,19 @@ public final class SelectionEditingChecks {
         });
     }
     public static void run(Minecraft client, Object overlay, Object clipboardSource, Consumer<String> screenshot, Dispatch dispatch) {
-        new SelectionEditingChecks(client, overlay, clipboardSource, screenshot, dispatch).run();
+        try { new SelectionEditingChecks(client, overlay, clipboardSource, screenshot, dispatch).run(); }
+        catch (RuntimeException | Error failure) {
+            // Report before the game-test world's shutdown can mask an assertion with a barrier wait.
+            failure.printStackTrace();
+            throw failure;
+        }
     }
     private void run() {
         List<?> historyBefore = onServer(this::history);
         List<?> blocksBefore = onServer(this::worldBlocks);
         onClient(() -> {
             check(!editing.options().enabled(), "Editing must be opt-in");
+            checkCrosshair(false, "disabled editing");
             hold = (KeyMapping) field(editing, "editKey"); fast = (KeyMapping) field(editing, "fastKey");
             check(hold.getDefaultKey().getValue() == 71, "Default editing key must be G");
             call(editing, "bind", false, new KeyEvent(71, 0, 0));
@@ -76,6 +87,7 @@ public final class SelectionEditingChecks {
             check(serverBounds().equals(original), "Draft changed authoritative region");
             release();
             await(() -> !editing.pending(), "wheel commit");
+            onClient(() -> { checkCrosshair(false, "G apply " + f); return null; });
             check(serverBounds().equals(draft), "Wheel failed on " + f);
         }
         select(true); aim(Face.EAST, false); start(Face.EAST);
@@ -145,7 +157,8 @@ public final class SelectionEditingChecks {
         onClient(() -> {
             nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 3.0);
             nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(256, 0, 0));
-            check(!editing.active() && client.gui.screen() == null, "Escape opened pause menu or retained draft"); return null;
+            check(!editing.active() && client.gui.screen() == null, "Escape opened pause menu or retained draft");
+            checkCrosshair(false, "Escape"); return null;
         });
         pause(300); check(!onClient(editing::active), "Cancelled hold re-entered without release");
         release(); check(serverBounds().equals(original), "Escape committed a draft");
@@ -186,7 +199,8 @@ public final class SelectionEditingChecks {
         select(false); aim(Face.NORTH, false); start(Face.NORTH);
         onClient(() -> {
             nativeCall(client.mouseHandler, "onScroll", client.getWindow().handle(), 0.0, 2.0);
-            client.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("", false)); return null;
+            client.gui.setScreen(new net.minecraft.client.gui.screens.ChatScreen("", false));
+            checkCrosshair(false, "chat before next editing tick"); return null;
         });
         pause(150); check(!onClient(editing::active), "Chat retained editing controls");
         release(); onClient(() -> { client.gui.setScreen(null); return null; });
@@ -240,6 +254,7 @@ public final class SelectionEditingChecks {
             await(() -> editing.visible() && !editing.active(), "passive corner " + corner);
             onClient(() -> { nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1); return null; });
             check(onClient(editing::dragging), "Direct corner did not drag: " + corner);
+            onClient(() -> { checkCrosshair(true, "free corner " + corner); return null; });
             double beforeYaw = onClient(() -> client.player.getYRot());
             onClient(() -> {
                 check(!hold.isDown(), "Direct corner needed hold key");
@@ -297,6 +312,7 @@ public final class SelectionEditingChecks {
             }
             CuboidDraft releasedDraft = onClient(() -> {
                 nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
+                checkCrosshair(false, "free corner mouse release");
                 return editing.draft();
             });
             await(() -> !editing.pending(), "corner commit " + corner);
@@ -316,6 +332,7 @@ public final class SelectionEditingChecks {
         await(editing::visible, "passive markers");
         onClient(() -> {
             check(!editing.button(0, 1), "Passive markers captured an ordinary face click");
+            checkCrosshair(false, "passive markers");
             check(!editing.scroll(1), "Passive markers captured ordinary wheel input");
             client.options.keyShift.setDown(true); client.player.input.tick();
             check(client.player.input.keyPresses.shift(), "Normal Shift was disabled outside editing");
@@ -340,20 +357,24 @@ public final class SelectionEditingChecks {
             hold.setDown(false);
             setField(editing, "pending", true);
             setField(editing, "level", new Object());
+            checkCrosshair(false, "world identity mismatch before tick");
             call(editing, "tick", client);
             check(!editing.pending() && !editing.active() && editing.draft() == null && field(editing, "origin") == null && field(editing, "shown") == null,
                     "World identity change retained a pending context");
             return null;
         });
         closeFacesAndModes();
+        crosshairLifecycle();
         check(onServer(this::history).equals(historyBefore), "Selection editing changed WorldEdit history");
         check(onServer(this::worldBlocks).equals(blocksBefore), "Selection editing changed world blocks");
         paletteHistory();
+        editingPaletteAndClassic();
         for (String language : new String[]{"en_us", "ru_ru"}) {
             var reload = onClient(() -> { client.getLanguageManager().setSelected(language); return client.reloadResourcePacks(); });
             await(reload::isDone, "language reload");
             await(() -> client.gui.overlay() == null, "language overlay");
-            onClient(() -> { client.gui.hud.getChat().clearMessages(false); return null; });
+            onClient(() -> { client.gui.hud.getChat().clearMessages(false); client.gui.setScreen(null); return null; });
+            if (language.equals("ru_ru")) chooseMode(SelectionEditMode.RESIZE, true);
         for (int scale : new int[]{2, 3, 4}) {
             onClient(() -> {
                 client.options.guiScale().set(scale); client.resizeGui();
@@ -398,7 +419,7 @@ public final class SelectionEditingChecks {
         await(reload::isDone, "restore language");
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
-        System.out.println("SELECTION EDIT VERIFY PASS: G tap toggle, close/inside six-face dragging, hidden-cursor radial/dead zone, root carry/look/Shift/fractional wheel/near-inside-far grips, LMB retains draft, eight free-camera one-block corners, Escape, stale, isolation, clipboard, unchanged blocks/history");
+        System.out.println("SELECTION EDIT VERIFY PASS: G tap toggle, close/inside six-face dragging, hidden-cursor radial/dead zone, root carry/look/Shift/fractional wheel/near-inside-far grips, LMB retains draft, eight free-camera one-block corners, crosshair lifecycle, Escape, stale, isolation, clipboard, unchanged blocks/history");
     }
     private void closeFacesAndModes() {
         for (Face face : Face.values()) for (int side : new int[]{1, -1}) {
@@ -438,6 +459,7 @@ public final class SelectionEditingChecks {
             check(org.lwjgl.glfw.GLFW.glfwGetInputMode(client.getWindow().handle(), org.lwjgl.glfw.GLFW.GLFW_CURSOR) == org.lwjgl.glfw.GLFW.GLFW_CURSOR_DISABLED,
                     "Radial retained visible system cursor");
             check(editing.capturesCamera(), "Radial did not freeze camera");
+            checkCrosshair(true, "idle radial");
             radialPointer(1000, 0);
             check(Math.hypot((double) field(editing, "radialX"), (double) field(editing, "radialY")) <= (int) call(editing, "menuRadius", client),
                     "Radial pointer escaped the ring");
@@ -448,6 +470,7 @@ public final class SelectionEditingChecks {
             hold.setDown(false); return null;
         }); pause(150);
         check(!onClient(editing::active) && onClient(editing::mode) == SelectionEditMode.RESIZE, "Center choice applied or changed mode");
+        onClient(() -> { checkCrosshair(false, "idle radial center cancellation"); return null; });
         check(onClient(() -> client.mouseHandler.isMouseGrabbed()), "Radial center failed to restore cursor");
         chooseMode(SelectionEditMode.MOVE, true);
         check(onClient(editing::mode) == SelectionEditMode.MOVE && !onClient(editing::active), "Radial selection unexpectedly applied or activated");
@@ -510,6 +533,7 @@ public final class SelectionEditingChecks {
         tap(); await(() -> editing.active() && editing.draft() != null, "move entry");
         onClient(() -> {
             check(!editing.capturesCamera() && client.mouseHandler.isMouseGrabbed(), "Move entry captured camera");
+            checkCrosshair(true, "idle active Move");
             check(!editing.scroll(1), "Idle Move captured hotbar wheel");
             double x = client.getWindow().getScreenWidth() / 2.0, y = client.getWindow().getScreenHeight() / 2.0;
             nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 1);
@@ -539,6 +563,7 @@ public final class SelectionEditingChecks {
             for (int axis = 0; axis < 3; axis++) check(editing.draft().size(axis) == original.size(axis), "Move resized box");
             nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
             check(editing.active() && !editing.dragging() && client.mouseHandler.isMouseGrabbed(), "Carry release committed or captured camera");
+            checkCrosshair(true, "Move draft after mouse release");
             check(!editing.scroll(1), "Released carry captured idle wheel");
             return null;
         });
@@ -555,6 +580,7 @@ public final class SelectionEditingChecks {
         check(onClient(() -> !editing.capturesCamera() && client.mouseHandler.isMouseGrabbed()), "Active Move menu failed to restore native camera");
         release(); await(() -> !editing.pending(), "move commit");
         check(serverBounds().equals(moved), "Whole move did not commit");
+        onClient(() -> { checkCrosshair(false, "Move apply"); return null; });
         onServer(() -> {
             var selector = WorldEdit.getInstance().getSessionManager().get(actor()).getRegionSelector(actor().getWorld());
             check(selector.getClass() == ExtendingCuboidRegionSelector.class, "Shift replaced selector");
@@ -603,6 +629,53 @@ public final class SelectionEditingChecks {
         pause(500); check(!onClient(editing::radialOpen) && !onClient(editing::active), "Esc reopened held menu");
         onClient(() -> { hold.setDown(false); return null; }); pause(100);
     }
+    private void checkCrosshair(boolean hidden, String context) {
+        check(editing.hidesCrosshair() == hidden, "Wrong crosshair suppression: " + context);
+    }
+    private void crosshairLifecycle() {
+        crosshairGameMode("creative");
+        select(false);
+        aimAt(new Point(30, 90, 30), new Point(30, 110, 30));
+        onClient(() -> { client.gui.hud.getChat().clearMessages(false); checkCrosshair(false, "sky baseline"); return null; });
+        pause(200); screenshot.accept("crosshair-visible");
+        tap(); await(editing::active, "crosshair resize entry");
+        onClient(() -> { checkCrosshair(true, "active Resize"); return null; });
+        pause(200); screenshot.accept("crosshair-hidden");
+        tap(); await(() -> !editing.active(), "crosshair G exit");
+        onClient(() -> { checkCrosshair(false, "unchanged G apply"); return null; });
+        pause(200); screenshot.accept("crosshair-restored");
+        tap(); await(editing::active, "crosshair focus entry");
+        onClient(() -> {
+            boolean focused = client.isWindowActive();
+            setField(client.getWindow(), "focused", false);
+            try {
+                checkCrosshair(false, "focus lost before tick");
+                call(editing, "tick", client);
+            } finally { setField(client.getWindow(), "focused", focused); }
+            check(!editing.active(), "Focus loss retained editing");
+            checkCrosshair(false, "focus regained after cancellation");
+            return null;
+        });
+        await(() -> field(editing, "shown") != null && !editing.pending(), "selection reacquired after focus loss");
+        tap(); await(editing::active, "crosshair disable entry");
+        onClient(() -> {
+            editing.configure(false, 1, 8); checkCrosshair(false, "editing disabled");
+            editing.configure(true, 1, 8); checkCrosshair(false, "editing re-enabled");
+            return null;
+        });
+        crosshairGameMode("spectator");
+        onClient(() -> { client.gui.hud.getChat().clearMessages(false); return null; });
+        System.out.println("CROSSHAIR VERIFY PASS: Resize/Move, radial, eight corners, G/mouse release, Escape, chat, focus, world identity, disable/re-enable");
+    }
+    private void crosshairGameMode(String mode) {
+        onServer(() -> {
+            var server = client.getSingleplayerServer();
+            server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamemode " + mode + " @p");
+            return null;
+        });
+        pause(200);
+        onClient(() -> { client.player.getAbilities().flying = true; return null; });
+    }
     private com.sk89q.worldedit.entity.Player permissionActor(com.sk89q.worldedit.entity.Player actor, boolean shift, boolean resize) {
         return (com.sk89q.worldedit.entity.Player) java.lang.reflect.Proxy.newProxyInstance(actor.getClass().getClassLoader(),
                 new Class<?>[]{com.sk89q.worldedit.entity.Player.class}, (proxy, method, args) -> {
@@ -625,7 +698,22 @@ public final class SelectionEditingChecks {
                 radialPointer(dx, 0);
                 return null;
             }); pause(150);
-            if (captureScreenshots) screenshot.accept("selection-edit-radial-x" + scale);
+            if (captureScreenshots) {
+                screenshot.accept("selection-edit-radial-x" + scale);
+                onClient(() -> { radialPointer(0, 0); return null; }); pause(150);
+                screenshot.accept("selection-edit-radial-cancel-x" + scale);
+                onClient(() -> {
+                    int radius = (int) call(editing, "menuRadius", client);
+                    radialPointer(radius * 0.65 * (mode == SelectionEditMode.MOVE ? -1 : 1), 0);
+                    return null;
+                }); pause(150);
+                screenshot.accept("selection-edit-radial-other-x" + scale);
+                onClient(() -> {
+                    int radius = (int) call(editing, "menuRadius", client);
+                    radialPointer(radius * 0.65 * (mode == SelectionEditMode.MOVE ? 1 : -1), 0);
+                    return null;
+                });
+            }
         }
         onClient(() -> { nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 0, new KeyEvent(71, 0, 0)); return null; }); pause(150);
         onClient(() -> { client.options.guiScale().set(2); client.resizeGui(); return null; });
@@ -709,6 +797,111 @@ public final class SelectionEditingChecks {
         });
         pause(200); screenshot.accept("palette-history");
         onClient(() -> { client.gui.setScreen(null); return null; });
+    }
+    private void editingPaletteAndClassic() {
+        Object styleBefore = onClient(() -> call(overlay, "uiStyle"));
+        boolean blurBefore = onClient(() -> (boolean) call(overlay, "uiBlur"));
+        boolean motionBefore = onClient(() -> (boolean) call(overlay, "reducedMotion"));
+        Object stateBefore = onClient(() -> {
+            call(overlay, "setUiStyle", UiStyle.GLASS);
+            Object screen = Class.forName("org.marshal.weaddon_lightposition.runtime.mc26_2.client.screen.OverlayColorSettingsScreen")
+                    .getConstructors()[0].newInstance(overlay, null);
+            client.gui.setScreen((net.minecraft.client.gui.screens.Screen) screen);
+            Object state = call(screen, "paletteState");
+            OverlayColorSlot[] slots = {OverlayColorSlot.EDIT_BOUNDARY, OverlayColorSlot.EDIT_AXIS_X,
+                    OverlayColorSlot.EDIT_AXIS_Y, OverlayColorSlot.EDIT_AXIS_Z};
+            int[] colors = {0xC0F0F0F0, 0xD0FF6070, 0xE070FF90, 0xF070A0FF};
+            call(screen, "beginPaletteEdit");
+            for (int i = 0; i < slots.length; i++) {
+                call(overlay, "previewOverlayColor", slots[i], colors[i]);
+                call(overlay, "previewOverlayLineWidthScale", slots[i], 1.5f);
+            }
+            call(screen, "finishPaletteEdit");
+            Object changed = call(screen, "paletteState");
+            paletteKey(90, 2); check(call(screen, "paletteState").equals(state), "Editing palette undo lost color/width");
+            paletteKey(89, 2); check(call(screen, "paletteState").equals(changed), "Editing palette redo lost color/width");
+            var serialized = new OverlayColorProfile();
+            for (int i = 0; i < slots.length; i++) {
+                check(OverlayRenderStyle.color(slots[i]) == colors[i], "Editing color not delivered to world renderer");
+                serialized.setColor(slots[i], colors[i]); serialized.setLineWidthScale(slots[i], 1.5f);
+            }
+            var loaded = new OverlayColorProfile();
+            for (String line : serialized.toConfigLines("")) {
+                int split = line.indexOf('='); loaded.applyConfigValue(line.substring(0, split), line.substring(split + 1));
+            }
+            for (String line : serialized.toLineWidthConfigLines("")) {
+                int split = line.indexOf('='); loaded.applyLineWidthConfigValue(line.substring(0, split), line.substring(split + 1));
+            }
+            for (var slot : slots) check(loaded.color(slot) == serialized.color(slot) && loaded.lineWidthScale(slot) == 1.5f,
+                    "Editing palette config roundtrip failed: " + slot);
+            call(overlay, "setAllOverlayLineWidthScale", 1.25f);
+            check((boolean) call(overlay, "allOverlayLineWidthsSame"), "Global width did not include editing slots");
+            for (var slot : slots) check(OverlayRenderStyle.lineWidth(SelectionEditStyle.BOUNDARY_WIDTH, slot) == 1.25f,
+                    "World editing width not linked to global slider");
+            var preview = SelectionEditStyle.previewSegments();
+            check(preview.size() == 15 && preview == SelectionEditStyle.previewSegments(), "Editing preview not cached");
+            call(overlay, "previewOverlayLineWidthScale", slots[1], 1.75f);
+            check(!(boolean) call(overlay, "allOverlayLineWidthsSame"), "Custom editing width did not disable global slider");
+            check(preview == SelectionEditStyle.previewSegments(), "Thickness unnecessarily rebuilt preview geometry");
+            call(overlay, "previewOverlayColor", slots[1], 0xFF123456);
+            check(preview != SelectionEditStyle.previewSegments(), "Editing preview ignored color invalidation");
+            call(overlay, "resetOverlayColor", slots[1]);
+            check(OverlayRenderStyle.color(slots[1]) == slots[1].defaultColor() && OverlayRenderStyle.lineWidthScale(slots[1]) == 1,
+                    "Per-element editing reset did not restore both color and width");
+            check(OverlayRenderStyle.color(slots[2]) == colors[2], "Per-element reset changed another axis");
+            for (Corner corner : Corner.values()) for (int axis = 0; axis < 3; axis++) {
+                Point from = original.corner(corner), end = SelectionEditStyle.axisEnd(original, corner, axis);
+                for (int checkAxis = 0; checkAxis < 3; checkAxis++) check(end.at(checkAxis) == (checkAxis == axis
+                        ? corner.face(axis).sign > 0 ? original.min(axis) : original.max(axis) + 1.0 : from.at(checkAxis)),
+                        "Editing preview/world axis endpoint mismatch");
+            }
+            Class<?> presets = java.util.Arrays.stream(screen.getClass().getDeclaredClasses()).filter(t -> t.getSimpleName().equals("OverlayPreset")).findFirst().orElseThrow();
+            for (Object preset : presets.getEnumConstants()) {
+                OverlayColorProfile profile = (OverlayColorProfile) call(preset, "profile");
+                check(profile.lineWidthScale(slots[0]) == profile.lineWidthScale(OverlayColorSlot.CUBOID_EDGE), "Preset skipped editing thickness");
+                check(profile.color(slots[1]) != profile.color(slots[2]) && profile.color(slots[2]) != profile.color(slots[3]), "Preset axes lost distinction");
+            }
+            call(screen, "applyPaletteState", state);
+            Class<?> groups = java.util.Arrays.stream(screen.getClass().getDeclaredClasses()).filter(t -> t.getSimpleName().equals("ColorGroup")).findFirst().orElseThrow();
+            Object editingGroup = java.util.Arrays.stream(groups.getEnumConstants()).filter(t -> t.toString().equals("EDITING")).findFirst().orElseThrow();
+            setField(screen, "selectedGroup", editingGroup); setField(screen, "selectedSlot", slots[0]);
+            call(screen, "syncHsvFromSelectedColor"); call(screen, "syncFields"); call(screen, "syncGroupButtons"); call(screen, "layoutWidgets");
+            return state;
+        });
+        for (int scale : new int[]{2, 3, 4}) {
+            onClient(() -> { client.options.guiScale().set(scale); client.resizeGui(); return null; });
+            pause(200); screenshot.accept("palette-editing-x" + scale);
+            onClient(() -> { client.gui.screen().mouseScrolled(20, 80, 0, -100); return null; });
+            pause(150); screenshot.accept("palette-editing-controls-x" + scale);
+            onClient(() -> { client.gui.screen().mouseScrolled(20, 80, 0, 100); return null; });
+        }
+        onClient(() -> {
+            call(client.gui.screen(), "applyPaletteState", stateBefore);
+            client.options.guiScale().set(2); client.resizeGui();
+            call(overlay, "setUiBlur", true); call(overlay, "setReducedMotion", true);
+            call(overlay, "setUiStyle", UiStyle.LEGACY);
+            Object screen = Class.forName("org.marshal.weaddon_lightposition.runtime.mc26_2.client.screen.OverlaySettingsScreen")
+                    .getConstructors()[0].newInstance(overlay, null);
+            client.gui.setScreen((net.minecraft.client.gui.screens.Screen) screen);
+            call(screen, "setMenuOpen", true);
+            check(((List<?>) field(screen, "menuControls")).size() == 3 && (int) call(screen, "menuHeight") == 103,
+                    "Classic retained inapplicable appearance controls/space");
+            check((boolean) call(overlay, "uiBlur") && (boolean) call(overlay, "reducedMotion"), "Classic erased modern preferences");
+            return null;
+        });
+        pause(200); screenshot.accept("settings-classic-appearance");
+        onClient(() -> {
+            call(overlay, "setUiStyle", UiStyle.GLASS);
+            Object screen = Class.forName("org.marshal.weaddon_lightposition.runtime.mc26_2.client.screen.OverlaySettingsScreen")
+                    .getConstructors()[0].newInstance(overlay, null);
+            client.gui.setScreen((net.minecraft.client.gui.screens.Screen) screen);
+            call(screen, "setMenuOpen", true);
+            check(((List<?>) field(screen, "menuControls")).size() == 5 && (int) call(screen, "menuHeight") == 155,
+                    "Modern appearance controls did not return");
+            call(overlay, "setUiStyle", styleBefore); call(overlay, "setUiBlur", blurBefore); call(overlay, "setReducedMotion", motionBefore);
+            client.gui.setScreen(null); return null;
+        });
+        System.out.println("EDITING PALETTE VERIFY PASS: colors/alpha/widths, config roundtrip, shared preview strokes/cache, all-corner axes, presets, resets, history, Classic appearance preferences");
     }
     private void paletteKey(int key, int modifiers) {
         check(client.gui.screen().keyPressed(new KeyEvent(key, 0, modifiers)), "Palette shortcut was not consumed");

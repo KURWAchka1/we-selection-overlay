@@ -47,7 +47,7 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "Command test failed: $($target.Name)" }
             $result = [IO.File]::ReadAllText((Join-Path $logs "$($target.Name).log"))
             $commandMarker = if ($target.Family) { 'WESO NEO COMMAND PASS:' } else { 'WESO COMMAND PASS:' }
-            foreach ($marker in @($commandMarker, 'SELECTION EDIT VERIFY PASS:', 'PALETTE HISTORY VERIFY PASS:')) {
+            foreach ($marker in @($commandMarker, 'SELECTION EDIT VERIFY PASS:', 'CROSSHAIR VERIFY PASS:', 'PALETTE HISTORY VERIFY PASS:', 'EDITING PALETTE VERIFY PASS:')) {
                 if (!$result.Contains($marker)) { throw "Incomplete $($target.Name) fixture: missing '$marker'" }
             }
             if ($result.Contains('Client gametests failed with an exception')) { throw "Client fixture failed: $($target.Name)" }

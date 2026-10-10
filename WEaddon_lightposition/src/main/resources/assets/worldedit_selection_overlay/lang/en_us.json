@@ -299,5 +299,10 @@
   "selection_edit.worldedit_selection_overlay.invalid": "Selection adjustment rejected",
   "selection_edit.worldedit_selection_overlay.failed": "Selection adjustment failed",
   "selection_edit.worldedit_selection_overlay.resize": "Resize",
-  "selection_edit.worldedit_selection_overlay.move": "Move"
+  "selection_edit.worldedit_selection_overlay.move": "Move",
+  "screen.worldedit_selection_overlay.colors.group.editing": "Editing",
+  "screen.worldedit_selection_overlay.colors.slot.editBoundary": "Editing outline",
+  "screen.worldedit_selection_overlay.colors.slot.editAxisX": "X axis",
+  "screen.worldedit_selection_overlay.colors.slot.editAxisY": "Y axis",
+  "screen.worldedit_selection_overlay.colors.slot.editAxisZ": "Z axis"
 }

@@ -16,13 +16,16 @@
   center marker can be grabbed; idle wheel retains native hotbar behavior.
 - Tap G to enter the chosen tool; tap again to apply the complete draft and exit.
   Hold G for 0.4 seconds to choose Resize or Move in a centered radial menu.
-  A bounded pointer replaces the cursor; release over the empty center to cancel.
+  Icon-only sectors show their names in the center; a bounded pointer replaces
+  the cursor. Release over the center's Cancel hint to keep the current tool/draft.
 - Configurable edit/menu key, normal step and fast step. Editing starts disabled
   with G as the default key; the fast modifier defaults to Left Shift.
   Existing custom bindings remain unchanged.
 - Precise Resize freezes the camera; Move retains normal look, movement and
   Shift descent. LMB release finishes only a local explicit-editor drag;
   Escape cancels the complete uncommitted draft in both tools.
+- The crosshair hides during active editing, free corner grabs and the radial
+  menu, then returns to normal HUD behavior on apply, cancel or interruption.
 - Shift accelerates precise Resize without lowering the player in flight.
   Free corner dragging retains normal flight descent and one-block steps.
 - One authoritative selection adjustment on apply, Escape/interruption
@@ -30,6 +33,9 @@
 - Palette editor undo/redo with Ctrl+Z / Ctrl+Y (also Ctrl+Shift+Z), including
   colors, transparency, thickness, resets and confirmed presets. Each slider
   drag or numeric-field edit is one step; preview-camera motion is not recorded.
+- Editing palette group with live preview, common contour color and X/Y/Z axis
+  colors, transparency and thickness. Includes global thickness, presets,
+  per-element/all resets and palette undo/redo.
 - Standard and extending cuboids retain their selector type and ordered corners.
   Local drafts do not write blocks, scan the selection or add undo entries.
 - Live in-world command preview while typing `//set`, `//replace`, `//walls`,
@@ -52,6 +58,8 @@
 
 ### Changed
 
+- Classic appearance shows only theme choices; blur/motion preferences are
+  available in Glass/Studio and remain saved when switching themes.
 - The deselect keybind no longer adds a "//deselect sent" overlay message.
 - Clipboard preview is retained, off by default, and temporarily yields to a
   command draft without losing its setting, transforms, or cached clipboard.
