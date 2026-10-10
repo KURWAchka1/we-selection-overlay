@@ -57,6 +57,10 @@
   compact section palettes, reusable models, and persistent section GPU buffers.
 - Incremental source-cell refresh for set/replace, stable unchanged random choices,
   and background expansion when more selection chunks become loaded.
+- Live clipboard rotation and reflection while typing `//rotate`, `//flip` or
+  `//mirror`, including oriented block states, three-axis rotations and WorldEdit
+  directions. Escape restores the original; Enter executes normally. Requires
+  enabled clipboard preview and never changes the real buffer while typing.
 
 ## Changed
 
@@ -64,7 +68,7 @@
   available in Glass/Studio and remain saved when switching themes.
 - The deselect keybind no longer adds a "//deselect sent" overlay message.
 - Clipboard preview is retained, off by default, and temporarily yields to a
-  command draft without losing its setting, transforms, or cached clipboard.
+  region-command draft without losing its setting, transforms, or cached clipboard.
 - Selection editing temporarily pauses clipboard rendering and the regular grid;
   confirmed resizes preserve the chosen isolation block types.
 - One universal Fabric JAR and one universal NeoForge JAR support Minecraft
@@ -74,6 +78,8 @@
 
 - NeoForge CUI packaging no longer collides with WorldEdit's shared protocol.
 - NeoForge 26.x clipboard access uses its official NeoForge player/block adapter.
+- Copied block models on NeoForge 26.x use the correct rendering stage instead
+  of showing only the clipboard bounds.
 
 Clipboard/command preview requires integrated singleplayer WorldEdit. Remote
 server CUI continues to support selection visualization, not command simulation

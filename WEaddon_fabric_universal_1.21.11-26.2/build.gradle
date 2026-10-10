@@ -191,3 +191,7 @@ sourceSets.test {
 }
 
 tasks.named('archiveVersionArtifact') { dependsOn(tasks.named('test')) }
+
+tasks.named('compileTestJava') {
+    source('../shared/command-preview/src/main/java/org/marshal/weaddon_lightposition/preview/ClipboardTransformDraft.java')
+}

@@ -3,6 +3,7 @@ package org.marshal.weaddon_lightposition.client.clipboard;
 import com.sk89q.worldedit.EmptyClipboardException;
 import com.sk89q.worldedit.IncompleteRegionException;
 import com.sk89q.worldedit.LocalSession;
+import com.sk89q.worldedit.UnknownDirectionException;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.entity.Player;
 import com.sk89q.worldedit.extent.clipboard.Clipboard;
@@ -11,6 +12,7 @@ import com.sk89q.worldedit.neoforge.NeoForgeAdapter;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.math.Vector3;
 import com.sk89q.worldedit.math.transform.Transform;
+import com.sk89q.worldedit.math.transform.AffineTransform;
 import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.session.ClipboardHolder;
 import com.sk89q.worldedit.world.block.BlockType;
@@ -18,8 +20,10 @@ import com.sk89q.worldedit.world.block.BlockTypes;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
@@ -28,6 +32,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.marshal.weaddon_lightposition.preview.ClipboardTransformDraft;
+import org.marshal.weaddon_lightposition.preview.ClipboardTransformStatus;
 
 public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSource {
     private static final Logger LOGGER = LoggerFactory.getLogger("worldedit_selection_overlay/clipboard");
@@ -36,20 +42,33 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
     private static final long MAX_SCAN_CELLS = 524_288L;
     private static final int MAX_SOURCE_BLOCKS = 150_000;
     private static final int MAX_RENDER_BLOCKS = 18_000;
+    private static final long WORK_BUDGET_NANOS = 2_000_000L;
     private static final Direction[] DIRECTIONS = Direction.values();
 
     private volatile ClipboardPreviewSnapshot currentSnapshot = ClipboardPreviewSnapshot.empty();
+    private ClipboardPreviewSnapshot baselineSnapshot = ClipboardPreviewSnapshot.empty();
+    private volatile ClipboardTransformStatus transformStatus = ClipboardTransformStatus.IDLE;
     private volatile boolean serverTaskQueued;
     private volatile long generation;
 
     private int tickCounter;
     private long revision;
-    private int cachedClipboardIdentity;
-    private String cachedTransformKey = "";
-    private List<SourceBlock> cachedSourceBlocks = List.of();
-    private BuildResult cachedBuild = BuildResult.empty();
-    private boolean cachedSourceLimited;
-    private SnapshotJob job;
+    private long lastScheduledGeneration = -1;
+    private volatile ClipboardTransformDraft transformDraft = ClipboardTransformDraft.none();
+    private volatile ServerState serverState = new ServerState();
+
+    @Override
+    public void setTransformDraft(ClipboardTransformDraft draft) {
+        if (transformDraft.equals(draft)) return;
+        transformDraft = draft;
+        generation++;
+        currentSnapshot = baselineSnapshot;
+        transformStatus = !draft.recognized() ? ClipboardTransformStatus.IDLE : draft.valid()
+                ? ClipboardTransformStatus.UPDATING : ClipboardTransformStatus.status(draft.reason());
+    }
+
+    @Override
+    public ClipboardTransformStatus transformStatus() { return transformStatus; }
 
     @Override
     public void tick(Minecraft client) {
@@ -60,12 +79,14 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
 
         IntegratedServer server = client.getSingleplayerServer();
         if (server == null) {
-            clear();
+            currentSnapshot = baselineSnapshot = ClipboardPreviewSnapshot.empty();
+            transformStatus = ClipboardTransformStatus.status("local_only");
             return;
         }
 
         tickCounter++;
-        if (job == null && tickCounter % POLL_INTERVAL_TICKS != 0) {
+        ServerState state = serverState;
+        if (!state.working && lastScheduledGeneration == generation && tickCounter % POLL_INTERVAL_TICKS != 0) {
             return;
         }
         if (serverTaskQueued) {
@@ -74,16 +95,19 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
 
         UUID playerId = client.player.getUUID();
         long scheduledGeneration = generation;
+        ClipboardTransformDraft draft = transformDraft;
+        lastScheduledGeneration = scheduledGeneration;
         serverTaskQueued = true;
         server.execute(() -> {
             try {
                 if (scheduledGeneration == generation) {
-                    pollOnServer(server, playerId, client, scheduledGeneration);
+                    pollOnServer(server, playerId, client, scheduledGeneration, draft, state);
                 }
             } catch (Throwable ex) {
                 LOGGER.warn("Could not update WorldEdit clipboard preview.", ex);
-                publish(client, ClipboardPreviewSnapshot.empty(), scheduledGeneration);
-                resetServerState();
+                publish(client, ClipboardPreviewSnapshot.empty(), ClipboardPreviewSnapshot.empty(),
+                        ClipboardTransformStatus.status("failed"), scheduledGeneration);
+                client.execute(() -> { if (scheduledGeneration == generation) serverState = new ServerState(); });
             } finally {
                 serverTaskQueued = false;
             }
@@ -98,14 +122,18 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
     @Override
     public void clear() {
         generation++;
-        currentSnapshot = ClipboardPreviewSnapshot.empty();
-        resetServerState();
+        currentSnapshot = baselineSnapshot = ClipboardPreviewSnapshot.empty();
+        transformDraft = ClipboardTransformDraft.none();
+        transformStatus = ClipboardTransformStatus.IDLE;
+        serverState = new ServerState();
+        tickCounter = 0;
     }
 
-    private void pollOnServer(IntegratedServer server, UUID playerId, Minecraft client, long scheduledGeneration) {
+    private void pollOnServer(IntegratedServer server, UUID playerId, Minecraft client, long scheduledGeneration,
+                              ClipboardTransformDraft draft, ServerState state) {
         ServerPlayer nativePlayer = server.getPlayerList().getPlayer(playerId);
         if (nativePlayer == null) {
-            clearOnClient(client, scheduledGeneration);
+            clearOnClient(client, scheduledGeneration, state, "local_only");
             return;
         }
 
@@ -115,69 +143,108 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
         try {
             holder = session.getClipboard();
         } catch (EmptyClipboardException ignored) {
-            clearOnClient(client, scheduledGeneration);
+            clearOnClient(client, scheduledGeneration, state, "clipboard_empty");
             return;
         }
 
         Clipboard clipboard = holder.getClipboard();
-        Transform transform = holder.getTransform();
+        Transform baseTransform = holder.getTransform();
         BlockVector3 placement = placementPosition(session, actor, clipboard);
-        int clipboardIdentity = System.identityHashCode(clipboard);
-        String transformKey = transformKey(transform);
-
-        if (job != null && job.clipboard != clipboard) {
-            job = null;
+        long deadline = System.nanoTime() + WORK_BUDGET_NANOS;
+        if (state.clipboard != clipboard || !clipboard.getOrigin().equals(state.origin)) {
+            state.reset();
+            state.clipboard = clipboard;
+            state.origin = clipboard.getOrigin();
+            state.job = new SnapshotJob(clipboard);
         }
-
-        if (cachedClipboardIdentity != clipboardIdentity && job == null) {
-            cachedSourceBlocks = List.of();
-            cachedBuild = BuildResult.empty();
-            cachedTransformKey = "";
-            job = new SnapshotJob(clipboard, clipboardIdentity);
-        }
-
-        if (job != null) {
-            processJob(job);
-            publishProgress(client, placement, job, scheduledGeneration);
-            if (!job.complete()) {
+        state.working = true;
+        if (state.job != null) {
+            processJob(state.job, deadline);
+            if (!state.job.complete()) {
+                publishProgress(client, placement, state.job, scheduledGeneration, draft);
                 return;
             }
-
-            cachedClipboardIdentity = job.clipboardIdentity;
-            cachedSourceBlocks = List.copyOf(job.blocks);
-            cachedSourceLimited = job.limited;
-            cachedBuild = BuildResult.empty();
-            cachedTransformKey = "";
-            job = null;
+            state.sourceBlocks = List.copyOf(state.job.blocks);
+            state.limited = state.job.limited;
+            state.scanned = state.job.scannedCells;
+            state.total = state.job.totalCells;
+            state.job = null;
         }
-
-        if (cachedBuild.isEmpty() || !cachedTransformKey.equals(transformKey)) {
-            cachedBuild = buildRenderBlocks(cachedSourceBlocks, transform);
-            cachedTransformKey = transformKey;
+        String baseKey = transformKey(baseTransform);
+        if (!baseKey.equals(state.baseKey)) {
+            BuildResult committed = baseKey.equals(state.draftKey) ? state.draft : null;
+            state.baseKey = baseKey;
+            state.base = committed;
+            state.draftKey = "";
+            state.draft = null;
+            state.builder = null;
         }
-
-        publish(
-                client,
-                new ClipboardPreviewSnapshot(
-                        ++revision,
-                        toNativeBlockPos(placement),
-                        cachedBuild.blocks(),
-                        cachedBuild.bounds(),
-                        cachedSourceBlocks.size(),
-                        cachedSourceBlocks.size(),
-                        false,
-                        cachedSourceLimited || cachedBuild.limited()
-                ),
-                scheduledGeneration
-        );
+        if (state.base == null) state.base = build(state, baseKey, baseTransform, deadline, scheduledGeneration);
+        if (state.base == null) {
+            publishProgress(client, placement, state, scheduledGeneration, draft);
+            return;
+        }
+        ClipboardPreviewSnapshot baseline = snapshot(placement, state.base, state);
+        ClipboardTransformStatus status = ClipboardTransformStatus.IDLE;
+        Transform effective = baseTransform;
+        if (draft.recognized()) {
+            if (!draft.valid()) status = ClipboardTransformStatus.status(draft.reason());
+            else if (!actor.hasPermission(draft.kind() == ClipboardTransformDraft.Kind.ROTATE
+                    ? "worldedit.clipboard.rotate" : "worldedit.clipboard.flip")) status = ClipboardTransformStatus.status("permission");
+            else {
+                try {
+                    AffineTransform transform = new AffineTransform();
+                    if (draft.kind() == ClipboardTransformDraft.Kind.ROTATE) {
+                        transform = transform.rotateY(-draft.y()).rotateX(-draft.x()).rotateZ(-draft.z());
+                    } else {
+                        BlockVector3 direction = WorldEdit.getInstance().getDirection(actor, draft.direction());
+                        transform = transform.scale(direction.abs().multiply(-2).add(1, 1, 1).toVector3());
+                    }
+                    // Match ClipboardCommands without modifying the real ClipboardHolder.
+                    effective = baseTransform.combine(transform);
+                    status = new ClipboardTransformStatus("clipboard_ready", draft.approximate());
+                } catch (UnknownDirectionException ignored) { status = ClipboardTransformStatus.status("clipboard_direction"); }
+            }
+        }
+        BuildResult result = state.base;
+        String effectiveKey = transformKey(effective);
+        if (!effectiveKey.equals(baseKey)) {
+            if (!effectiveKey.equals(state.draftKey)) {
+                state.draftKey = effectiveKey;
+                state.draft = null;
+            }
+            if (state.draft == null) state.draft = build(state, effectiveKey, effective, deadline, scheduledGeneration);
+            if (state.draft == null) {
+                publish(client, baseline, baseline, ClipboardTransformStatus.UPDATING, scheduledGeneration);
+                return;
+            }
+            result = state.draft;
+        } else {
+            state.builder = null;
+        }
+        state.working = false;
+        publish(client, snapshot(placement, result, state), baseline, status, scheduledGeneration);
     }
 
-    private void processJob(SnapshotJob job) {
+    private BuildResult build(ServerState state, String key, Transform transform, long deadline, long scheduledGeneration) {
+        if (state.builder == null || !state.builder.key.equals(key)) state.builder = new BuildJob(key, state.sourceBlocks, transform);
+        BuildResult result = state.builder.advance(deadline, () -> scheduledGeneration != generation);
+        if (result != null) state.builder = null;
+        return result;
+    }
+
+    private ClipboardPreviewSnapshot snapshot(BlockVector3 placement, BuildResult result, ServerState state) {
+        return new ClipboardPreviewSnapshot(++revision, toNativeBlockPos(placement), result.blocks(), result.bounds(),
+                state.scanned, state.total, false, state.limited || result.limited());
+    }
+
+    private void processJob(SnapshotJob job, long deadline) {
         int processed = 0;
         while (job.iterator.hasNext()
                 && processed < SCAN_BUDGET_PER_TICK
                 && job.scannedCells < MAX_SCAN_CELLS
                 && job.blocks.size() < MAX_SOURCE_BLOCKS) {
+            if ((processed & 63) == 0 && System.nanoTime() >= deadline) return;
             BlockVector3 position = job.iterator.next();
             processed++;
             job.scannedCells++;
@@ -197,7 +264,18 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
         }
     }
 
-    private void publishProgress(Minecraft client, BlockVector3 placement, SnapshotJob job, long scheduledGeneration) {
+    private void publishProgress(Minecraft client, BlockVector3 placement, SnapshotJob job, long scheduledGeneration,
+                                 ClipboardTransformDraft draft) {
+        publishProgress(client, placement, job.scannedCells, job.totalCells, job.limited, scheduledGeneration, draft);
+    }
+
+    private void publishProgress(Minecraft client, BlockVector3 placement, ServerState state, long scheduledGeneration,
+                                 ClipboardTransformDraft draft) {
+        publishProgress(client, placement, state.scanned, state.total, state.limited, scheduledGeneration, draft);
+    }
+
+    private void publishProgress(Minecraft client, BlockVector3 placement, long scanned, long total, boolean limited,
+                                 long scheduledGeneration, ClipboardTransformDraft draft) {
         publish(
                 client,
                 new ClipboardPreviewSnapshot(
@@ -205,78 +283,15 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
                         toNativeBlockPos(placement),
                         List.of(),
                         null,
-                        job.scannedCells,
-                        job.totalCells,
+                        scanned,
+                        total,
                         true,
-                        job.limited
+                        limited
                 ),
+                ClipboardPreviewSnapshot.empty(),
+                !draft.recognized() ? ClipboardTransformStatus.IDLE : draft.valid()
+                        ? ClipboardTransformStatus.UPDATING : ClipboardTransformStatus.status(draft.reason()),
                 scheduledGeneration
-        );
-    }
-
-    private static BuildResult buildRenderBlocks(List<SourceBlock> sourceBlocks, Transform transform) {
-        if (sourceBlocks.isEmpty()) {
-            return BuildResult.empty();
-        }
-
-        Long2ObjectOpenHashMap<ClipboardPreviewBlock> byPosition = new Long2ObjectOpenHashMap<>(sourceBlocks.size());
-        boolean limited = false;
-
-        int minX = Integer.MAX_VALUE;
-        int minY = Integer.MAX_VALUE;
-        int minZ = Integer.MAX_VALUE;
-        int maxX = Integer.MIN_VALUE;
-        int maxY = Integer.MIN_VALUE;
-        int maxZ = Integer.MIN_VALUE;
-
-        for (SourceBlock sourceBlock : sourceBlocks) {
-            BlockVector3 transformed = transform
-                    .apply(Vector3.at(sourceBlock.x(), sourceBlock.y(), sourceBlock.z()))
-                    .toBlockPoint();
-            int x = transformed.x();
-            int y = transformed.y();
-            int z = transformed.z();
-            com.sk89q.worldedit.world.block.BlockState transformedState =
-                    BlockTransformExtent.transform(sourceBlock.state(), transform).toImmutableState();
-            BlockState nativeState = NeoForgeAdapter.get().toNativeBlockState(transformedState);
-            if (nativeState == null || nativeState.isAir()) {
-                continue;
-            }
-
-            ClipboardPreviewBlock block = new ClipboardPreviewBlock(x, y, z, nativeState);
-            byPosition.put(BlockPos.asLong(x, y, z), block);
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            minZ = Math.min(minZ, z);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
-            maxZ = Math.max(maxZ, z);
-        }
-
-        if (byPosition.isEmpty()) {
-            return BuildResult.empty();
-        }
-
-        ArrayList<ClipboardPreviewBlock> visibleBlocks = new ArrayList<>(Math.min(byPosition.size(), MAX_RENDER_BLOCKS));
-        for (ClipboardPreviewBlock block : byPosition.values()) {
-            if (isHiddenInsideClipboard(block, byPosition)) {
-                continue;
-            }
-            if (visibleBlocks.size() >= MAX_RENDER_BLOCKS) {
-                limited = true;
-                continue;
-            }
-            visibleBlocks.add(block);
-        }
-
-        if (visibleBlocks.isEmpty()) {
-            visibleBlocks.add(byPosition.values().iterator().next());
-        }
-
-        return new BuildResult(
-                List.copyOf(visibleBlocks),
-                new ClipboardPreviewBounds(minX, minY, minZ, maxX, maxY, maxZ),
-                limited
         );
     }
 
@@ -324,11 +339,11 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
     }
 
     private static String vectorKey(Vector3 vector) {
-        return quantize(vector.x()) + "," + quantize(vector.y()) + "," + quantize(vector.z());
+        return coordinateBits(vector.x()) + "," + coordinateBits(vector.y()) + "," + coordinateBits(vector.z());
     }
 
-    private static long quantize(double value) {
-        return Math.round(value * 1_000_000.0);
+    private static long coordinateBits(double value) {
+        return Double.doubleToLongBits(value == 0 ? 0 : value);
     }
 
     private static boolean isAir(BlockType type) {
@@ -339,28 +354,40 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
         return new BlockPos(vector.x(), vector.y(), vector.z());
     }
 
-    private void publish(Minecraft client, ClipboardPreviewSnapshot snapshot, long scheduledGeneration) {
+    private void publish(Minecraft client, ClipboardPreviewSnapshot snapshot, ClipboardPreviewSnapshot baseline,
+                         ClipboardTransformStatus status, long scheduledGeneration) {
         client.execute(() -> {
             if (scheduledGeneration == generation) {
                 currentSnapshot = snapshot;
+                baselineSnapshot = baseline;
+                if (!transformStatus.equals(status)) transformStatus = status;
             }
         });
     }
 
-    private void clearOnClient(Minecraft client, long scheduledGeneration) {
-        resetServerState();
-        publish(client, ClipboardPreviewSnapshot.empty(), scheduledGeneration);
+    private void clearOnClient(Minecraft client, long scheduledGeneration, ServerState state, String reason) {
+        state.reset();
+        publish(client, ClipboardPreviewSnapshot.empty(), ClipboardPreviewSnapshot.empty(),
+                ClipboardTransformStatus.status(reason), scheduledGeneration);
     }
 
-    private void resetServerState() {
-        cachedClipboardIdentity = 0;
-        cachedTransformKey = "";
-        cachedSourceBlocks = List.of();
-        cachedBuild = BuildResult.empty();
-        cachedSourceLimited = false;
-        job = null;
-        serverTaskQueued = false;
-        tickCounter = 0;
+    private static final class ServerState {
+        private Clipboard clipboard;
+        private BlockVector3 origin;
+        private SnapshotJob job;
+        private List<SourceBlock> sourceBlocks = List.of();
+        private BuildResult base, draft;
+        private String baseKey = "", draftKey = "";
+        private BuildJob builder;
+        private boolean limited;
+        private long scanned, total;
+        private volatile boolean working;
+
+        void reset() {
+            clipboard = null; origin = null; job = null; sourceBlocks = List.of();
+            base = draft = null; baseKey = draftKey = ""; builder = null;
+            limited = false; scanned = total = 0; working = false;
+        }
     }
 
     private record SourceBlock(int x, int y, int z, com.sk89q.worldedit.world.block.BlockState state) {
@@ -370,15 +397,60 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
         static BuildResult empty() {
             return new BuildResult(List.of(), null, false);
         }
+    }
 
-        boolean isEmpty() {
-            return bounds == null || blocks.isEmpty();
+    private static final class BuildJob {
+        private final String key;
+        private final List<SourceBlock> source;
+        private final Transform transform;
+        private final Long2ObjectOpenHashMap<ClipboardPreviewBlock> byPosition;
+        private final IdentityHashMap<com.sk89q.worldedit.world.block.BlockState, BlockState> states = new IdentityHashMap<>();
+        private final ArrayList<ClipboardPreviewBlock> visible = new ArrayList<>();
+        private Iterator<ClipboardPreviewBlock> exposed;
+        private int index;
+        private int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
+        private int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
+        private boolean limited;
+
+        BuildJob(String key, List<SourceBlock> source, Transform transform) {
+            this.key = key; this.source = source; this.transform = transform;
+            byPosition = new Long2ObjectOpenHashMap<>(source.size());
+        }
+
+        BuildResult advance(long deadline, BooleanSupplier obsolete) {
+            int processed = 0;
+            while (index < source.size()) {
+                if ((processed & 63) == 0 && (obsolete.getAsBoolean() || System.nanoTime() >= deadline || processed >= 4096)) return null;
+                SourceBlock block = source.get(index++);
+                processed++;
+                BlockState state = states.get(block.state());
+                if (state == null) {
+                    state = NeoForgeAdapter.get().toNativeBlockState(BlockTransformExtent.transform(block.state(), transform).toImmutableState());
+                    states.put(block.state(), state);
+                }
+                if (state == null || state.isAir()) continue;
+                BlockVector3 point = transform.apply(Vector3.at(block.x(), block.y(), block.z())).toBlockPoint();
+                int x = point.x(), y = point.y(), z = point.z();
+                byPosition.put(BlockPos.asLong(x, y, z), new ClipboardPreviewBlock(x, y, z, state));
+                minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+                maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+            }
+            if (byPosition.isEmpty()) return BuildResult.empty();
+            if (exposed == null) exposed = byPosition.values().iterator();
+            while (exposed.hasNext()) {
+                if ((processed & 63) == 0 && (obsolete.getAsBoolean() || System.nanoTime() >= deadline || processed >= 4096)) return null;
+                ClipboardPreviewBlock block = exposed.next();
+                processed++;
+                if (isHiddenInsideClipboard(block, byPosition)) continue;
+                if (visible.size() >= MAX_RENDER_BLOCKS) { limited = true; continue; }
+                visible.add(block);
+            }
+            return new BuildResult(List.copyOf(visible), new ClipboardPreviewBounds(minX, minY, minZ, maxX, maxY, maxZ), limited);
         }
     }
 
     private static final class SnapshotJob {
         private final Clipboard clipboard;
-        private final int clipboardIdentity;
         private final BlockVector3 origin;
         private final Iterator<BlockVector3> iterator;
         private final ArrayList<SourceBlock> blocks = new ArrayList<>();
@@ -388,13 +460,12 @@ public final class WorldEditClipboardPreviewSource implements ClipboardPreviewSo
         private boolean finished;
         private boolean limited;
 
-        private SnapshotJob(Clipboard clipboard, int clipboardIdentity) {
+        private SnapshotJob(Clipboard clipboard) {
             this.clipboard = clipboard;
-            this.clipboardIdentity = clipboardIdentity;
             this.origin = clipboard.getOrigin();
             Region region = clipboard.getRegion();
             this.iterator = region.iterator();
-            this.totalCells = Math.min(region.getVolume(), MAX_SCAN_CELLS);
+            this.totalCells = region.getVolume();
         }
 
         private boolean complete() {

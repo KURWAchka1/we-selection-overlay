@@ -27,4 +27,24 @@ foreach ($name in $targets.Keys | Sort-Object) {
         if ($cyan -lt 8000) { throw "Missing/incorrect diamond ghost texture: $name ($cyan cyan pixels)" }
         Write-Host "$name diamond texture pixels: $cyan"
     } finally { $bitmap.Dispose() }
+    $directory = Split-Path -Parent $file
+    foreach ($kind in @('rotate', 'mirror')) {
+        $capture = Get-ChildItem -LiteralPath $directory -Filter "*clipboard-draft-$kind.png" |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if (!$capture) { throw "Missing clipboard $kind screenshot: $name" }
+        $bitmap = [Drawing.Bitmap]::new($capture.FullName)
+        try {
+            $warm = 0
+            for ($y = 260; $y -lt 480; $y++) {
+                for ($x = 530; $x -lt 760; $x++) {
+                    $pixel = $bitmap.GetPixel($x, $y)
+                    if (($pixel.R -gt $pixel.G + 35 -and $pixel.R -gt $pixel.B + 35) -or
+                        ($pixel.R -gt 110 -and $pixel.G -gt 100 -and $pixel.B -lt $pixel.R - 40 -and $pixel.B -lt $pixel.G - 40)) { $warm++ }
+                }
+            }
+            # Sky, cyan bounds and magenta reference-command messages cannot satisfy this test.
+            if ($warm -lt 100) { throw "Missing clipboard $kind models: $name ($warm texture pixels)" }
+            Write-Host "$name clipboard $kind texture pixels: $warm"
+        } finally { $bitmap.Dispose() }
+    }
 }

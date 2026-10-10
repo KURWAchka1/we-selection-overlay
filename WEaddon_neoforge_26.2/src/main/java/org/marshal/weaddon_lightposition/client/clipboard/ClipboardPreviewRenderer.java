@@ -1,11 +1,9 @@
 package org.marshal.weaddon_lightposition.client.clipboard;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import java.lang.reflect.Field;
 import java.util.IdentityHashMap;
 import java.util.List;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.block.BlockModelRenderState;
 import net.minecraft.client.renderer.block.BlockModelResolver;
@@ -30,7 +28,7 @@ final class ClipboardPreviewRenderer {
     private ModelManager cachedModelManager;
     private BlockModelResolver resolver;
 
-    void render(PoseStack poseStack, ClipboardPreviewSnapshot snapshot) {
+    void render(PoseStack poseStack, ClipboardPreviewSnapshot snapshot, SubmitNodeCollector collector, Vec3 cameraPos) {
         if (snapshot == null || !snapshot.active()) {
             return;
         }
@@ -40,14 +38,8 @@ final class ClipboardPreviewRenderer {
             return;
         }
 
-        SubmitNodeCollector collector = submitNodeCollector(client);
-        if (collector == null) {
-            return;
-        }
-
         ensureResolver(client);
 
-        Vec3 cameraPos = client.gameRenderer.mainCamera().position();
         List<ClipboardPreviewBlock> blocks = snapshot.blocks();
         int baseX = snapshot.placement().getX();
         int baseY = snapshot.placement().getY();
@@ -119,14 +111,4 @@ final class ClipboardPreviewRenderer {
         return model;
     }
 
-    private static SubmitNodeCollector submitNodeCollector(Minecraft client) {
-        try {
-            Field field = LevelRenderer.class.getDeclaredField("submitNodeStorage");
-            field.setAccessible(true);
-            Object value = field.get(client.levelRenderer);
-            return value instanceof SubmitNodeCollector collector ? collector : null;
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
-            return null;
-        }
-    }
 }

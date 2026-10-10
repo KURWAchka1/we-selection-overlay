@@ -38,9 +38,32 @@ again on execution: individual random placements are not guaranteed to match.
 
 Preview is enabled by default. Toggle it in `O` settings or with configurable
 `F8`, including while chat is open. Clipboard preview remains off by default.
-When a supported draft is present, clipboard rendering and background scanning
+When a supported region-command draft is present, clipboard rendering and background scanning
 pause; its enabled preference, clipboard, transforms, and cache are preserved.
 Closing chat/removing that draft restores normal clipboard behavior.
+
+With clipboard preview enabled, `//rotate Y [X] [Z]` and `//flip [direction]`
+(also `//mirror`) instead preview the clipboard transform while typing. The
+existing transform is combined in WorldEdit's order, including block-state
+orientation and the clipboard origin. Flip uses WorldEdit's public direction
+resolver, including the default look direction and relative aliases. Incomplete
+or invalid drafts, including a diagonal look rejected by WorldEdit's flip
+argument converter, restore the actual clipboard geometry; Escape and F8 do so
+immediately. Enter executes the original command once. `//cut` and `//paste`
+have no live command preview; the existing copied-object preview is unchanged.
+
+Clipboard input is scanned once and retained across draft edits. Only the
+baseline and the latest transformed result are cached, with generation-guarded
+publication and budgeted coordinate/state conversion and exposed-block filtering.
+These slices target 2 ms, check every 64 cells and process at most 4,096 conversion
+steps per call; an external API call cannot be preempted. Existing clipboard
+scan/render safeguards remain unchanged; the uncapped loaded-chunk policy
+below applies to region-command previews, not the copied-object renderer.
+
+NeoForge 26.x extracts the immutable clipboard snapshot into `LevelRenderState`
+and submits its models through `SubmitCustomGeometryEvent`, before opaque feature
+rendering. It uses the event's public collector and extracted camera position,
+not reflective access to renderer internals or submission after the feature pass.
 
 ## Safety and Scheduling
 
@@ -141,6 +164,7 @@ for the inspected primary implementations and architecture decisions.
 - [Fabric world rendering and immutable extraction/drawing state](https://docs.fabricmc.net/develop/rendering/world)
 - [WorldEdit patterns and relative weights](https://worldedit.enginehub.org/en/latest/usage/general/patterns/)
 - [WorldEdit clipboard/session behavior](https://worldedit.enginehub.org/en/latest/usage/clipboard/)
+- [NeoForge custom geometry submission](https://github.com/neoforged/NeoForge/blob/26.1.x/src/client/java/net/neoforged/neoforge/client/event/SubmitCustomGeometryEvent.java)
 - [WorldEdit 7.4 source](https://github.com/EngineHub/WorldEdit/tree/version/7.4.x)
 - [EngineHub's shared CUI protocol](https://github.com/EngineHub/WorldEditCUI-Protocol)
 

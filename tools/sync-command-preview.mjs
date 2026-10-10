@@ -17,7 +17,8 @@ const targets = [
 const files = ['client/preview/CommandPreviewSnapshot.java', 'client/preview/CommandPreviewSource.java',
   'client/preview/WorldEditCommandPreviewSource.java', 'client/preview/CommandPreviewController.java',
   'client/preview/CommandPreviewRenderer.java', 'client/preview/CommandPreviewGpuSection.java',
-  'client/preview/CommandPreviewMask.java', 'client/preview/CommandPreviewTerrainState.java', 'mixin/ChatCommandPreviewMixin.java'];
+  'client/preview/CommandPreviewMask.java', 'client/preview/CommandPreviewTerrainState.java', 'mixin/ChatCommandPreviewMixin.java',
+  'client/clipboard/ClipboardPreviewController.java', 'client/clipboard/ClipboardPreviewSource.java', 'client/clipboard/WorldEditClipboardPreviewSource.java'];
 const copies = new Map();
 for (const file of files) copies.set(file, await fs.readFile(path.join(root, canonical, java, file), 'utf8'));
 
@@ -67,6 +68,7 @@ function yarn(code) {
     .replaceAll('FabricAdapter.get().fromNativePlayer(', 'FabricAdapter.adaptPlayer(')
     .replaceAll('FabricAdapter.get().toNativeBlockState(', 'FabricAdapter.adapt(')
     .replaceAll('direction.getStepX()', 'direction.getOffsetX()').replaceAll('direction.getStepY()', 'direction.getOffsetY()').replaceAll('direction.getStepZ()', 'direction.getOffsetZ()')
+    .replaceAll('.canOcclude()', '.isOpaque()')
     .replaceAll('normal.getStepX()', 'normal.getOffsetX()').replaceAll('normal.getStepY()', 'normal.getOffsetY()').replaceAll('normal.getStepZ()', 'normal.getOffsetZ()')
     .replaceAll('client.getWindow().getGuiScaledWidth()', 'client.getWindow().getScaledWidth()')
     .replaceAll('client.getWindow().getGuiScaledHeight()', 'client.getWindow().getScaledHeight()')
@@ -122,7 +124,24 @@ for (const target of targets) {
         .replaceAll('NeoForgeAdapter.get().toNativeBlockState(', 'NeoForgeAdapter.adapt(');
       code = code.replace('import net.fabricmc.loader.api.FabricLoader;', 'import net.neoforged.fml.ModList;')
         .replaceAll('FabricLoader.getInstance().isModLoaded(', 'ModList.get().isLoaded(');
-      if (file.endsWith('Controller.java')) code = code.replace('import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;', 'import com.mojang.blaze3d.vertex.PoseStack;')
+      if (file.endsWith('ClipboardPreviewController.java')) {
+        code = code.replace('import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;', 'import com.mojang.blaze3d.vertex.PoseStack;')
+          .replaceAll('LevelRenderContext context', 'PoseStack context');
+        if (target.version.startsWith('26.')) code = code.replace('    public void renderBlocks(PoseStack context) {\n        if (!enabled) {\n            return;\n        }\n        renderer.render(context, source.snapshot());\n    }',
+          `    private static final net.minecraft.util.context.ContextKey<ClipboardPreviewSnapshot> FRAME_KEY =
+            new net.minecraft.util.context.ContextKey<>(net.minecraft.resources.Identifier.fromNamespaceAndPath("worldedit_selection_overlay", "clipboard_preview"));
+
+    public void extractFrame(net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent event, boolean visible) {
+        event.getRenderState().setRenderData(FRAME_KEY, enabled && visible ? source.snapshot() : null);
+    }
+
+    public void renderBlocks(net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent event) {
+        ClipboardPreviewSnapshot snapshot = event.getLevelRenderState().getRenderData(FRAME_KEY);
+        if (snapshot != null) renderer.render(event.getPoseStack(), snapshot, event.getSubmitNodeCollector(),
+                event.getLevelRenderState().cameraRenderState.pos);
+    }`);
+      }
+      else if (file.endsWith('Controller.java')) code = code.replace('import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;', 'import com.mojang.blaze3d.vertex.PoseStack;')
         .replaceAll('LevelRenderContext context', 'PoseStack context, net.minecraft.client.renderer.culling.Frustum frustum')
         .replace('renderer.render(context,', 'renderer.render(context, frustum,');
       if (file.endsWith('Renderer.java')) {
@@ -225,6 +244,8 @@ for (const target of targets) {
     await fs.writeFile(isolationPath, isolation);
   }
   let main = await fs.readFile(mainPath, 'utf8');
+  if (!main.includes('commandPreviewController.bindClipboardPreview')) main = main.replace('        clipboardPreviewController.initialize();',
+    '        clipboardPreviewController.initialize();\n        commandPreviewController.bindClipboardPreview(clipboardPreviewController);');
   if (!main.includes('commandPreviewController =')) {
     main = main.replace('import org.marshal.weaddon_lightposition.client.clipboard.ClipboardPreviewController;', 'import org.marshal.weaddon_lightposition.client.clipboard.ClipboardPreviewController;\nimport org.marshal.weaddon_lightposition.client.preview.CommandPreviewController;')
       .replace('private final ClipboardPreviewController clipboardPreviewController = new ClipboardPreviewController();', 'private final ClipboardPreviewController clipboardPreviewController = new ClipboardPreviewController();\n    private final CommandPreviewController commandPreviewController = CommandPreviewController.instance();')
@@ -259,12 +280,10 @@ for (const target of targets) {
   if (target.neo && target.version.startsWith('26.')) main = main.replace('event.getPoseStack(), event.getFrustum()', 'event.getPoseStack(), event.getLevelRenderState().cameraRenderState.cullFrustum');
   if (target.neo && target.version === '1.21.11') main = main.replace('event.getPoseStack(), event.getFrustum()', 'event.getPoseStack(), org.marshal.weaddon_lightposition.client.preview.CommandPreviewFrustum.current()');
   if (target.version === 'yarn') main = main.replace('WorldRenderEvents.AFTER_TRANSLUCENT.register(this::onRenderCommandPreview);', 'WorldRenderEvents.END_MAIN.register(this::onRenderCommandPreview);');
-  main = main.replace(/(?<!if \(!commandPreviewController\.ownsPreviewChannel\(\)\) )clipboardPreviewController\.renderBlocks\(/g,
-    'if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(')
-    .replace(/(?<!if \(!commandPreviewController\.ownsPreviewChannel\(\)\) )clipboardPreviewController\.renderBounds\(\);/g,
-      'if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBounds();');
-  main = main.replace(/(?<!if \(!commandPreviewController\.ownsPreviewChannel\(\)\) )clipboardPreviewController\.tick\(client\);/g,
-    'if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.tick(client);');
+  main = main.replaceAll('if (!commandPreviewController.ownsPreviewChannel() && !selectionEditController.active()) if (!commandPreviewController.ownsPreviewChannel())',
+    'if (!commandPreviewController.ownsPreviewChannel() && !selectionEditController.active())');
+  main = main.replace(/^([ \t]*)clipboardPreviewController\.(renderBlocks|renderBounds|tick)\(/gm,
+    '$1if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.$2(');
   if (target.neo) main = main.replace('import org.enginehub.worldeditcui.protocol.CUIPacketHandler;\n', '')
     .replace('        CUIPacketHandler.instance().registerClientboundHandler(this::onCuiPacket);', '        RuntimeCuiBridge.register(this::handleCuiPacket);')
     .replace(/    private void onCuiPacket\(CUIPacket payload, CUIPacketHandler.PacketContext context\) \{[\s\S]*?\n    }\n\n/, '')

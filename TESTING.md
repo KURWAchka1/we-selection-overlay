@@ -41,13 +41,15 @@ Matrix commands below enable both safeguards automatically. Aggregate logs go
 to `build/desktop-tests/`, in addition to the existing per-runtime logs and real
 framebuffer screenshots. The interactive manual launcher remains separate.
 
-On 2026-10-10, guarded background command/editing runs passed on Fabric 1.21.11
-and NeoForge 1.21.11, 26.1.2 and 26.2. Every run required both the cursor-guard
-and background-input completion markers. Fabric 26.1/26.2 functional results
-below are from the earlier runs, not additional guarded-background runs.
+On 2026-10-10, guarded background command/editing/clipboard-transform runs passed
+on all six WorldEdit-enabled targets below. Every run required both the
+cursor-guard and background-input completion markers. The two NeoForge 26.x
+targets were rerun after correcting their clipboard model submission stage;
+the other four runtime implementations were unchanged by that stage correction.
 The separate Fabric 26.2 layout-only fixture also passed on a private desktop
 with the packaged, privately relocated cursor guard and a 40 FPS cap.
-All six command-texture and selection-HUD screenshot pixel checks passed.
+All six command-texture, selection-HUD and clipboard-transform screenshot pixel
+checks passed.
 
 Implementation references: [Microsoft desktops](https://learn.microsoft.com/en-us/windows/win32/winstation/desktops),
 [process desktop selection](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-startupinfow),
@@ -62,13 +64,15 @@ boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
 1.5 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,546,920 bytes (Fabric) and 1,517,974 bytes
+The archived release outputs are 1,579,903 bytes (Fabric) and 1,551,799 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
 previous test results.
-The current packager suites pass 114 Fabric-side and 8 NeoForge-side executions;
-the 103 shared selection-domain cases run on the Fabric side, not twice.
+The current packager suites pass 119 Fabric-side and 8 NeoForge-side executions;
+the 103 shared selection-domain cases and five clipboard-draft parser cases run
+on the Fabric side, not twice. The parser explicitly excludes cut/paste and checks
+Y/X/Z argument order, aliases, incomplete/non-finite angles and interpolation warnings.
 NeoForge tests additionally reject exported EngineHub and Architectury injection
 packages, and check the private official CUI codecs. Actual WorldEdit launches
 exercise its installed protocol; no-WorldEdit launches exercise the optional
@@ -125,7 +129,7 @@ not only a nonempty geometry buffer. All six set-preview screenshots pass
 the cyan surface test; its color predicate excludes blue sky, not only neutral
 stone. Partial replacement, flora, line and curve screenshots are also inspected.
 The fixed crop contains 34,099 diamond-texture pixels on each Fabric runtime,
-24,978 on NeoForge 1.21.11 and 24,981 on NeoForge 26.x in the final fixture.
+28,398 on NeoForge 1.21.11 and 28,389 on NeoForge 26.x in the current fixture.
 The texture check complements native-buffer assertions; a nonempty GPU buffer
 alone does not establish correct world projection or texture sampling.
 
@@ -142,7 +146,31 @@ Editing fixtures explicitly bind G in their disposable profile: prior keybind
 screen checks may have left it unassigned. Production never overwrites saved
 assignments. The matrix requires the command, editing and palette-history
 completion markers, including crosshair and editing-palette checks, in the fresh
-game log, not just a zero process exit code.
+game log, not just a zero process exit code. Each target additionally runs the
+real screenshot texture check after the client closes.
+
+### Clipboard transform drafts
+
+All six targets compare `//rotate` Y/X/Z order, negative and arbitrary angles,
+tiny rotations, stacked transforms, six absolute flip directions, `//mirror`,
+default/relative look directions and diagonal-direction rejection against real
+WorldEdit `ClipboardCommands` in a detached reference session. An asymmetric
+clipboard with an offset origin and an already rotated/reflected baseline checks
+both coordinates and oriented stair/trapdoor states.
+
+The fixture verifies unchanged world/history/real transform before Enter, source
+cache identity across edits and camera changes, equivalent-angle reuse, rapid
+typing, incomplete/invalid drafts, Escape/F8 restoration, normal Enter execution,
+empty/disabled clipboard and explicit cut/paste exclusion. A 10,000-step build
+probe verifies the 4,096-step conversion slice and obsolete-work cancellation.
+
+Screenshot inspection caught NeoForge 26.x displaying only the clipboard bounds
+despite correct calculated states. The added pixel regression reproduced zero
+texture pixels before the public extraction/custom-submission event fix. Both
+corrected NeoForge 26.x runs then passed the full native suite and texture check.
+The rotate/mirror crops contain 4,225/1,113 warm model-texture pixels on every
+target; blue sky, cyan bounds and magenta reference-command messages do not meet
+the predicate. These are native framebuffer captures, not mockups.
 
 ### Complete results and scheduling regression
 
@@ -594,9 +622,10 @@ reproduction command, actual screenshots, measured performance, and limits.
 ## Remaining coverage
 
 Sodium, Iris/shaders, LabyMod, remote-server CUI, changed/custom resource packs,
-and narration/IME need separate compatibility review. Clipboard coexistence and
-normal command submission are covered, but this is not a comprehensive matrix
-of every clipboard transform or WorldEdit extension. Unknown patterns, flags,
+and narration/IME need separate compatibility review. Clipboard rotation/reflection,
+coexistence and normal command submission are covered as specified above; this
+is a block-model preview, not clipboard entity/biome/NBT rendering or support for
+every WorldEdit extension. Unknown patterns, flags,
 and extension masks are deliberately rejected, not approximated.
 
 The UI timing measurements in UI_VALIDATION.md belong to the earlier UI profile;

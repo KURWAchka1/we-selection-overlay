@@ -5,6 +5,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.marshal.weaddon_lightposition.preview.ClipboardTransformDraft;
+import org.marshal.weaddon_lightposition.preview.ClipboardTransformStatus;
 
 public final class ClipboardPreviewController {
     private static final Logger LOGGER = LoggerFactory.getLogger("worldedit_selection_overlay/clipboard");
@@ -15,6 +17,8 @@ public final class ClipboardPreviewController {
     private ClipboardPreviewSource source = new UnavailableSource();
     private boolean initialized;
     private boolean enabled = true;
+    private String transformInput = "";
+    private ClipboardTransformDraft transformDraft = ClipboardTransformDraft.none();
 
     public void initialize() {
         if (initialized) {
@@ -40,7 +44,6 @@ public final class ClipboardPreviewController {
 
     public void tick(MinecraftClient client) {
         if (!enabled) {
-            source.clear();
             return;
         }
         source.tick(client);
@@ -61,6 +64,8 @@ public final class ClipboardPreviewController {
     }
 
     public void clear() {
+        transformInput = "";
+        transformDraft = ClipboardTransformDraft.none();
         source.clear();
         renderer.clearCache();
     }
@@ -83,9 +88,18 @@ public final class ClipboardPreviewController {
         return source.available();
     }
 
-    public boolean active() {
-        return enabled && source.snapshot().active();
+    public boolean active() { return enabled && source.snapshot().active(); }
+
+    public void setTransformDraft(String input) {
+        if (!enabled) input = "";
+        if (transformInput.equals(input)) return;
+        transformInput = input;
+        transformDraft = ClipboardTransformDraft.parse(input);
+        source.setTransformDraft(transformDraft);
     }
+
+    public boolean hasTransformDraft() { return enabled && transformDraft.recognized(); }
+    public ClipboardTransformStatus transformStatus() { return source.transformStatus(); }
 
     private static final class UnavailableSource implements ClipboardPreviewSource {
         @Override

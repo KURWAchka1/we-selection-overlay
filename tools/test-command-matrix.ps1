@@ -56,10 +56,11 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "Command test failed: $($target.Name)" }
             $result = [IO.File]::ReadAllText((Join-Path $logs "$($target.Name).log"))
             $commandMarker = if ($target.Family) { 'WESO NEO COMMAND PASS:' } else { 'WESO COMMAND PASS:' }
-            foreach ($marker in @($commandMarker, 'CURSOR ISOLATION GUARD PASS:', 'BACKGROUND INPUT VERIFY PASS:', 'SELECTION EDIT VERIFY PASS:', 'EDIT OUTLINE VERIFY PASS:', 'MOVE AXES VERIFY PASS:', 'CROSSHAIR VERIFY PASS:', 'PALETTE HISTORY VERIFY PASS:', 'EDITING PALETTE VERIFY PASS:')) {
+            foreach ($marker in @($commandMarker, 'CURSOR ISOLATION GUARD PASS:', 'BACKGROUND INPUT VERIFY PASS:', 'CLIPBOARD TRANSFORM VERIFY PASS:', 'SELECTION EDIT VERIFY PASS:', 'EDIT OUTLINE VERIFY PASS:', 'MOVE AXES VERIFY PASS:', 'CROSSHAIR VERIFY PASS:', 'PALETTE HISTORY VERIFY PASS:', 'EDITING PALETTE VERIFY PASS:')) {
                 if (!$result.Contains($marker)) { throw "Incomplete $($target.Name) fixture: missing '$marker'" }
             }
             if ($result.Contains('Client gametests failed with an exception')) { throw "Client fixture failed: $($target.Name)" }
+            & (Join-Path $PSScriptRoot 'check-command-pixels.ps1') -Only $target.Name
             Write-Host "Verified commands, selection editing and palette history: $($target.Name)"
         } finally { Pop-Location }
     }

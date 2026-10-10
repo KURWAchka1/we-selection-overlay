@@ -141,6 +141,7 @@ public final class WorldEditPointOverlayClient {
         commandPreviewController.initialize(settingsFile.getParent());
         selectionEditController.initialize(settingsFile.getParent());
         clipboardPreviewController.initialize();
+        commandPreviewController.bindClipboardPreview(clipboardPreviewController);
         clipboardPreviewController.setEnabled(clipboardPreviewEnabled);
         BlockIsolationController.setSelectedBlockIds(isolatedBlockIds);
         openSettingsKey = new KeyMapping(
@@ -198,8 +199,15 @@ public final class WorldEditPointOverlayClient {
     }
 
     public void onRenderAfterEntities(RenderLevelStageEvent.AfterOpaqueFeatures event) {
-        if (!commandPreviewController.ownsPreviewChannel() && !selectionEditController.active()) clipboardPreviewController.renderBlocks(event.getPoseStack());
         onRenderWorld();
+    }
+
+    public void onExtractClipboard(net.neoforged.neoforge.client.event.ExtractLevelRenderStateEvent event) {
+        clipboardPreviewController.extractFrame(event, !commandPreviewController.ownsPreviewChannel() && !selectionEditController.active());
+    }
+
+    public void onSubmitClipboard(net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent event) {
+        if (!commandPreviewController.ownsPreviewChannel()) clipboardPreviewController.renderBlocks(event);
     }
 
     public void onRenderCommandPreview(RenderLevelStageEvent.AfterTranslucentBlocks event) {

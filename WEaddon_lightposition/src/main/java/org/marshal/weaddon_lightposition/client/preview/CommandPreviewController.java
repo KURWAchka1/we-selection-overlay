@@ -18,6 +18,8 @@ import org.marshal.weaddon_lightposition.preview.PreviewOptions;
 import org.marshal.weaddon_lightposition.preview.PreviewDraft;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.marshal.weaddon_lightposition.client.clipboard.ClipboardPreviewController;
+import org.marshal.weaddon_lightposition.preview.ClipboardTransformStatus;
 
 public final class CommandPreviewController {
     private static final Logger LOGGER = LoggerFactory.getLogger("worldedit_selection_overlay/command-preview");
@@ -25,6 +27,7 @@ public final class CommandPreviewController {
     private static final CommandPreviewSnapshot UNAVAILABLE = CommandPreviewSnapshot.status(CommandPreviewSnapshot.State.UNAVAILABLE, "local_only", "");
     private final CommandPreviewRenderer renderer = new CommandPreviewRenderer();
     private CommandPreviewSource source;
+    private ClipboardPreviewController clipboard;
     private PreviewOptions options = PreviewOptions.defaults();
     private Path settings;
     private KeyMapping toggleKey;
@@ -32,7 +35,7 @@ public final class CommandPreviewController {
     private Object lastLevel;
     private record HudLine(net.minecraft.util.FormattedCharSequence text, int color) { }
     private List<HudLine> hud = List.of();
-    private CommandPreviewSnapshot hudSnapshot;
+    private Object hudSnapshot;
     private Object hudLanguage;
     private int hudWidth;
 
@@ -59,6 +62,7 @@ public final class CommandPreviewController {
     }
 
     public void setToggleKey(KeyMapping key) { toggleKey = key; }
+    public void bindClipboardPreview(ClipboardPreviewController clipboard) { this.clipboard = clipboard; }
     public boolean handleToggleKey(KeyEvent key) {
         if (toggleKey == null || !toggleKey.matches(key)) return false;
         setEnabled(!options.enabled());
@@ -94,12 +98,14 @@ public final class CommandPreviewController {
     public void selectionChanged() { if (source != null) source.selectionChanged(); }
 
     private void request(Minecraft client) {
+        if (clipboard != null) clipboard.setTransformDraft(options.enabled() && client.screen instanceof ChatScreen ? draft : "");
         if (source != null) source.tick(client, ownsPreviewChannel() ? draft : "", options);
     }
 
     public void clearDraft() { edited(""); }
     public void close() {
         draft = "";
+        if (clipboard != null) clipboard.setTransformDraft("");
         if (source != null) source.clear();
         renderer.clear();
         CommandPreviewTerrainState.update(Minecraft.getInstance(), CommandPreviewMask.empty());
@@ -132,21 +138,33 @@ public final class CommandPreviewController {
     }
 
     public void renderHud(GuiGraphicsExtractor graphics) {
-        if (!ownsPreviewChannel()) return;
         Minecraft client = Minecraft.getInstance();
-        CommandPreviewSnapshot s = snapshot();
+        boolean clipboardChannel = options.enabled() && clipboard != null && clipboard.hasTransformDraft()
+                && client.screen instanceof ChatScreen;
+        if (!ownsPreviewChannel() && !clipboardChannel) return;
+        Object s = clipboardChannel ? clipboard.transformStatus() : snapshot();
         int x = 8, y = 8, width = Math.min(360, client.getWindow().getGuiScaledWidth() - 16);
         if (width < 48) return;
         Object language = net.minecraft.locale.Language.getInstance();
         if (hudSnapshot != s || hudWidth != width || hudLanguage != language) {
             hudSnapshot = s; hudWidth = width; hudLanguage = language;
-            hud = hudLines(client, s, width - 16);
+            hud = clipboardChannel ? clipboardHudLines(client, (ClipboardTransformStatus) s, width - 16)
+                    : hudLines(client, (CommandPreviewSnapshot) s, width - 16);
         }
         int count = Math.min(hud.size(), Math.max(2, (client.getWindow().getGuiScaledHeight() - 60) / 11));
         graphics.fill(x, y, x + width, y + count * 11 + 12, 0xC922262A);
         graphics.enableScissor(x, y, x + width, y + count * 11 + 12);
         for (int i = 0; i < count; i++) graphics.text(client.font, hud.get(i).text(), x + 8, y + 6 + i * 11, hud.get(i).color(), false);
         graphics.disableScissor();
+    }
+
+    private List<HudLine> clipboardHudLines(Minecraft client, ClipboardTransformStatus status, int width) {
+        ArrayList<HudLine> lines = new ArrayList<>();
+        addHudLine(client, lines, Component.translatable("preview.worldedit_selection_overlay.clipboard_title"), width, 0xFFB9E8D3);
+        addHudLine(client, lines, Component.translatable("preview.worldedit_selection_overlay." + status.reason()), width, 0xFFF0F1F3);
+        if (status.approximate()) addHudLine(client, lines,
+                Component.translatable("preview.worldedit_selection_overlay.clipboard_no_interpolation"), width, 0xFFFFD275);
+        return List.copyOf(lines);
     }
 
     private List<HudLine> hudLines(Minecraft client, CommandPreviewSnapshot s, int width) {

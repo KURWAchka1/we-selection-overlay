@@ -21,5 +21,13 @@
   "preview.worldedit_selection_overlay.unloaded": "Нужные для расчёта чанки не загружены.",
   "preview.worldedit_selection_overlay.worldedit_limit": "Результат превышает лимит изменений WorldEdit.",
   "preview.worldedit_selection_overlay.outside_snapshot": "Операция читает за пределами снимка выделения.",
-  "preview.worldedit_selection_overlay.failed": "Превью недоступно; мир не изменён."
+  "preview.worldedit_selection_overlay.failed": "Превью недоступно; мир не изменён.",
+  "preview.worldedit_selection_overlay.clipboard_title": "Предпросмотр преобразования буфера",
+  "preview.worldedit_selection_overlay.clipboard_ready": "Только отображение; Enter выполнит команду.",
+  "preview.worldedit_selection_overlay.clipboard_updating": "Подготовка преобразования буфера...",
+  "preview.worldedit_selection_overlay.clipboard_empty": "Сначала скопируйте объект через WorldEdit.",
+  "preview.worldedit_selection_overlay.clipboard_angle": "Укажите от одного до трёх конечных углов: Y, X, Z.",
+  "preview.worldedit_selection_overlay.clipboard_syntax": "Формат: //rotate Y [X] [Z] или //flip [направление].",
+  "preview.worldedit_selection_overlay.clipboard_direction": "WorldEdit не распознал направление.",
+  "preview.worldedit_selection_overlay.clipboard_no_interpolation": "WorldEdit округляет блоки; рекомендуются шаги по 90 градусов."
 }

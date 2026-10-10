@@ -69,7 +69,7 @@ Copy something with WorldEdit and preview the clipboard before pasting:
 
 * Shows copied blocks as a textured in-world ghost
 * Follows WorldEdit placement position
-* Updates after clipboard transforms like `//rotate` and `//flip`
+* Live `//rotate`, `//flip` / `//mirror` preview while typing, including block orientation
 * Uses capped, cached rendering for large copies
 * Disabled by default; enable it in overlay settings when needed
 
@@ -89,7 +89,7 @@ See a ghost of the result while typing `//set`, `//replace`, `//walls`,
 * Line/curve thickness and shells; replaced source blocks disappear visually
 * Incremental set/replace updates without restarting for each changed source block
 * Quick toggle in settings or with configurable `F8`
-* Clipboard preview pauses temporarily, then returns when chat closes
+* Region-command previews temporarily pause clipboard preview, then restore it
 
 Requires integrated singleplayer WorldEdit. Random execution rolls again;
 the displayed sample is not a promise of exact placements or later block physics.

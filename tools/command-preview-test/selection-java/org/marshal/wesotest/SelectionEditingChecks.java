@@ -426,6 +426,7 @@ public final class SelectionEditingChecks {
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
         onClient(() -> { checkSystemCursorFree(); return null; });
+        ClipboardTransformChecks.run(client, overlay, clipboardSource, screenshot, dispatch);
         System.out.println("BACKGROUND INPUT VERIFY PASS: simulated game focus and mouse callbacks; real GLFW cursor remains NORMAL");
         System.out.println("SELECTION EDIT VERIFY PASS: G tap toggle, close/inside six-face dragging, hidden-cursor radial/dead zone, independent XYZ wheel/flight/compass, LMB retains draft, eight free-camera one-block corners, crosshair lifecycle, Escape, stale, isolation, clipboard, unchanged blocks/history");
     }

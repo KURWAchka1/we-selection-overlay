@@ -21,5 +21,13 @@
   "preview.worldedit_selection_overlay.unloaded": "Required source chunks are not loaded.",
   "preview.worldedit_selection_overlay.worldedit_limit": "Result exceeds your WorldEdit change limit.",
   "preview.worldedit_selection_overlay.outside_snapshot": "Operation reads outside the captured selection.",
-  "preview.worldedit_selection_overlay.failed": "Preview unavailable; the world was not changed."
+  "preview.worldedit_selection_overlay.failed": "Preview unavailable; the world was not changed.",
+  "preview.worldedit_selection_overlay.clipboard_title": "Clipboard transform preview",
+  "preview.worldedit_selection_overlay.clipboard_ready": "Visual only; Enter executes the command.",
+  "preview.worldedit_selection_overlay.clipboard_updating": "Preparing the clipboard transform...",
+  "preview.worldedit_selection_overlay.clipboard_empty": "Copy something with WorldEdit first.",
+  "preview.worldedit_selection_overlay.clipboard_angle": "Enter one to three finite angles: Y, X, Z.",
+  "preview.worldedit_selection_overlay.clipboard_syntax": "Use //rotate Y [X] [Z] or //flip [direction].",
+  "preview.worldedit_selection_overlay.clipboard_direction": "WorldEdit does not recognize this direction.",
+  "preview.worldedit_selection_overlay.clipboard_no_interpolation": "WorldEdit rounds blocks; 90-degree steps are recommended."
 }

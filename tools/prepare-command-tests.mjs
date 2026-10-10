@@ -5,7 +5,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const base = path.join(root, 'tools/command-preview-test');
 const fabric = await fs.readFile(path.join(base, 'java/org/marshal/wesotest/CommandGameTest.java'), 'utf8');
 const neo = await fs.readFile(path.join(base, 'neo-java/org/marshal/wesotest/NeoCommandTest.java'), 'utf8');
-const editing = await fs.readFile(path.join(base, 'selection-java/org/marshal/wesotest/SelectionEditingChecks.java'), 'utf8');
+const sharedChecks = new Map();
+for (const name of ['SelectionEditingChecks.java', 'ClipboardTransformChecks.java'])
+  sharedChecks.set(name, await fs.readFile(path.join(base, 'selection-java/org/marshal/wesotest', name), 'utf8'));
 for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1', '26.2']) {
   let source = loader === 'fabric' ? fabric : neo;
   source = source.replaceAll('runtime.mc26_2', 'runtime.' + ({'1.21.11':'mc1_21_11', '26.1':'mc26_1', '26.2':'mc26_2'}[family]));
@@ -44,7 +46,8 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
   const dir = path.join(base, `generated/${loader}-${family}/org/marshal/wesotest`);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(path.join(dir, loader === 'fabric' ? 'CommandGameTest.java' : 'NeoCommandTest.java'), source);
-  let edit = editing.replaceAll('runtime.mc26_2', 'runtime.' + ({'1.21.11':'mc1_21_11', '26.1':'mc26_1', '26.2':'mc26_2'}[family]));
+  for (const [name, original] of sharedChecks) {
+  let edit = original.replaceAll('runtime.mc26_2', 'runtime.' + ({'1.21.11':'mc1_21_11', '26.1':'mc26_1', '26.2':'mc26_2'}[family]));
   if (loader === 'neo') edit = edit.replaceAll('com.sk89q.worldedit.fabric.FabricAdapter', 'com.sk89q.worldedit.neoforge.NeoForgeAdapter').replaceAll('FabricAdapter', 'NeoForgeAdapter');
   if (family !== '26.2') edit = edit.replaceAll('client.gui.screen()', 'client.screen').replaceAll('client.gui.setScreen(', 'client.setScreen(')
     .replaceAll('client.gui.overlay()', 'client.getOverlay()')
@@ -52,7 +55,8 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
   if (loader === 'neo' && family === '1.21.11') edit = edit.replaceAll('client.resizeGui()', 'client.resizeDisplay()');
   if (family === '1.21.11') edit = edit.replaceAll('setField(client.getWindow(), "focused",',
     loader === 'neo' ? 'setField(client, "windowActive",' : 'setField(client, "field_1695",');
-  if (loader === 'neo' && family === '1.21.11') edit = edit.replaceAll('NeoForgeAdapter.get().fromNativePlayer(', 'NeoForgeAdapter.adaptPlayer(');
+  if (loader === 'neo' && family === '1.21.11') edit = edit.replaceAll('NeoForgeAdapter.get().fromNativePlayer(', 'NeoForgeAdapter.adaptPlayer(')
+    .replaceAll('NeoForgeAdapter.get().toNativeBlockState(', 'NeoForgeAdapter.adapt(');
   if (loader === 'fabric' && family === '1.21.11') edit = edit
     .replaceAll('net.minecraft.gizmos.Gizmos', 'net.minecraft.world.debug.gizmo.GizmoDrawing').replaceAll('Gizmos.withCollector(', 'GizmoDrawing.using(')
     .replaceAll('net.minecraft.gizmos.GizmoCollector', 'net.minecraft.world.debug.gizmo.GizmoCollector').replaceAll('GizmoCollector.IGNORED', 'GizmoCollector.NOOP_CONFIGURABLE')
@@ -64,6 +68,7 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('net.minecraft.client.input.MouseButtonInfo', 'net.minecraft.client.input.MouseInput').replaceAll('MouseButtonInfo', 'MouseInput')
     .replace(/(?<![.\w])client\.screen\b/g, 'client.currentScreen').replaceAll('getSingleplayerServer()', 'getServer()').replaceAll('getPlayerList()', 'getPlayerManager()').replaceAll('getPlayers()', 'getPlayerList()')
     .replaceAll('FabricAdapter.get().fromNativePlayer(', 'FabricAdapter.adaptPlayer(')
+    .replaceAll('FabricAdapter.get().toNativeBlockState(', 'FabricAdapter.adapt(')
     .replaceAll('client.mouseHandler', 'client.mouse').replaceAll('client.keyboardHandler', 'client.keyboard')
     .replaceAll('client.mouse.xpos()', 'client.mouse.getX()').replaceAll('client.mouse.ypos()', 'client.mouse.getY()')
     .replaceAll('client.player.setPos(', 'client.player.setPosition(')
@@ -75,6 +80,8 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('client.options.keyRight', 'client.options.rightKey').replaceAll('client.options.keyJump', 'client.options.jumpKey')
     .replaceAll('.input.keyPresses.right()', '.input.playerInput.right()').replaceAll('.input.keyPresses.jump()', '.input.playerInput.jump()')
     .replaceAll('getYRot()', 'getYaw()').replaceAll('.getDefaultKey().getValue()', '.getDefaultKey().getCode()')
+    .replaceAll('setYRot(', 'setYaw(').replaceAll('setXRot(', 'setPitch(')
+    .replaceAll('net.minecraft.core.BlockPos', 'net.minecraft.util.math.BlockPos')
     .replaceAll('client.options.keyShift', 'client.options.sneakKey').replaceAll('.input.keyPresses.shift()', '.input.playerInput.sneak()')
     .replaceAll('net.minecraft.client.gui.screens.ChatScreen', 'net.minecraft.client.gui.screen.ChatScreen')
     .replaceAll('net.minecraft.client.gui.screens.Screen', 'net.minecraft.client.gui.screen.Screen')
@@ -93,5 +100,6 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('"getRowTop"', '"method_25337"')
     .replaceAll('"setScrollAmount"', '"method_44382"')
     .replaceAll('server.getCommands().performPrefixedCommand(server.createCommandSourceStack(),', 'server.getCommandManager().parseAndExecute(server.getCommandSource(),');
-  await fs.writeFile(path.join(dir, 'SelectionEditingChecks.java'), edit);
+  await fs.writeFile(path.join(dir, name), edit);
+  }
 }

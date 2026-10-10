@@ -40,12 +40,23 @@ Newly loaded chunks are coalesced after the in-flight result instead of resettin
 its progress; a displayed snapshot remains until the expanded result is ready.
 Unloading required chunks and meaningful selection/session edits still cancel.
 
+## Implemented Clipboard Transforms
+
+| Command | Previewed arguments | Notes |
+| --- | --- | --- |
+| `//rotate` | Y, optional X/Z angles | Combines with the actual transform; oriented block states and clipboard origin are respected |
+| `//flip`, `//mirror` | optional direction | Official WorldEdit absolute/relative direction resolver; default is look direction |
+
+Requires enabled clipboard preview and command preview in integrated singleplayer.
+These drafts change only the copied-object display, not terrain, clipboard state
+or history. Escape restores the baseline, and Enter executes WorldEdit normally.
+`//cut` and `//paste` are intentionally excluded from live command preview.
+
 ## Not Implemented Yet
 
 | Group | Commands / modes | Required work before honest support |
 | --- | --- | --- |
 | Movement/repetition | `//move`, `//stack` | Snapshot source and loaded destinations; overlap-safe writes, direction and flags; never shift the real selection |
-| Clipboard edits | `//paste`, `//cut`, transforms | Coordinate the existing clipboard preview and command ownership; never mutate clipboard/history during typing |
 | Terrain smoothing | `//smooth`, `//snowsmooth` | Incremental official height-map/convolution adaptation; masks, iterations and snow layers |
 | Generators | `//sphere`, `//hsphere`, `//cyl`, `//hcyl`, pyramids, forests | Placement, dimensions, generated footprint and native generation isolation |
 | Expressions | `//generate`, `//deform` | Bounded/cancellable expression evaluation and validated read dependencies |
@@ -53,9 +64,9 @@ Unloading required chunks and meaningful selection/session edits still cancel.
 | Utility/flood operations | drain, fill, fix liquids, snow, thaw, green | Placement/radius, connected-component capture and command-specific masks |
 | Biomes/entities/history/tools | set biome, remove entities, undo/redo, brushes | These are not static block replacement previews; need separate visual contracts |
 
-Selection commands and clipboard transforms already update their existing
-selection/clipboard displays after execution. They must not be executed on a
-live LocalSession merely because chat contains a draft.
+Selection commands update the selection display after execution. Clipboard
+rotation/reflection also have the read-only draft display above. Neither may
+be executed on a live LocalSession merely because chat contains a draft.
 
 ## Verification Contract
 

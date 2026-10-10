@@ -13,7 +13,7 @@ Client-side selection visualization and inspection for WorldEdit. The current de
 
 There is **one universal JAR per loader**, not one JAR that loads on both Fabric and NeoForge. Each loader's JAR contains the three supported Minecraft runtimes and selects the matching runtime at launch. This does **not** imply support for every 1.21.x or 26.x version.
 
-The mod can launch without WorldEdit; WorldEdit-dependent features need a compatible WorldEdit installation or CUI data from a server. Clipboard and command-result previews require an integrated/local WorldEdit session. Previews and isolation never modify world blocks or undo history. Typing a supported command temporarily takes priority over clipboard rendering without changing its preference or cache.
+The mod can launch without WorldEdit; WorldEdit-dependent features need a compatible WorldEdit installation or CUI data from a server. Clipboard and command-result previews require an integrated/local WorldEdit session. Previews and isolation never modify world blocks or undo history. Typing a supported region command temporarily takes priority over clipboard rendering without changing its preference or cache. With clipboard preview enabled, typing `//rotate`, `//flip` or `//mirror` previews the copied object's transform without changing the real buffer. `//cut` and `//paste` have no live command preview.
 
 On NeoForge, the published WorldEdit 7.4.3 JAR requires **26.1.2 or newer**.
 NeoForge 26.1/26.1.1 startup checks without WorldEdit are not proof of local

@@ -316,5 +316,13 @@
   "screen.worldedit_selection_overlay.colors.slot.editBoundary": "Editing outline",
   "screen.worldedit_selection_overlay.colors.slot.editAxisX": "X axis",
   "screen.worldedit_selection_overlay.colors.slot.editAxisY": "Y axis",
-  "screen.worldedit_selection_overlay.colors.slot.editAxisZ": "Z axis"
+  "screen.worldedit_selection_overlay.colors.slot.editAxisZ": "Z axis",
+  "preview.worldedit_selection_overlay.clipboard_title": "Clipboard transform preview",
+  "preview.worldedit_selection_overlay.clipboard_ready": "Visual only; Enter executes the command.",
+  "preview.worldedit_selection_overlay.clipboard_updating": "Preparing the clipboard transform...",
+  "preview.worldedit_selection_overlay.clipboard_empty": "Copy something with WorldEdit first.",
+  "preview.worldedit_selection_overlay.clipboard_angle": "Enter one to three finite angles: Y, X, Z.",
+  "preview.worldedit_selection_overlay.clipboard_syntax": "Use //rotate Y [X] [Z] or //flip [direction].",
+  "preview.worldedit_selection_overlay.clipboard_direction": "WorldEdit does not recognize this direction.",
+  "preview.worldedit_selection_overlay.clipboard_no_interpolation": "WorldEdit rounds blocks; 90-degree steps are recommended."
 }

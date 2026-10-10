@@ -146,6 +146,7 @@ public final class WorldEditPointOverlayClient {
         commandPreviewController.initialize(settingsFile.getParent());
         selectionEditController.initialize(settingsFile.getParent());
         clipboardPreviewController.initialize();
+        commandPreviewController.bindClipboardPreview(clipboardPreviewController);
         clipboardPreviewController.setEnabled(clipboardPreviewEnabled);
         BlockIsolationController.setSelectedBlockIds(isolatedBlockIds);
         openSettingsKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(

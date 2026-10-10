@@ -19,5 +19,7 @@ public final class WorldEditSelectionOverlayClient {
         NeoForge.EVENT_BUS.addListener(OVERLAY_CLIENT::onClientLogout);
         NeoForge.EVENT_BUS.addListener(OVERLAY_CLIENT::onClientSystemMessage);
         NeoForge.EVENT_BUS.addListener(OVERLAY_CLIENT::onRenderAfterEntities);
+        NeoForge.EVENT_BUS.addListener(OVERLAY_CLIENT::onExtractClipboard);
+        NeoForge.EVENT_BUS.addListener(OVERLAY_CLIENT::onSubmitClipboard);
     }
 }
