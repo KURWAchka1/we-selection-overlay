@@ -74,8 +74,8 @@ def main():
             # Long English sentences split into separate synchronous cues before synthesis.
             wrap_caption(en)
             cues.append(item)
-            source_lines += [f"**{item['id']}**", "", en, "", item["ru"].replace("\n", "  \n"), ""]
-    (ROOT / "docs/video/SCRIPT.md").write_text("\n".join(source_lines), encoding="utf-8")
+            source_lines += [f"**{item['id']}**", "", en, "", item["ru"].replace("\n", "\\\n"), ""]
+    (ROOT / "docs/video/SCRIPT.md").write_text("\n".join(source_lines), encoding="utf-8", newline="\n")
     print(f"Script validated: {len(cues)} cues, {sum(len(c['en'].split()) for c in cues)} English words", flush=True)
     if args.plan_only:
         return
