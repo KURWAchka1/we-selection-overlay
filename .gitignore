@@ -12,6 +12,7 @@
 *.iml
 *.log
 tools/command-preview-test/generated/
+tools/video/__pycache__/
 
 # Release artifacts belong in GitHub Releases, not source history.
 *.jar

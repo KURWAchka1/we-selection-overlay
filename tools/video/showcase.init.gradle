@@ -1,0 +1,64 @@
+allprojects {
+    afterEvaluate {
+        def guard = file('../tools/test-desktop/agent/build/libs/cursor-isolation-agent.jar')
+        repositories.maven { url = 'https://api.modrinth.com/maven' }
+        def root = file('../tools/video')
+        def beauty = System.getenv('WESO_VIDEO_BEAUTY') == '1'
+        def location = System.getenv('WESO_VIDEO_LOCATION') ?: 'none'
+        def pickups = System.getenv('WESO_VIDEO_PICKUPS') == '1'
+        def shaderRoot = file('../build/video-tools/shaders')
+        def tests = sourceSets.create('videoTest') {
+            java.srcDir(new File(root, 'java'))
+            resources.srcDir(new File(root, 'resources'))
+            compileClasspath += sourceSets.main.compileClasspath
+        }
+        dependencies.add('videoTestImplementation', fabricApi.module('fabric-client-gametest-api-v1', fabric_version))
+        dependencies.add('videoTestImplementation', 'maven.modrinth:worldedit:7.4.5')
+        def fixture = tasks.register('videoTestJar', Jar) {
+            from(tests.output)
+            archiveClassifier = 'video-test-only'
+        }
+        def modsConfig = configurations.create('videoProductionMods')
+        dependencies.add(modsConfig.name, "net.fabricmc.fabric-api:fabric-api:${fabric_version}")
+        dependencies.add(modsConfig.name, fabricApi.module('fabric-client-gametest-api-v1', fabric_version))
+        dependencies.add(modsConfig.name, 'maven.modrinth:worldedit:7.4.5')
+        def runType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')
+        tasks.register('testVideoShowcase', runType) {
+            dependsOn(fixture)
+            mods.setFrom(modsConfig, fixture,
+                file("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar"))
+            if (beauty) mods.from(new File(shaderRoot, 'iris-fabric-1.11.4+mc26.2.jar'),
+                new File(shaderRoot, 'sodium-fabric-0.9.2+mc26.2.jar'))
+            runDir = file(beauty ? 'run-video-beauty-test' : 'run-video-test')
+            jvmArgs.addAll('-Xmx2G', '-Dfabric.client.gametest', '-Dfabric.debug.disableModShuffle=true',
+                "-javaagent:${guard.absolutePath}")
+            def directory = pickups ? 'capture-celestia-pickups' : location == 'full' ? (beauty ? 'capture-celestia-beauty' : 'capture-celestia') :
+                location == 'scout' ? 'capture-location' : beauty ? 'capture-beauty' : 'capture'
+            jvmArgs.add("-Dweso.video.output=${file('../build/video/1.8.0/' + directory).absolutePath}")
+            jvmArgs.add("-Dweso.video.beauty=${beauty}")
+            jvmArgs.add("-Dweso.video.pickups=${pickups}")
+            jvmArgs.add("-Dweso.video.location=${location}")
+            jvmArgs.add("-Dweso.video.map=${file('../build/video-tools/celestia-town.zip').absolutePath}")
+            jvmArgs.add("-Dweso.video.ffmpeg=${System.getenv('WESO_VIDEO_FFMPEG') ?: ''}")
+            jvmArgs.add("-Dweso.video.frames=${System.getenv('WESO_VIDEO_FRAMES') ?: '90'}")
+            doFirst {
+                if (!System.getenv('WESO_TEST_DESKTOP')?.startsWith('WesoTest-') || !guard.isFile())
+                    throw new GradleException('Use tools/test-ui-layout.ps1 -Showcase: private desktop and guard required')
+                if (minecraft_version != '26.2') throw new GradleException('Filming fixture is scoped to 26.2')
+                if (pickups && (beauty || location != 'full')) throw new GradleException('Pickups require credited vanilla location')
+                if (beauty) {
+                    def assets = new groovy.json.JsonSlurper().parse(new File(shaderRoot, 'manifest.json'))
+                    assets.each { asset ->
+                        def path = new File(shaderRoot, asset.filename)
+                        def hash = java.security.MessageDigest.getInstance('SHA-512').digest(path.bytes).encodeHex().toString()
+                        if (hash != asset.sha512) throw new GradleException('Shader asset hash mismatch: ' + asset.filename)
+                    }
+                    copy { from(new File(shaderRoot, 'ComplementaryReimagined_r5.9.3.zip')); into(new File(runDir.get().asFile, 'shaderpacks')) }
+                    copy { from(new File(root, 'lighting/iris.properties')); into(new File(runDir.get().asFile, 'config')) }
+                    copy { from(new File(root, 'lighting/ComplementaryReimagined_r5.9.3.zip.txt')); into(new File(runDir.get().asFile, 'shaderpacks')) }
+                }
+            }
+            programArgs.addAll('--width', '1920', '--height', '1080')
+        }
+    }
+}

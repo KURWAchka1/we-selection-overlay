@@ -77,6 +77,9 @@ and preparation without opening a game window.
 - [Fabric packaging and tests](WEaddon_fabric_universal_1.21.11-26.2/README.md)
 - [NeoForge packaging and tests](WEaddon_neoforge_universal_1.21.11-26.2/README.md)
 - [Current verification](TESTING.md)
+- [Full-mod video production brief](docs/video/PRODUCTION.md)
+- [Video research and decisions](docs/video/RESEARCH.md)
+- [English script with Russian translation](docs/video/SCRIPT.md)
 
 ## License
 
