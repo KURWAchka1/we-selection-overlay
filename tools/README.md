@@ -17,6 +17,8 @@ Node, sharp, Python, fontTools, or network access to regenerate UI resources.
   `--restore-format` restores JSON whitespace from HEAD without changing values.
 - `test-command-matrix.ps1`: checks both command preview and selection editing
   against the production universal JARs, including native input and EN/RU menus.
+  Automated clients require a private Win32 desktop and cursor isolation agent;
+  game focus/input are simulated internally, not through the user's mouse.
 - `polish-ui.mjs`: synchronizes targeted palette/inspector adjustments and
   translations while preserving each JSON key's existing formatting.
 - `build-ui-assets.mjs`: regenerates the SDF tile and licensed icon/font assets.
@@ -30,7 +32,12 @@ Node, sharp, Python, fontTools, or network access to regenerate UI resources.
   the packaged universal JAR. Not included in releases.
 - `test-ui-matrix.ps1`: sequential six-runtime settings/isolation regression
   checks. Needs JDK 21/25 and the NeoForge fixture worlds.
+- `test-ui-layout.ps1`: guarded full layout fixture. Defaults to the lighter
+  40 FPS screenshot/layout checks; `-Performance` opts into the timing profile.
+- `test-desktop.ps1` and `test-desktop/`: private desktop, process-tree cleanup,
+  and the test-only cursor guard. Unit/native GLFW probes run before a matrix;
+  no visible or unguarded fallback is allowed. Not part of the shipped mod.
 
 See `../UI_VALIDATION.md` for commands, screenshots, measurements, and limits.
-For layout-only iterations, add `-Pui_fast=true` to the UI test command; this
-skips CPU/FPS sampling but retains the interaction and screenshot checks.
+Layout-only iterations are the wrapper default; interaction and screenshot
+checks remain enabled while CPU/FPS sampling is skipped.

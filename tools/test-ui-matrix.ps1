@@ -1,10 +1,18 @@
 param(
     [Parameter(Mandatory = $true)][string]$Java21,
     [Parameter(Mandatory = $true)][string]$Java25,
-    [string[]]$Only = @()
+    [string[]]$Only = @(),
+    [switch]$DesktopWorker
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'test-desktop.ps1')
+if (!$DesktopWorker) {
+    & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
+    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Only=$Only; DesktopWorker=$true}
+    return
+}
+Assert-WesoTestDesktop
 $root = Split-Path -Parent $PSScriptRoot
 $logDirectory = Join-Path $root 'build/ui-validation'
 New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
@@ -30,7 +38,8 @@ try {
         $env:JAVA_HOME = $target.Java
         Push-Location (Join-Path $root $target.Module)
         try {
-            & .\gradlew.bat @($target.Args) --offline --no-daemon --console=plain 2>&1 |
+            Assert-WesoTestDesktop
+            & .\gradlew.bat @($target.Args) --offline --no-daemon --max-workers=2 --console=plain 2>&1 |
                 Tee-Object -FilePath (Join-Path $logDirectory "$($target.Name).log")
             if ($LASTEXITCODE -ne 0) { throw "Runtime test failed: $($target.Name)" }
         } finally { Pop-Location }

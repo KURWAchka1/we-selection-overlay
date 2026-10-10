@@ -54,6 +54,9 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     loader === 'neo' ? 'setField(client, "windowActive",' : 'setField(client, "field_1695",');
   if (loader === 'neo' && family === '1.21.11') edit = edit.replaceAll('NeoForgeAdapter.get().fromNativePlayer(', 'NeoForgeAdapter.adaptPlayer(');
   if (loader === 'fabric' && family === '1.21.11') edit = edit
+    .replaceAll('net.minecraft.gizmos.Gizmos', 'net.minecraft.world.debug.gizmo.GizmoDrawing').replaceAll('Gizmos.withCollector(', 'GizmoDrawing.using(')
+    .replaceAll('net.minecraft.gizmos.GizmoCollector', 'net.minecraft.world.debug.gizmo.GizmoCollector').replaceAll('GizmoCollector.IGNORED', 'GizmoCollector.NOOP_CONFIGURABLE')
+    .replaceAll('net.minecraft.gizmos.RectGizmo', 'net.minecraft.world.debug.gizmo.QuadGizmo').replaceAll('RectGizmo', 'QuadGizmo')
     .replaceAll('net.minecraft.client.Minecraft', 'net.minecraft.client.MinecraftClient').replace(/\bMinecraft\b/g, 'MinecraftClient')
     .replaceAll('net.minecraft.client.KeyMapping', 'net.minecraft.client.option.KeyBinding').replaceAll('KeyMapping', 'KeyBinding')
     .replaceAll('net.minecraft.client.input.KeyEvent', 'net.minecraft.client.input.KeyInput').replaceAll('KeyEvent', 'KeyInput')

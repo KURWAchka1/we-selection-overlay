@@ -15,3 +15,14 @@ Fall back to text/file search for string literals, error messages, config values
 Before implementing or changing the mod's GUI screens, read `UI_REDESIGN_RESEARCH.md`.
 It records the user's compact-settings/full-screen-inspector requirements,
 reference research, animation constraints, and cross-version verification gates.
+
+## Non-Disruptive Native Tests
+
+Run automated Minecraft clients through `tools/test-command-matrix.ps1` or
+`tools/test-ui-matrix.ps1` (or `tools/test-ui-layout.ps1` for layout checks).
+They require a private Win32 desktop AND the test-only
+cursor isolation agent. A separate desktop alone does not prevent global cursor
+confinement. Never bypass their launch guards, activate a test window on the
+user's desktop, switch desktops, or inject system keyboard/mouse input.
+The fixture dispatches synthetic input inside Minecraft instead. The interactive
+`tools/manual-test.ps1` launcher is for an explicitly requested manual playtest.

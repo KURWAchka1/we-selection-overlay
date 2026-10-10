@@ -1,10 +1,18 @@
 param(
     [Parameter(Mandatory = $true)][string]$Java21,
     [Parameter(Mandatory = $true)][string]$Java25,
-    [string[]]$Only = @()
+    [string[]]$Only = @(),
+    [switch]$DesktopWorker
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'test-desktop.ps1')
+if (!$DesktopWorker) {
+    & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
+    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Only=$Only; DesktopWorker=$true}
+    return
+}
+Assert-WesoTestDesktop
 $root = Split-Path -Parent $PSScriptRoot
 $logs = Join-Path $root 'build/command-validation'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
@@ -42,12 +50,13 @@ try {
         $env:JAVA_HOME = $target.Java
         Push-Location $module
         try {
-            & .\gradlew.bat @($target.Args) --offline --no-daemon --console=plain 2>&1 |
+            Assert-WesoTestDesktop
+            & .\gradlew.bat @($target.Args) --offline --no-daemon --max-workers=2 --console=plain 2>&1 |
                 Tee-Object -FilePath (Join-Path $logs "$($target.Name).log")
             if ($LASTEXITCODE -ne 0) { throw "Command test failed: $($target.Name)" }
             $result = [IO.File]::ReadAllText((Join-Path $logs "$($target.Name).log"))
             $commandMarker = if ($target.Family) { 'WESO NEO COMMAND PASS:' } else { 'WESO COMMAND PASS:' }
-            foreach ($marker in @($commandMarker, 'SELECTION EDIT VERIFY PASS:', 'MOVE AXES VERIFY PASS:', 'CROSSHAIR VERIFY PASS:', 'PALETTE HISTORY VERIFY PASS:', 'EDITING PALETTE VERIFY PASS:')) {
+            foreach ($marker in @($commandMarker, 'CURSOR ISOLATION GUARD PASS:', 'BACKGROUND INPUT VERIFY PASS:', 'SELECTION EDIT VERIFY PASS:', 'EDIT OUTLINE VERIFY PASS:', 'MOVE AXES VERIFY PASS:', 'CROSSHAIR VERIFY PASS:', 'PALETTE HISTORY VERIFY PASS:', 'EDITING PALETTE VERIFY PASS:')) {
                 if (!$result.Contains($marker)) { throw "Incomplete $($target.Name) fixture: missing '$marker'" }
             }
             if ($result.Contains('Client gametests failed with an exception')) { throw "Client fixture failed: $($target.Name)" }

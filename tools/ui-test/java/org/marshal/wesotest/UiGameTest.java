@@ -18,7 +18,7 @@ public final class UiGameTest implements FabricClientGameTest {
             client.options.renderDistance().set(4);
             client.options.guiScale().set(2);
             client.options.enableVsync().set(false);
-            client.options.framerateLimit().set(120);
+            client.options.framerateLimit().set(Boolean.getBoolean("weso.ui.skipProfile") ? 40 : 120);
             client.options.inactivityFpsLimit().set(net.minecraft.client.InactivityFpsLimit.MINIMIZED);
             client.resizeGui();
         });

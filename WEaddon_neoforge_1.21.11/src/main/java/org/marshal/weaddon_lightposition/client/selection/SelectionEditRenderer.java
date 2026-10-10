@@ -19,12 +19,19 @@ import org.marshal.weaddon_lightposition.selection.CuboidDraft.Corner;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Point;
 import org.marshal.weaddon_lightposition.selection.SelectionEditSnapshot;
 import org.marshal.weaddon_lightposition.selection.SelectionEditMode;
+import org.marshal.weaddon_lightposition.selection.SelectionEditOutline;
+import org.marshal.weaddon_lightposition.selection.SelectionEditOutline.Edge;
+import java.util.List;
 
 final class SelectionEditRenderer {
     private static final Face[] FACES = Face.values();
     private static final Corner[] CORNERS = Corner.values();
     private final float[] menuHover = new float[2];
     private long menuStart, menuFrame;
+    private CuboidDraft outlineOriginal, outlineDraft;
+    private Corner outlineCorner;
+    private Face outlineFace;
+    private List<Edge> outlineBoundary = List.of(), outlineGhost = List.of(), outlineActive = List.of();
     private final int[] compassOrder = {0, 1, 2};
     private final double[] compassX = new double[3], compassY = new double[3], compassDepth = new double[3];
     private static final Component[] AXIS_LABELS = {Component.literal("X"), Component.literal("Y"), Component.literal("Z")};
@@ -106,7 +113,6 @@ final class SelectionEditRenderer {
         }
     }
     void corners(CuboidDraft bounds, Corner target, View view, long appeared, boolean pending) {
-        UiStyle style = UiStyle.current();
         float alpha = fade(appeared) * (pending ? 0.45f : 1);
         for (Corner corner : CORNERS) {
             Point center = bounds.corner(corner);
@@ -114,17 +120,28 @@ final class SelectionEditRenderer {
             double radius = view.radius(center, corner == target ? 8 : 6);
             Point r = view.right.scale(radius), u = view.up.scale(radius);
             Gizmos.rect(vec(center.subtract(u)), vec(center.add(r)), vec(center.add(u)), vec(center.subtract(r)),
-                    GizmoStyle.strokeAndFill(tint(OverlayRenderStyle.color(OverlayColorSlot.EDIT_BOUNDARY), alpha * (corner == target ? 1 : 0.65f)),
-                            OverlayRenderStyle.lineWidth(SelectionEditStyle.HANDLE_WIDTH, OverlayColorSlot.EDIT_BOUNDARY),
-                            tint(style.surface, alpha * 0.95f))).setAlwaysOnTop();
+                    GizmoStyle.fill(tint(OverlayRenderStyle.color(OverlayColorSlot.EDIT_BOUNDARY),
+                            alpha * (corner == target ? 1 : 0.65f)))).setAlwaysOnTop();
         }
     }
     void world(CuboidDraft original, CuboidDraft draft, Face target, Corner corner, View view, long appeared, boolean pending, boolean moving) {
         float alpha = fade(appeared);
         int boundary = OverlayRenderStyle.color(OverlayColorSlot.EDIT_BOUNDARY);
         float width = OverlayRenderStyle.lineWidth(SelectionEditStyle.BOUNDARY_WIDTH, OverlayColorSlot.EDIT_BOUNDARY);
-        if (!original.equals(draft)) Gizmos.cuboid(box(original), GizmoStyle.stroke(tint(boundary, alpha * 0.28f), width)).setAlwaysOnTop();
-        Gizmos.cuboid(box(draft), GizmoStyle.stroke(tint(boundary, alpha * 0.65f), width)).setAlwaysOnTop();
+        Face activeFace = corner == null ? target : null;
+        if (moving || corner == null && activeFace == null) {
+            if (!original.equals(draft)) Gizmos.cuboid(box(original), GizmoStyle.stroke(tint(boundary, alpha * 0.28f), width)).setAlwaysOnTop();
+            Gizmos.cuboid(box(draft), GizmoStyle.stroke(tint(boundary, alpha * 0.65f), width)).setAlwaysOnTop();
+        } else {
+            outline(original, draft, corner, activeFace);
+            for (Edge edge : outlineGhost) line(edge, tint(boundary, alpha * 0.28f), width);
+            for (Edge edge : outlineBoundary) line(edge, tint(boundary, alpha * 0.65f), width);
+            for (Edge edge : outlineActive) {
+                OverlayColorSlot slot = SelectionEditStyle.axisSlot(corner != null ? edge.axis() : activeFace.axis);
+                line(edge, tint(OverlayRenderStyle.color(slot), alpha * (pending ? 0.45f : 1)),
+                        OverlayRenderStyle.lineWidth(SelectionEditStyle.ACTIVE_WIDTH, slot));
+            }
+        }
         if (moving) return;
         for (Face f : FACES) {
             Point center = draft.center(f);
@@ -136,31 +153,17 @@ final class SelectionEditRenderer {
             Gizmos.rect(vec(center.subtract(r).subtract(u)), vec(center.add(r).subtract(u)), vec(center.add(r).add(u)),
                     vec(center.subtract(r).add(u)), GizmoStyle.strokeAndFill(color, OverlayRenderStyle.lineWidth(SelectionEditStyle.BOUNDARY_WIDTH, slot), color)).setAlwaysOnTop();
         }
-        if (target != null) face(draft, target, alpha);
-        if (corner != null) {
-            Point start = draft.corner(corner);
-            for (int axis = 0; axis < 3; axis++) {
-                OverlayColorSlot slot = SelectionEditStyle.axisSlot(axis);
-                Gizmos.line(vec(start), vec(SelectionEditStyle.axisEnd(draft, corner, axis)),
-                        tint(OverlayRenderStyle.color(slot), alpha * (pending ? 0.45f : 1)),
-                        OverlayRenderStyle.lineWidth(SelectionEditStyle.ACTIVE_WIDTH, slot)).setAlwaysOnTop();
-            }
-        }
         corners(draft, corner != null ? corner : cornerHit(draft, view), view, appeared, pending);
     }
-    private void face(CuboidDraft b, Face f, float alpha) {
-        OverlayColorSlot slot = SelectionEditStyle.axisSlot(f.axis);
-        int color = tint(OverlayRenderStyle.color(slot), alpha);
-        float width = OverlayRenderStyle.lineWidth(SelectionEditStyle.ACTIVE_WIDTH, slot);
-        int a = (f.axis + 1) % 3, c = (f.axis + 2) % 3;
-        Point[] corners = new Point[4];
-        for (int i = 0; i < 4; i++) {
-            double[] p = {0, 0, 0}; p[f.axis] = b.center(f).at(f.axis);
-            p[a] = (i == 1 || i == 2) ? b.max(a) + 1.0 : b.min(a);
-            p[c] = i >= 2 ? b.max(c) + 1.0 : b.min(c);
-            corners[i] = new Point(p[0], p[1], p[2]);
-        }
-        for (int i = 0; i < 4; i++) Gizmos.line(vec(corners[i]), vec(corners[(i + 1) % 4]), color, width).setAlwaysOnTop();
+    private void outline(CuboidDraft original, CuboidDraft draft, Corner corner, Face face) {
+        if (original.equals(outlineOriginal) && draft.equals(outlineDraft) && corner == outlineCorner && face == outlineFace) return;
+        outlineActive = SelectionEditOutline.active(draft, corner, face);
+        outlineBoundary = SelectionEditOutline.boundary(draft, outlineActive);
+        outlineGhost = original.equals(draft) ? List.of() : SelectionEditOutline.boundary(original, outlineActive);
+        outlineOriginal = original; outlineDraft = draft; outlineCorner = corner; outlineFace = face;
+    }
+    private static void line(Edge edge, int color, float width) {
+        Gizmos.line(vec(edge.from()), vec(edge.to()), color, width).setAlwaysOnTop();
     }
 
     void hud(GuiGraphics graphics, CuboidDraft draft, Face face, Corner corner, SelectionEditSnapshot origin, String reason, boolean pending, long appeared, boolean moving, Face wheelAxis) {

@@ -273,13 +273,23 @@ Do not add release notes or mark the milestone complete based only on compilatio
 - The overlay palette has an Editing group for the shared editing contour and
   X/Y/Z colors, including alpha and per-element stroke scales. Selected corner
   edges show their world axes; selected faces and the Move wheel indicator use
-  the same axis colors. Markers use the common contour color. HUD/radial chrome
+  the same axis colors. Corner markers use the common contour color as a flat
+  fill, without an outline or dark inset; the selected marker is larger/brighter.
+  HUD/radial chrome
   remains a UI-theme concern, not a world-overlay color setting.
+  Active corner/face edges replace ordinary contour strokes, rather than being
+  painted over them. The original comparison contour is clipped where it
+  coincides with an active edge, including partially overlapping resize drafts.
+  A wider or more opaque boundary therefore cannot fringe or tint an axis.
 - Editing strokes use the existing global/per-slot width calculation. Presets,
   per-element/all resets, persistence and palette undo/redo include them. The
-  palette's cached 15-segment editing sample shares stroke roles and axis
+  palette's cached 12-segment editing sample shares stroke roles and axis
   endpoints with the native world renderer; changing width does not regenerate
   its geometry. Adding the group raises the responsive sidebar height threshold.
+  Nine ordinary edges plus three independent axes form the corner sample.
+  Shared `SelectionEditOutline` geometry is cached by original/draft bounds and
+  active corner/face; no new scan, shader, framebuffer or per-frame mesh build
+  is needed to separate the stroke roles.
 
 - Shared drafting, inclusive coordinates, hit testing and transaction code live
   in `shared/selection-editing`; the canonical native adapter is Fabric 26.2.

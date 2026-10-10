@@ -3,6 +3,57 @@
 Current source verification: 1.8.0, 2026-10-10. The test worlds, generated
 fixtures, screenshots, and logs are local data and are not committed.
 
+## Background native tests
+
+Both automated matrix scripts and `tools/test-ui-layout.ps1` launch on a dedicated private Win32 desktop,
+not a Windows Task View virtual desktop. They never call `SwitchDesktop` or
+send system-wide input. A Windows job contains the whole process tree, assigns
+BelowNormal priority to every descendant, and kills remaining Gradle/Java
+children on completion, failure, cancellation or watchdog timeout.
+The parent checks that no job-owned window appears on the input desktop.
+Initialization failure stops the test; there is no visible fallback.
+
+**Desktop isolation alone is insufficient for mouse safety.** An initial private
+desktop run still confined the user's cursor and was stopped. Every automated
+client now also requires the test-only `cursor-isolation-agent.jar`: its guarded
+GLFW methods suppress cursor capture/hiding/confinement, raw-mouse changes and
+system cursor warps. They leave the actual native cursor in `GLFW_CURSOR_NORMAL`.
+The guard is verified without Minecraft, then probed against real cached LWJGL
+3.3.3 and 3.4.1 before launching a matrix. Unsupported bytecode fails closed.
+Neither this agent nor its ASM dependency is packaged in the production mod.
+The agent relocates ASM into its private namespace using the existing Shadow
+plugin version; it must not expose a second ASM copy to Fabric Loader.
+
+Selection tests explicitly simulate game focus and dispatch input through the
+native Minecraft callbacks. They still check logical grab/camera/crosshair
+transitions and focus-loss cancellation, but do **not** claim physical foreground
+focus or OS cursor capture/restoration coverage. Those require an opt-in manual
+playtest. Command fixtures use a 40 FPS cap and Gradle uses two workers; this
+does not guarantee zero CPU/GPU load. Earlier 100 FPS timings below are historical
+measurements, not new background-performance results.
+
+```powershell
+.\tools\test-desktop\probe.ps1
+.\tools\test-desktop\probe-cursor.ps1 -Java21 'C:\path\to\jdk-21'
+```
+
+Matrix commands below enable both safeguards automatically. Aggregate logs go
+to `build/desktop-tests/`, in addition to the existing per-runtime logs and real
+framebuffer screenshots. The interactive manual launcher remains separate.
+
+On 2026-10-10, guarded background command/editing runs passed on Fabric 1.21.11
+and NeoForge 1.21.11, 26.1.2 and 26.2. Every run required both the cursor-guard
+and background-input completion markers. Fabric 26.1/26.2 functional results
+below are from the earlier runs, not additional guarded-background runs.
+The separate Fabric 26.2 layout-only fixture also passed on a private desktop
+with the packaged, privately relocated cursor guard and a 40 FPS cap.
+All six command-texture and selection-HUD screenshot pixel checks passed.
+
+Implementation references: [Microsoft desktops](https://learn.microsoft.com/en-us/windows/win32/winstation/desktops),
+[process desktop selection](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/ns-processthreadsapi-startupinfow),
+[job objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects),
+and [GLFW cursor modes](https://www.glfw.org/docs/latest/input_guide.html#cursor_mode).
+
 ## Release build
 
 The root README build command completed for all six runtimes and both universal
@@ -11,13 +62,13 @@ boundaries, bundled license notices, and registration of the chat-preview and
 selection-editing mixins for every runtime. Each universal JAR is approximately
 1.5 MiB; neither bundles
 WorldEdit nor Fabric API.
-The archived release outputs are 1,534,728 bytes (Fabric) and 1,505,858 bytes
+The archived release outputs are 1,546,920 bytes (Fabric) and 1,517,974 bytes
 (NeoForge), under each packager's `libs/1.8.0/` directory.
 The current tests also verify that UI assets/notices are shared once. JAR and
 runtime input files are declared test inputs so changed binaries invalidate
 previous test results.
-The current packager suites pass 90 Fabric-side and 8 NeoForge-side executions;
-the 79 shared selection-domain cases run on the Fabric side, not twice.
+The current packager suites pass 114 Fabric-side and 8 NeoForge-side executions;
+the 103 shared selection-domain cases run on the Fabric side, not twice.
 NeoForge tests additionally reject exported EngineHub and Architectury injection
 packages, and check the private official CUI codecs. Actual WorldEdit launches
 exercise its installed protocol; no-WorldEdit launches exercise the optional
@@ -279,7 +330,7 @@ The existing command regressions run alongside these checks, including large
 grass replacement and incremental chunk arrival; no command-engine changes were
 needed for editing. Tests and temporary configs are confined to disposable worlds.
 
-The shared domain suite passes 79 cases covering face signs, inside/outside rays,
+The shared domain suite passes 103 cases covering face signs, inside/outside rays,
 zero-depth face intersections, axis dragging from either camera side, world boundaries,
 minimum size, integer overflow, large volume, configuration defaults/clamps,
 all corner signs/opposite-point preservation, step snapping, captured plane
@@ -287,6 +338,9 @@ projection, live-camera translation/turning at captured depth, off-center grabs,
 invalid rays and huge corner offsets without arithmetic overflow. New cases
 cover near/end-on screen-axis mapping, stable signs, whole-box translation,
 tap/hold timing, key repeats, cancellation and radial center/seam hit testing.
+The 24 outline cases check all eight corners and six faces, exclusive stroke
+ownership, original-ghost overlap clipping on expansion/contraction, untouched
+displaced contours, single cells and exact world-border coordinates.
 Both packagers also assert the editing classes and explicit active-mixin registry
 for each relocated runtime, including the 1.21.11 FOV accessor.
 
@@ -369,8 +423,8 @@ world/history assertions also pass. No command-engine change was needed.
 The 22 new shared carry cases cover re-grabbing, all six signed axes, fractional
 motion, independent-axis clamping, immediate reversal after rejected overshoot,
 nonfinite data, huge regions and long travel. Both packagers pass their tests:
-90 Fabric-side and 8 NeoForge-side executions, including the shared suite on
-Fabric (not 98 distinct domain cases). All six runtime builds also succeeded.
+114 Fabric-side and 8 NeoForge-side executions, including the shared suite on
+Fabric (not 122 distinct domain cases). All six runtime builds also succeeded.
 
 Logs are in `build/command-validation/`; carry screenshots are in each runtime's
 `run-command-test/screenshots/` or the NeoForge packager's versioned equivalent.
@@ -417,9 +471,18 @@ common contour and X/Y/Z. Atomic color/alpha/width edits round-trip through the
 profile properties and native Ctrl+Z/Y. All five presets set editing colors
 and widths; per-element reset restores both without resetting another axis.
 The common width includes the new roles and becomes unavailable for mixed
-widths. The fixed 15-segment preview shares world stroke roles and endpoints;
+widths. The fixed 12-segment preview shares world stroke roles and endpoints;
 all eight corner/three-axis combinations are checked. Width changes retain
 the segment list, while color changes invalidate its cached colors.
+
+The outline regression checks all eight native corner drags for nine ordinary
+contour edges and three exclusive axis edges. Both the draft and original
+comparison contour must have no collinear overlap with active axes. A dedicated
+`selection-edit-axis-outline.png` capture uses a wide yellow contour with thin
+cyan, dark and semitransparent white axes. A scoped native Gizmos collector
+also checks the actual emitted corner quads: palette-colored fill, no stroke
+and no dark inset. Palette-only changes retain the outline geometry cache.
+The command matrix requires the additional `EDIT OUTLINE VERIFY PASS` marker.
 
 Editing-preview and scrolled controls are captured at requested 2x/3x/4x.
 Classic's appearance popup has three theme choices and a 103-pixel logical
@@ -486,21 +549,21 @@ The 1.21.11 screenshots confirm that non-selected blocks inside the selection ar
 
 ## Reproduction commands
 
-Build first, then run the Fabric game tests from each Fabric runtime directory:
+Build first, then run the guarded background matrix from the repository root:
 
 ```powershell
-.\gradlew.bat -I ..\WEaddon_fabric_universal_1.21.11-26.2\tools\isolation-test.init.gradle testUniversalIsolation --no-daemon --console=plain
+.\tools\test-ui-matrix.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25'
 ```
 
-Run NeoForge game tests from the NeoForge universal packager:
+Use `-Only` for a specific loader/runtime, for example:
 
 ```powershell
-.\gradlew.bat -I tools\isolation-test.init.gradle runIsolationClient --no-daemon --console=plain
-.\gradlew.bat -I tools\isolation-test.init.gradle runIsolationClient '-Pneo_version=26.1.2.75' '-Psmoke_java_version=25' --no-daemon --console=plain
-.\gradlew.bat -I tools\isolation-test.init.gradle runIsolationClient '-Pneo_version=26.2.0.67' '-Psmoke_java_version=25' --no-daemon --console=plain
+.\tools\test-ui-matrix.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Only neoforge-26.2
 ```
 
-Set `JAVA_HOME` to JDK 21 for 1.21.11 and JDK 25 for 26.x. Run the NeoForge default build again after using an overridden version.
+The wrapper selects JDK 21 for 1.21.11 and JDK 25 for 26.x. Internal Gradle
+client tasks refuse a direct unguarded launch. Run the NeoForge default build
+again after using an overridden version.
 
 ### NeoForge Fixture Worlds
 

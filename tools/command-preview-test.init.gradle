@@ -1,6 +1,7 @@
 // Runs the actual universal Fabric JAR with WorldEdit in a disposable Minecraft world.
 allprojects {
     afterEvaluate {
+        def cursorGuard = file('../tools/test-desktop/agent/build/libs/cursor-isolation-agent.jar')
         repositories.maven { url = 'https://api.modrinth.com/maven' }
         def root = file('../tools/command-preview-test')
         def tests = sourceSets.create('commandTest') {
@@ -32,6 +33,12 @@ allprojects {
             mods.setFrom(modsConfig, runtimeTestJar, file("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar"))
             runDir = file('run-command-test')
             jvmArgs.addAll('-Xmx2G', '-Dfabric.client.gametest', '-Dfabric.debug.disableModShuffle=true')
+            jvmArgs.add("-javaagent:${cursorGuard.absolutePath}")
+            doFirst {
+                if (!System.getenv('WESO_TEST_DESKTOP')?.startsWith('WesoTest-') || !cursorGuard.isFile()) {
+                    throw new GradleException('Use tools/test-command-matrix.ps1: private desktop and cursor guard required')
+                }
+            }
             programArgs.addAll('--width', '1280', '--height', '720')
         }
     }

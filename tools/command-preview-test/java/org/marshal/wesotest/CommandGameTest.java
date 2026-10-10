@@ -33,7 +33,7 @@ public final class CommandGameTest implements FabricClientGameTest {
         check(Float.isFinite(PreviewOptions.load(values).opacity()), "Nonfinite config accepted");
         context.runOnClient(client -> {
             client.options.renderDistance().set(4); client.options.guiScale().set(2);
-            client.options.framerateLimit().set(100); client.resizeGui();
+            client.options.framerateLimit().set(40); client.resizeGui();
         });
         try (var world = context.worldBuilder().adjustSettings(settings -> settings.setAllowCommands(true)).create()) {
             world.getServer().runCommand("gamemode spectator @p");

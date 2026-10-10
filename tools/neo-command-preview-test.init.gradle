@@ -1,5 +1,6 @@
 allprojects {
     afterEvaluate {
+        def cursorGuard = file('../tools/test-desktop/agent/build/libs/cursor-isolation-agent.jar')
         repositories { maven { name = 'Modrinth'; url = 'https://api.modrinth.com/maven' } }
         def legacy = neo_version.startsWith('21.')
         def family = legacy ? '1.21.11' : (neo_version.startsWith('26.2') ? '26.2' : '26.1')
@@ -22,7 +23,15 @@ allprojects {
             gameDirectory = file("run-command-test-${family}")
             programArguments.addAll('--quickPlaySingleplayer', 'weso-fixture', '--width', '1280', '--height', '720')
             jvmArguments.add('-Xmx2G')
+            jvmArguments.add("-javaagent:${cursorGuard.absolutePath}")
         }
         dependencies.add('localRuntime', files(testJar))
+        tasks.named('runCommandClient') {
+            doFirst {
+                if (!System.getenv('WESO_TEST_DESKTOP')?.startsWith('WesoTest-') || !cursorGuard.isFile()) {
+                    throw new GradleException('Use tools/test-command-matrix.ps1: private desktop and cursor guard required')
+                }
+            }
+        }
     }
 }

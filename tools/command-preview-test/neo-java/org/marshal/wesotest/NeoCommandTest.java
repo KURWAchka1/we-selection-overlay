@@ -89,7 +89,7 @@ public final class NeoCommandTest {
         if (wait > 0) { wait--; return; }
         var controller = CommandPreviewController.instance();
         if (stage == 0) {
-            client.options.renderDistance().set(4); client.options.guiScale().set(2); client.options.framerateLimit().set(100); client.resizeGui();
+            client.options.renderDistance().set(4); client.options.guiScale().set(2); client.options.framerateLimit().set(40); client.resizeGui();
             setup = client.getSingleplayerServer().submit(() -> {
                 var server = client.getSingleplayerServer(); server.getWorldData().setAllowCommands(true);
                 for (String command : List.of("fill -8 64 -8 24 64 24 stone", "fill 0 66 0 5 71 5 stone", "gamemode spectator @p", "tp @p 12 77 16 145 30", "time set day"))

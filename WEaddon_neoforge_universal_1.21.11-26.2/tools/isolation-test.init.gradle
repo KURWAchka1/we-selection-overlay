@@ -1,5 +1,6 @@
 allprojects {
     afterEvaluate {
+        def cursorGuard = file('../tools/test-desktop/agent/build/libs/cursor-isolation-agent.jar')
         def tests = sourceSets.create('isolationTest') {
             java.srcDir(neo_version.startsWith('21.') ? 'tools/isolation-test/mc1_21_11' : (neo_version.startsWith('26.2') ? 'tools/isolation-test/java' : 'tools/isolation-test/mc26_1'))
             resources.srcDir('tools/isolation-test/resources')
@@ -16,7 +17,15 @@ allprojects {
             gameDirectory = file('run-isolation-test-' + (neo_version.startsWith('21.') ? '1.21.11' : (neo_version.startsWith('26.2') ? '26.2' : '26.1')))
             programArguments.addAll('--quickPlaySingleplayer', 'weso-fixture', '--width', '1024', '--height', '640')
             jvmArguments.add('-Xmx2G')
+            jvmArguments.add("-javaagent:${cursorGuard.absolutePath}")
         }
         dependencies.add('runtimeOnly', files(testJar))
+        tasks.named('runIsolationClient') {
+            doFirst {
+                if (!System.getenv('WESO_TEST_DESKTOP')?.startsWith('WesoTest-') || !cursorGuard.isFile()) {
+                    throw new GradleException('Use tools/test-ui-matrix.ps1: private desktop and cursor guard required')
+                }
+            }
+        }
     }
 }

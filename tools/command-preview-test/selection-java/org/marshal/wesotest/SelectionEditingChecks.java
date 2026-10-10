@@ -10,6 +10,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonInfo;
+import net.minecraft.gizmos.Gizmos;
+import net.minecraft.gizmos.GizmoCollector;
+import net.minecraft.gizmos.RectGizmo;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.client.selection.SelectionEditController;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.client.overlay.OverlayColorProfile;
 import org.marshal.weaddon_lightposition.runtime.mc26_2.client.overlay.OverlayColorSlot;
@@ -63,6 +66,7 @@ public final class SelectionEditingChecks {
         }
     }
     private void run() {
+        onClient(() -> { prepareLogicalFocus(); checkSystemCursorFree(); return null; });
         List<?> historyBefore = onServer(this::history);
         List<?> blocksBefore = onServer(this::worldBlocks);
         onClient(() -> {
@@ -306,9 +310,11 @@ public final class SelectionEditingChecks {
             check(!cornerDraft.equals(original), "Corner drag did not change bounds: " + corner);
             check(cornerDraft.corner(corner.opposite()).equals(original.corner(corner.opposite())), "Corner moved opposite point");
             check(serverBounds().equals(original), "Corner drag committed early");
+            checkCornerOutline(corner);
             if (corner == Corner.EAST_UP_SOUTH) {
                 onClient(() -> { client.gui.hud.getChat().clearMessages(false); return null; });
                 pause(200); screenshot.accept("selection-edit-corner");
+                contrastingCornerOutline(corner);
             }
             CuboidDraft releasedDraft = onClient(() -> {
                 nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
@@ -419,6 +425,8 @@ public final class SelectionEditingChecks {
         await(reload::isDone, "restore language");
         await(() -> client.gui.overlay() == null, "restore overlay");
         onClient(() -> { client.gui.setScreen(null); client.options.guiScale().set(2); client.resizeGui(); editing.configure(false, 1, 8); return null; });
+        onClient(() -> { checkSystemCursorFree(); return null; });
+        System.out.println("BACKGROUND INPUT VERIFY PASS: simulated game focus and mouse callbacks; real GLFW cursor remains NORMAL");
         System.out.println("SELECTION EDIT VERIFY PASS: G tap toggle, close/inside six-face dragging, hidden-cursor radial/dead zone, independent XYZ wheel/flight/compass, LMB retains draft, eight free-camera one-block corners, crosshair lifecycle, Escape, stale, isolation, clipboard, unchanged blocks/history");
     }
     private void closeFacesAndModes() {
@@ -456,8 +464,7 @@ public final class SelectionEditingChecks {
         check(!onClient(editing::radialOpen) && !onClient(editing::active), "Short hold opened menu or entered editor");
         await(editing::radialOpen, "radial hold");
         onClient(() -> {
-            check(org.lwjgl.glfw.GLFW.glfwGetInputMode(client.getWindow().handle(), org.lwjgl.glfw.GLFW.GLFW_CURSOR) == org.lwjgl.glfw.GLFW.GLFW_CURSOR_DISABLED,
-                    "Radial retained visible system cursor");
+            checkSystemCursorFree();
             check(editing.capturesCamera(), "Radial did not freeze camera");
             checkCrosshair(true, "idle radial");
             radialPointer(1000, 0);
@@ -491,8 +498,7 @@ public final class SelectionEditingChecks {
             onClient(() -> {
                 nativeCall(client.mouseHandler, "onButton", client.getWindow().handle(), new MouseButtonInfo(0, 0), 0);
                 check(client.mouseHandler.isMouseGrabbed() && !client.options.keyAttack.isDown(), "Carry G leaked a trailing attack");
-                check(org.lwjgl.glfw.GLFW.glfwGetInputMode(client.getWindow().handle(), org.lwjgl.glfw.GLFW.GLFW_CURSOR)
-                        == org.lwjgl.glfw.GLFW.GLFW_CURSOR_DISABLED, "Carry G left GLFW cursor unlocked despite native grab flag");
+                checkSystemCursorFree();
                 return null;
             });
             check(serverBounds().equals(nudge), "Carry G lost the final held-grip sample");
@@ -825,6 +831,13 @@ public final class SelectionEditingChecks {
                 });
     }
     private void chooseMode(SelectionEditMode mode, boolean captureScreenshots) {
+        onClient(() -> {
+            prepareLogicalFocus();
+            axisKey(71, 0);
+            return null;
+        });
+        await(() -> client.isWindowActive() && client.gui.screen() == null && client.gui.overlay() == null
+                && (editing.active() || field(editing, "shown") != null), "ready for mode hold");
         onClient(() -> { nativeCall(client.keyboardHandler, "keyPress", client.getWindow().handle(), 1, new KeyEvent(71, 0, 0)); return null; });
         await(editing::radialOpen, "mode menu");
         for (int scale : captureScreenshots ? new int[]{2, 3, 4} : new int[]{2}) {
@@ -935,6 +948,72 @@ public final class SelectionEditingChecks {
         pause(200); screenshot.accept("palette-history");
         onClient(() -> { client.gui.setScreen(null); return null; });
     }
+    private void checkCornerOutline(Corner corner) {
+        onClient(() -> {
+            Object renderer = field(editing, "renderer");
+            check(field(renderer, "outlineDraft").equals(editing.draft()), "Stale native outline geometry");
+            check(field(renderer, "outlineCorner") == corner, "Native outline uses another corner");
+            List<?> active = (List<?>) field(renderer, "outlineActive"), boundary = (List<?>) field(renderer, "outlineBoundary");
+            check(active.size() == 3 && boundary.size() == 9, "Native outline has duplicate/missing edges");
+            var markers = new java.util.ArrayList<RectGizmo>();
+            try (var collection = Gizmos.withCollector(gizmo -> {
+                check(gizmo instanceof RectGizmo, "Corner marker is not a native quad");
+                markers.add((RectGizmo) gizmo);
+                return GizmoCollector.IGNORED;
+            })) {
+                call(renderer, "corners", editing.draft(), corner, call(renderer, "view", client), field(editing, "appeared"), false);
+            }
+            check(!markers.isEmpty(), "Missing visible native corner markers");
+            for (var marker : markers) check(!marker.style().hasStroke() && marker.style().hasFill()
+                    && (marker.style().fill() & 0xFFFFFF) == (OverlayRenderStyle.color(OverlayColorSlot.EDIT_BOUNDARY) & 0xFFFFFF),
+                    "Corner marker retained an outline or a dark inset");
+            for (String collection : new String[]{"outlineBoundary", "outlineGhost"}) for (Object edge : (List<?>) field(renderer, collection)) {
+                int axis = (int) call(edge, "axis");
+                Point from = (Point) call(edge, "from"), to = (Point) call(edge, "to");
+                for (Object stroke : active) {
+                    if ((int) call(stroke, "axis") != axis) continue;
+                    Point start = (Point) call(stroke, "from"), end = (Point) call(stroke, "to");
+                    boolean collinear = true;
+                    for (int coordinate = 0; coordinate < 3; coordinate++) if (coordinate != axis && from.at(coordinate) != start.at(coordinate)) collinear = false;
+                    if (!collinear) continue;
+                    check(Math.max(from.at(axis), Math.min(start.at(axis), end.at(axis))) >= Math.min(to.at(axis), Math.max(start.at(axis), end.at(axis))),
+                            "Native boundary/ghost underlays a corner axis: " + corner);
+                }
+            }
+            return null;
+        });
+    }
+    private void contrastingCornerOutline(Corner corner) {
+        OverlayColorSlot[] slots = {OverlayColorSlot.EDIT_BOUNDARY, OverlayColorSlot.EDIT_AXIS_X,
+                OverlayColorSlot.EDIT_AXIS_Y, OverlayColorSlot.EDIT_AXIS_Z};
+        int[] beforeColors = new int[4], colors = {0xFFFFFF00, 0xFF00FFFF, 0xFF101010, 0x80FFFFFF};
+        float[] beforeWidths = new float[4];
+        onClient(() -> {
+            Object renderer = field(editing, "renderer"), geometry = field(renderer, "outlineBoundary");
+            for (int i = 0; i < slots.length; i++) {
+                beforeColors[i] = OverlayRenderStyle.color(slots[i]);
+                beforeWidths[i] = OverlayRenderStyle.lineWidthScale(slots[i]);
+                call(overlay, "previewOverlayColor", slots[i], colors[i]);
+                call(overlay, "previewOverlayLineWidthScale", slots[i], i == 0 ? 4.0f : 0.5f);
+            }
+            call(renderer, "outline", original, editing.draft(), corner, null);
+            check(field(renderer, "outlineBoundary") == geometry, "Palette changes unnecessarily rebuilt native outline geometry");
+            return null;
+        });
+        try {
+            pause(250); checkCornerOutline(corner);
+            screenshot.accept("selection-edit-axis-outline");
+            System.out.println("EDIT OUTLINE VERIFY PASS: 9 contour + 3 exclusive axis edges, clipped original ghost, independent RGBA/widths, borderless native corner quads");
+        } finally {
+            onClient(() -> {
+                for (int i = 0; i < slots.length; i++) {
+                    call(overlay, "previewOverlayColor", slots[i], beforeColors[i]);
+                    call(overlay, "previewOverlayLineWidthScale", slots[i], beforeWidths[i]);
+                }
+                return null;
+            });
+        }
+    }
     private void editingPaletteAndClassic() {
         Object styleBefore = onClient(() -> call(overlay, "uiStyle"));
         boolean blurBefore = onClient(() -> (boolean) call(overlay, "uiBlur"));
@@ -976,7 +1055,7 @@ public final class SelectionEditingChecks {
             for (var slot : slots) check(OverlayRenderStyle.lineWidth(SelectionEditStyle.BOUNDARY_WIDTH, slot) == 1.25f,
                     "World editing width not linked to global slider");
             var preview = SelectionEditStyle.previewSegments();
-            check(preview.size() == 15 && preview == SelectionEditStyle.previewSegments(), "Editing preview not cached");
+            check(preview.size() == 12 && preview == SelectionEditStyle.previewSegments(), "Editing preview not cached or has duplicate strokes");
             call(overlay, "previewOverlayLineWidthScale", slots[1], 1.75f);
             check(!(boolean) call(overlay, "allOverlayLineWidthsSame"), "Custom editing width did not disable global slider");
             check(preview == SelectionEditStyle.previewSegments(), "Thickness unnecessarily rebuilt preview geometry");
@@ -1073,7 +1152,7 @@ public final class SelectionEditingChecks {
         Face previous = onClient(editing::target);
         boolean angled = lastAimAngled;
         aim(face, angled, true);
-        onClient(() -> { org.lwjgl.glfw.GLFW.glfwFocusWindow(client.getWindow().handle()); return null; });
+        onClient(() -> { prepareLogicalFocus(); return null; });
         tap();
         await(() -> editing.active() && editing.draft() != null, "enter editing " + face);
         onClient(() -> {
@@ -1103,6 +1182,7 @@ public final class SelectionEditingChecks {
         });
     }
     private void tap() {
+        onClient(() -> { prepareLogicalFocus(); return null; });
         await(() -> client.isWindowActive() && (editing.active() || field(editing, "shown") != null), "ready for G tap");
         onClient(() -> { axisKey(71, 1); axisKey(71, 0); return null; }); pause(150);
     }
@@ -1135,6 +1215,16 @@ public final class SelectionEditingChecks {
         while (!onClient(test::getAsBoolean)) { if (System.nanoTime() > deadline) throw new AssertionError("Selection editing timeout: " + label + " reason=" + onClient(editing::reason)); pause(25); }
     }
     private void pause(long millis) { dispatch.pause(millis); }
+    private void prepareLogicalFocus() {
+        if (System.getenv("WESO_TEST_DESKTOP") == null) throw new AssertionError("Selection input tests require the private desktop runner");
+        // Simulated input needs game focus, not OS focus on the user's desktop.
+        setField(client.getWindow(), "focused", true);
+    }
+    private void checkSystemCursorFree() {
+        check("active".equals(System.getProperty("weso.test.cursorIsolation")), "Native cursor guard was not loaded");
+        check(org.lwjgl.glfw.GLFW.glfwGetInputMode(client.getWindow().handle(), org.lwjgl.glfw.GLFW.GLFW_CURSOR)
+                == org.lwjgl.glfw.GLFW.GLFW_CURSOR_NORMAL, "Test client captured the system cursor");
+    }
     private static Object field(Object target, String name) {
         try { var field = target.getClass().getDeclaredField(name); field.setAccessible(true); return field.get(target); }
         catch (ReflectiveOperationException ex) { throw new AssertionError(ex); }

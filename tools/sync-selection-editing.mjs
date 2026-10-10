@@ -71,6 +71,7 @@ function yarn(code) {
     .replaceAll('GizmoDrawing.cuboid(', 'GizmoDrawing.box(').replaceAll('DrawStyle.strokeAndFill(', 'DrawStyle.filledAndStroked(').replaceAll('.setAlwaysOnTop()', '.ignoreOcclusion()')
     .replaceAll('GizmoDrawing.rect(', 'GizmoDrawing.quad(')
     .replaceAll('DrawStyle.stroke(', 'DrawStyle.stroked(')
+    .replaceAll('DrawStyle.fill(', 'DrawStyle.filled(')
     .replaceAll('point(camera.getCameraPos())', 'point(camera.getCameraPos())').replaceAll('v.x()', 'v.x').replaceAll('v.y()', 'v.y').replaceAll('v.z()', 'v.z')
     .replaceAll('graphics.pose()', 'graphics.getMatrices()')
     .replaceAll('.withStyle(style -> style.withBold(true))', '.styled(style -> style.withBold(true))')

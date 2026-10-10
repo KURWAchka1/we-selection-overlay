@@ -1,6 +1,7 @@
 // Run in a Fabric source project. The tested mod is the built universal JAR.
 allprojects {
     afterEvaluate {
+        def cursorGuard = file('../tools/test-desktop/agent/build/libs/cursor-isolation-agent.jar')
         def testRoot = file('../WEaddon_fabric_universal_1.21.11-26.2/tools/isolation-test')
         def testSources = sourceSets.create('isolationTest') {
             java.srcDir(new File(testRoot, minecraft_version == '1.21.11' ? 'mc1_21_11' : (minecraft_version.startsWith('26.2') ? 'mc26_2' : 'mc26_1')))
@@ -31,6 +32,12 @@ allprojects {
             mods.setFrom(modsConfig, runtimeTestJar, file("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar"))
             runDir = file('run-isolation-test')
             jvmArgs.addAll('-Xmx2G', '-Dfabric.client.gametest', '-Dfabric.debug.disableModShuffle=true')
+            jvmArgs.add("-javaagent:${cursorGuard.absolutePath}")
+            doFirst {
+                if (!System.getenv('WESO_TEST_DESKTOP')?.startsWith('WesoTest-') || !cursorGuard.isFile()) {
+                    throw new GradleException('Use tools/test-ui-matrix.ps1: private desktop and cursor guard required')
+                }
+            }
             programArgs.addAll('--width', '1024', '--height', '640')
         }
     }

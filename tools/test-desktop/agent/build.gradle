@@ -1,0 +1,62 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '9.4.2'
+}
+repositories { mavenCentral() }
+dependencies { implementation 'org.ow2.asm:asm:9.9' }
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+tasks.withType(JavaCompile).configureEach { options.release = 21 }
+// Assertions run in verifyGuard; this tiny tool does not depend on a JUnit engine.
+tasks.named('test') { enabled = false }
+jar {
+    archiveFileName = 'cursor-isolation-agent-thin.jar'
+    manifest { attributes 'Premain-Class': 'org.marshal.wesotest.background.CursorIsolationAgent' }
+}
+shadowJar {
+    archiveFileName = 'cursor-isolation-agent.jar'
+    manifest { attributes 'Premain-Class': 'org.marshal.wesotest.background.CursorIsolationAgent' }
+    relocate 'org.objectweb.asm', 'org.marshal.wesotest.background.internal.asm'
+    exclude 'module-info.class'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+tasks.register('verifyAgentJar') {
+    dependsOn shadowJar
+    doLast {
+        new java.util.zip.ZipFile(shadowJar.archiveFile.get().asFile).withCloseable { zip ->
+            if (zip.entries().find { it.name.startsWith('org/objectweb/asm/') }) {
+                throw new GradleException('Test agent exports ASM into the loader classpath')
+            }
+            for (def name : ['org/marshal/wesotest/background/internal/asm/ClassReader.class', 'META-INF/ASM-LICENSE.txt']) {
+                if (!zip.getEntry(name)) throw new GradleException("Missing test agent resource: ${name}")
+            }
+        }
+    }
+}
+tasks.register('verifyGuard', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.marshal.wesotest.background.CursorIsolationAgentChecks'
+}
+tasks.register('verifyNativeGuard', JavaExec) {
+    dependsOn verifyAgentJar
+    classpath = sourceSets.test.output + files(shadowJar)
+    mainClass = 'org.marshal.wesotest.background.CursorIsolationNativeProbe'
+    jvmArgs "-javaagent:${shadowJar.archiveFile.get().asFile.absolutePath}"
+    doFirst {
+        if (!System.getenv('WESO_TEST_DESKTOP')?.startsWith('WesoTest-')) {
+            throw new GradleException('Native cursor probe requires the private desktop runner')
+        }
+        def cache = new File(gradle.gradleUserHomeDir, 'caches/modules-2/files-2.1/org.lwjgl')
+        def version = providers.gradleProperty('probe_lwjgl_version').getOrElse('3.4.1')
+        def nativeJars = []
+        for (def library : ['lwjgl', 'lwjgl-glfw']) {
+            for (def suffix : ['', '-natives-windows']) {
+                def matches = fileTree(new File(cache, "${library}/${version}")).matching { include "**/${library}-${version}${suffix}.jar" }.files
+                if (matches.size() != 1) throw new GradleException("Expected one cached ${library}${suffix} JAR")
+                nativeJars.addAll(matches)
+            }
+        }
+        classpath += files(nativeJars)
+    }
+}
+check.dependsOn verifyGuard, verifyAgentJar

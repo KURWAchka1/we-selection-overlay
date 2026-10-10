@@ -1,6 +1,7 @@
 // Production JAR, real Minecraft client: UI bounds, persistence, screenshots, and CPU samples.
 allprojects {
     afterEvaluate {
+        def cursorGuard = file('../tools/test-desktop/agent/build/libs/cursor-isolation-agent.jar')
         def root = file('../tools/ui-test')
         def tests = sourceSets.create('uiTest') {
             java.srcDir(new File(root, 'java'))
@@ -21,6 +22,12 @@ allprojects {
             mods.setFrom(modsConfig, testJar, file("../WEaddon_fabric_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-fabric-1.21.11-26.2.jar"))
             runDir = file('run-ui-test')
             jvmArgs.addAll('-Xmx2G', '-Dfabric.client.gametest', '-Dfabric.debug.disableModShuffle=true', '-Dweso.ui.profile=true')
+            jvmArgs.add("-javaagent:${cursorGuard.absolutePath}")
+            doFirst {
+                if (!System.getenv('WESO_TEST_DESKTOP')?.startsWith('WesoTest-') || !cursorGuard.isFile()) {
+                    throw new GradleException('Use tools/test-ui-layout.ps1: private desktop and cursor guard required')
+                }
+            }
             if (project.findProperty('ui_fast') == 'true') jvmArgs.add('-Dweso.ui.skipProfile=true')
             programArgs.addAll('--width', '1920', '--height', '1080')
         }

@@ -6,6 +6,7 @@ import net.minecraft.world.phys.Vec3;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Corner;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft.Point;
+import org.marshal.weaddon_lightposition.selection.SelectionEditOutline;
 
 /** Shared stroke roles for the world editor and its palette preview. */
 public final class SelectionEditStyle {
@@ -30,30 +31,20 @@ public final class SelectionEditStyle {
     public static List<LineSegment> previewSegments() {
         long version = OverlayRenderStyle.colorVersion();
         if (previewVersion == version) return preview;
-        ArrayList<LineSegment> lines = new ArrayList<>(15);
+        ArrayList<LineSegment> lines = new ArrayList<>(12);
         Corner selected = Corner.values()[0];
-        Point anchor = SAMPLE.corner(selected);
-        for (Corner corner : Corner.values()) {
-            Point from = SAMPLE.corner(corner);
-            for (int axis = 0; axis < 3; axis++) {
-                if (corner.face(axis).sign > 0) continue;
-                Point to = axisEnd(SAMPLE, corner, axis);
-                add(lines, from, to, OverlayColorSlot.EDIT_BOUNDARY, BOUNDARY_WIDTH, 0.65f);
-            }
-        }
-        for (int axis = 0; axis < 3; axis++) {
-            Point end = axisEnd(SAMPLE, selected, axis);
-            add(lines, anchor, end, axisSlot(axis), ACTIVE_WIDTH, 1);
-        }
+        var active = SelectionEditOutline.active(SAMPLE, selected, null);
+        for (var edge : SelectionEditOutline.boundary(SAMPLE, active))
+            add(lines, edge.from(), edge.to(), OverlayColorSlot.EDIT_BOUNDARY, BOUNDARY_WIDTH, 0.65f);
+        for (var edge : active)
+            add(lines, edge.from(), edge.to(), axisSlot(edge.axis()), ACTIVE_WIDTH, 1);
         preview = List.copyOf(lines);
         previewVersion = version;
         return preview;
     }
 
     public static Point axisEnd(CuboidDraft bounds, Corner corner, int axis) {
-        Point start = bounds.corner(corner);
-        double end = corner.face(axis).sign > 0 ? bounds.min(axis) : bounds.max(axis) + 1.0;
-        return new Point(axis == 0 ? end : start.x(), axis == 1 ? end : start.y(), axis == 2 ? end : start.z());
+        return SelectionEditOutline.axisEnd(bounds, corner, axis);
     }
 
     private static void add(List<LineSegment> lines, Point from, Point to, OverlayColorSlot slot, float width, float alpha) {

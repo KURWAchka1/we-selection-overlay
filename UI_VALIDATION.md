@@ -27,15 +27,17 @@ controls are captured.
 
 ## Reproduce
 
-Build both universal artifacts using the root README command. Then, with Java
-25, run from `WEaddon_fabric_26.2`:
+Build both universal artifacts using the root README command. Then run from the
+repository root on a private desktop with the cursor guard:
 
 ```powershell
-.\gradlew.bat -I ..\tools\ui-test.init.gradle testUniversalUi --offline --no-daemon --console=plain
+.\tools\test-ui-layout.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25'
 ```
 
-For layout-only rechecks, add `-Pui_fast=true`. This skips timing samples;
-it must not be cited as a performance benchmark.
+The default is layout-only, capped at 40 FPS. It skips timing samples and must
+not be cited as a performance benchmark. `-Performance` explicitly enables the
+heavier 120 FPS timing profile. Neither mode shows windows on the user's desktop
+or captures the system cursor; see TESTING.md for the safeguards and limitations.
 
 The six-runtime isolation and settings-render checks can be run sequentially
 from the repository root:
@@ -61,6 +63,9 @@ sidebar's minimum-height calculation, with stacked/scrolling layout at smaller
 logical sizes. The rerun captures 42 images; after a locale reload it waits for
 the native resource-loading overlay to disappear, not just for its future to
 complete. Screenshot review includes the additional group and Russian controls.
+The latest rerun used the private-desktop launcher with its separate GLFW
+cursor guard, at 40 FPS. Its 42 captures come from the native framebuffer;
+the game window never needs to appear on the user's input desktop.
 
 The 2026-10-10 editing runs also capture the real native keybind menu in EN/RU
 at requested 2x/3x/4x on all six targets. The shorter face-edit/fast-step names
@@ -93,6 +98,14 @@ The native crosshair remains visible for passive markers and pending applies,
 hides only for active tools/grabs/radial choice, and returns on exit. All six
 Creative screenshot triplets pass the separate 68/0/68 center-pixel check.
 See TESTING.md for interruption coverage and framework teardown rerun details.
+
+The editing outline fixture additionally captures a high-contrast world sample:
+wide yellow contour, thin cyan/dark/semitransparent white corner axes, and flat
+filled diamond markers. Axis edges replace contour strokes rather than drawing
+over them; overlapping parts of the original comparison contour are clipped.
+The same partition is used in the palette's 12-edge Editing sample. Native quad
+inspection checks that corner markers have fill only, without a frame or inset.
+These are geometry/style checks, not new FPS measurements.
 
 The same six runs verify palette Ctrl+Z/Y history with native screen events,
 including a focused HEX field, one-step drags, popup/confirmation blocking,
