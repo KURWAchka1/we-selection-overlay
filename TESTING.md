@@ -5,6 +5,18 @@ fixtures, screenshots, and logs are local data and are not committed.
 
 ## Background native tests
 
+Optional server-bridge foundation checks are recorded separately in
+[SERVER_BRIDGE_IMPLEMENTATION.md](docs/engineering/SERVER_BRIDGE_IMPLEMENTATION.md).
+`tools/test-server-bridge.ps1` verifies pure state/codec tests on Java 21 and 25
+and six native payload codecs without opening a game window.
+`tools/test-bridge-packaging.ps1` uses development-only artifact names and runs
+both universal packager suites, without overwriting archived release 1.8.0.
+`tools/test-paper-bridge.ps1` starts a loopback-only, headless disposable Paper
+server after explicit EULA acceptance; it never uses normal launcher worlds.
+Its TCP clients prove the Paper/application protocol boundary, not native mod
+login/gameplay compatibility or measured busy-server overhead.
+
+
 Both automated matrix scripts and `tools/test-ui-layout.ps1` launch on a dedicated private Win32 desktop,
 not a Windows Task View virtual desktop. They never call `SwitchDesktop` or
 send system-wide input. A Windows job contains the whole process tree, assigns

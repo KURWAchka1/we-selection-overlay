@@ -11,14 +11,17 @@ optional WorldEdit server companion, not a generic Java tutorial.
 - **Proposal** means a design awaiting a prototype and measurements.
 - **Unverified** means we must not advertise support yet.
 
-The server bridge is **not implemented** by this documentation change.
-Published client 1.8.0 needs an update to understand a future bridge protocol.
+An experimental **read-only transport foundation** is now implemented; see the
+[implementation evidence](SERVER_BRIDGE_IMPLEMENTATION.md). Remote selection
+editing, clipboard synchronization and command simulation remain unimplemented.
+Published client 1.8.0 is unchanged and has no bridge protocol support.
 Existing CUI-only servers must keep working without installing a companion.
 
 | Reference | Use |
 | --- | --- |
 | [Bridge design](SERVER_BRIDGE_DESIGN.md) | Ownership, protocol, permissions, scheduling, feature boundaries |
 | [Verification gates](SERVER_BRIDGE_VERIFICATION.md) | Security, correctness, dedicated-server and performance evidence |
+| [Implementation evidence](SERVER_BRIDGE_IMPLEMENTATION.md) | Executed tests, exact scope and remaining gates |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

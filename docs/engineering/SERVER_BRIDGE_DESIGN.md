@@ -1,6 +1,9 @@
 # Optional Server Bridge: Engineering Design
 
-Status: **proposal, not implementation or frozen wire specification**.
+Status: **long-term design, not a frozen wire specification**. A bounded,
+read-only transport foundation is implemented; the editing/streaming/simulation
+stages below are still proposals. See [executed evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
+and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).
 Research date: 2026-10-11. Start with the [knowledge base](JAVA_MINECRAFT_KNOWLEDGE_BASE.md).
 
 ## Product Boundary

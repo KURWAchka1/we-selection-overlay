@@ -1,0 +1,4 @@
+rootProject.name = 'worldedit-selection-overlay-bridge'
+include 'protocol', 'client', 'core', 'paper', 'paper-test-fixture'
+project(':protocol').projectDir = file('../shared/server-bridge-protocol')
+project(':client').projectDir = file('../shared/server-bridge-client')

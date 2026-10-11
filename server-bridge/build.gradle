@@ -1,0 +1,39 @@
+plugins {
+    id 'base'
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    group = 'org.marshal.worldedit_selection_overlay.bridge'
+    version = rootProject.property('bridge_version')
+    repositories { mavenCentral() }
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(21)
+        withSourcesJar()
+    }
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 21
+        options.encoding = 'UTF-8'
+    }
+    dependencies {
+        testImplementation platform('org.junit:junit-bom:5.11.4')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+        maxParallelForks = 1
+        javaLauncher = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(
+                    providers.gradleProperty('testJavaVersion').getOrElse('21').toInteger())
+        }
+        testLogging { events 'failed', 'skipped' }
+    }
+    tasks.withType(AbstractArchiveTask).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+}
+
+tasks.named('check') { dependsOn subprojects.collect { it.tasks.named('check') } }
+tasks.named('assemble') { dependsOn ':paper:jar' }

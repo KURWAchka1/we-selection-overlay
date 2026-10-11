@@ -12,6 +12,7 @@ public final class WorldEditSelectionOverlayClient {
     public static void initialize(IEventBus modEventBus) {
         RuntimeCuiBridge.initialize(modEventBus);
         OVERLAY_CLIENT.initialize();
+        org.marshal.weaddon_lightposition.client.bridge.NativeServerBridge.initialize(modEventBus);
         NeoForge.EVENT_BUS.addListener(OVERLAY_CLIENT::onRenderCommandPreview);
         modEventBus.addListener(OVERLAY_CLIENT::onRegisterKeyMappings);
         NeoForge.EVENT_BUS.addListener(OVERLAY_CLIENT::onClientTick);

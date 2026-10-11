@@ -1,0 +1,8 @@
+# Conservative transport admission defaults, not measured performance guarantees.
+# There are no preview workers, subscriptions or recurring tasks in this stage.
+limits:
+  max-connections: 1024
+  global-requests-per-second: 100
+  global-burst: 100
+  player-requests-per-second: 4
+  player-burst: 8

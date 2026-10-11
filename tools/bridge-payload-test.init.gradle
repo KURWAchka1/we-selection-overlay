@@ -1,0 +1,21 @@
+// Headless codec checks only: no Minecraft client, world, window or cursor.
+allprojects {
+    afterEvaluate { project ->
+        if (!project.plugins.hasPlugin('java')) return
+        def fixtureDir = new File(project.rootDir, '../tools/server-bridge-test')
+        sourceSets {
+            bridgePayloadTest {
+                java.srcDir(fixtureDir)
+                compileClasspath += sourceSets.main.output + configurations.compileClasspath
+                runtimeClasspath = output + sourceSets.main.output + configurations.compileClasspath
+            }
+        }
+        tasks.register('verifyBridgePayload', JavaExec) {
+            dependsOn tasks.named('bridgePayloadTestClasses')
+            classpath = sourceSets.bridgePayloadTest.runtimeClasspath
+            mainClass = 'org.marshal.weaddon_lightposition.bridge.test.NativeCodecProbe'
+            systemProperty 'weso.bridge.codec', project.hasProperty('yarn_mappings')
+                    ? 'net.minecraft.network.codec.PacketCodec' : 'net.minecraft.network.codec.StreamCodec'
+        }
+    }
+}

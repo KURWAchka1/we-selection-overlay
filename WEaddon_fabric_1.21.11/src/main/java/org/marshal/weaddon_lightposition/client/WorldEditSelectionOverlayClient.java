@@ -8,5 +8,6 @@ public class WorldEditSelectionOverlayClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         overlayClient.initialize();
+        org.marshal.weaddon_lightposition.client.bridge.NativeServerBridge.initialize();
     }
 }

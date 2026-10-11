@@ -1,0 +1,20 @@
+name: WorldEditSelectionOverlayBridge
+version: '${version}'
+main: org.marshal.weaddon_lightposition.bridge.paper.WorldEditOverlayBridgePlugin
+api-version: '1.21.11'
+author: Marshal_RF
+website: https://github.com/KURWAchka1/we-selection-overlay
+description: Experimental optional transport for WorldEdit Selection Overlay.
+depend: [WorldEdit]
+commands:
+  wesobridge:
+    description: Show bridge transport counters (no world scans).
+    permission: weso.bridge.admin
+    usage: /wesobridge
+permissions:
+  weso.bridge.selection:
+    description: Allow read-only metadata of your own WorldEdit selection.
+    default: false
+  weso.bridge.admin:
+    description: Inspect bridge transport counters.
+    default: op

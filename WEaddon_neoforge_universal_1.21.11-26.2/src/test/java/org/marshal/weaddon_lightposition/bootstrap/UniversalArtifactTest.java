@@ -15,6 +15,21 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class UniversalArtifactTest {
     @Test
+    void optionalBridgeIsRelocatedAndContainsNoServerOrFixtureCode() throws Exception {
+        try (var jar = new JarFile(System.getProperty("universal.jar"))) {
+            for (String id : List.of("mc1_21_11", "mc26_1", "mc26_2")) {
+                String base = "org/marshal/weaddon_lightposition/runtime/" + id + "/";
+                for (String type : List.of("client/bridge/BridgePayload", "client/bridge/NativeServerBridge",
+                        "bridge/client/BridgeClient", "bridge/protocol/BridgeCodec", "bridge/protocol/BridgeMessage"))
+                    assertNotNull(jar.getEntry(base + type + ".class"), base + type);
+            }
+            assertFalse(jar.stream().anyMatch(e -> e.getName().contains("/bridge/server/")
+                    || e.getName().contains("/bridge/paper/") || e.getName().contains("/bridge/fixture/")));
+            assertNull(jar.getEntry("org/marshal/weaddon_lightposition/bridge/protocol/BridgeCodec.class"));
+        }
+    }
+
+    @Test
     void editingHudAndCrosshairHooksAreRegisteredOncePerRuntime() throws Exception {
         try (var jar = new JarFile(System.getProperty("universal.jar"))) {
             for (String id : List.of("mc1_21_11", "mc26_1", "mc26_2")) {

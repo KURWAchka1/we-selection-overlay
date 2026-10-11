@@ -1,0 +1,86 @@
+param(
+    [Parameter(Mandatory = $true)][string]$Java21,
+    [Parameter(Mandatory = $true)][string]$Java25,
+    [switch]$SkipNativeCodecs,
+    [switch]$Offline
+)
+
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+foreach ($java in @($Java21, $Java25)) {
+    if (!(Test-Path -LiteralPath (Join-Path $java 'bin/java.exe'))) { throw "Missing Java: $java" }
+}
+$logs = Join-Path $root 'build/bridge-validation'
+New-Item -ItemType Directory -Force -Path $logs | Out-Null
+$common = @('--no-daemon', '--max-workers=2', '--console=plain')
+if ($Offline) { $common += '--offline' }
+$previousJava = $env:JAVA_HOME
+
+function Invoke-BridgeGradle([string]$Module, [string]$Java, [string]$Name, [string[]]$Tasks) {
+    $env:JAVA_HOME = $Java
+    Push-Location (Join-Path $root $Module)
+    try {
+        $wrapper = Join-Path $root "$Module/gradlew.bat"
+        if (!(Test-Path -LiteralPath $wrapper)) { $wrapper = Join-Path $root 'WEaddon_fabric_1.21.11/gradlew.bat' }
+        & $wrapper @Tasks @common 2>&1 |
+                Tee-Object -FilePath (Join-Path $logs "$Name.log")
+        if ($LASTEXITCODE -ne 0) { throw "Bridge verification failed: $Name" }
+        if ($Name -like 'codec-*' -and !(Select-String -LiteralPath (Join-Path $logs "$Name.log") -SimpleMatch 'NATIVE BRIDGE PAYLOAD PASS:' -Quiet)) {
+            throw "Native codec marker missing: $Name"
+        }
+    } finally { Pop-Location }
+}
+
+function Assert-PaperArtifact {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $file = Join-Path $root 'server-bridge/paper/build/libs/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar'
+    if ((Get-Item -LiteralPath $file).Length -gt 1MB) { throw 'Unexpected companion footprint' }
+    $zip = [IO.Compression.ZipFile]::OpenRead($file)
+    try {
+        foreach ($name in @('LICENSE', 'plugin.yml', 'config.yml',
+                'org/marshal/weaddon_lightposition/bridge/server/BridgeServer.class',
+                'org/marshal/weaddon_lightposition/bridge/protocol/BridgeCodec.class',
+                'org/marshal/weaddon_lightposition/bridge/paper/WorldEditOverlayBridgePlugin.class')) {
+            if ($null -eq $zip.GetEntry($name)) { throw "Companion entry missing: $name" }
+        }
+        foreach ($entry in $zip.Entries) {
+            if ($entry.FullName -match '^(net/|com/sk89q/|org/bukkit/)|/bridge/(client|fixture)/|Test\.class$') {
+                throw "Companion contains client, test or provided dependency: $($entry.FullName)"
+            }
+            if ($entry.FullName.EndsWith('.class')) {
+                $stream = $entry.Open()
+                try {
+                    $header = New-Object byte[] 8
+                    for ($i = 0; $i -lt 8; $i++) {
+                        $value = $stream.ReadByte()
+                        if ($value -lt 0) { throw 'Truncated class header' }
+                        $header[$i] = $value
+                    }
+                    if ([BitConverter]::ToString([byte[]]$header[0..3]).Replace('-', '') -ne 'CAFEBABE' -or (($header[6] -shl 8) + $header[7]) -gt 65) {
+                        throw "Companion bytecode is not Java 21: $($entry.FullName)"
+                    }
+                } finally { $stream.Dispose() }
+            }
+        }
+    } finally { $zip.Dispose() }
+    Write-Output 'PAPER ARTIFACT PASS: Java 21, license present, no client/fixture/provided dependencies.'
+}
+
+try {
+    Invoke-BridgeGradle 'server-bridge' $Java21 'unit-java21' @('check', 'assemble', '--rerun-tasks', '-PtestJavaVersion=21')
+    Assert-PaperArtifact
+    Invoke-BridgeGradle 'server-bridge' $Java25 'unit-java25' @('check', '--rerun-tasks', '-PtestJavaVersion=25')
+    if (!$SkipNativeCodecs) {
+        foreach ($target in @(
+            @{Name='fabric-1.21.11'; Module='WEaddon_fabric_1.21.11'; Java=$Java21},
+            @{Name='fabric-26.1'; Module='WEaddon_lightposition'; Java=$Java25},
+            @{Name='fabric-26.2'; Module='WEaddon_fabric_26.2'; Java=$Java25},
+            @{Name='neoforge-1.21.11'; Module='WEaddon_neoforge_1.21.11'; Java=$Java21},
+            @{Name='neoforge-26.1'; Module='WEaddon_neoforge_26.1'; Java=$Java25},
+            @{Name='neoforge-26.2'; Module='WEaddon_neoforge_26.2'; Java=$Java25}
+        )) {
+            Invoke-BridgeGradle $target.Module $target.Java "codec-$($target.Name)" @('-I', '../tools/bridge-payload-test.init.gradle', 'verifyBridgePayload')
+        }
+    }
+} finally { $env:JAVA_HOME = $previousJava }
+Write-Output 'Bridge checks passed. This does not prove dedicated-server joins or gameplay compatibility.'

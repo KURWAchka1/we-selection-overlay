@@ -167,3 +167,7 @@ publishing {
         // retrieving dependencies.
     }
 }
+
+sourceSets.main.java.srcDir('../shared/server-bridge-protocol/src/main/java')
+
+sourceSets.main.java.srcDir('../shared/server-bridge-client/src/main/java')

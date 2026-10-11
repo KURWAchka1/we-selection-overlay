@@ -199,12 +199,25 @@ Dependency order, API version and permission declarations. Use the appropriate
 WorldEdit dependency and independently test reload/disable behavior; do not mark
 Folia support or widen Minecraft compatibility solely through metadata.
 
+## S28 Paper Download And Wire Fixture
+
+[Official download service](https://docs.papermc.io/misc/downloads-service/) and
+its versioned build API establish the Paper 1.21.11 build-132 artifact/hash.
+[PrismarineJS protocol library](https://github.com/PrismarineJS/node-minecraft-protocol)
+and [upstream API](https://github.com/PrismarineJS/node-minecraft-protocol/blob/master/docs/API.md)
+establish test-only headless client support for 1.21.11; the fixture pins 1.68.0.
+Neither the library nor its dependencies are bundled in client/companion JARs.
+[WorldEdit 7.4.2 CUI handler](https://github.com/EngineHub/WorldEdit/blob/eb8e82c3d8843bed3f71e82ea974122415645178/worldedit-bukkit/src/main/java/com/sk89q/worldedit/bukkit/CUIChannelListener.java)
+and the pinned LocalSession initialization path establish the independent CUI
+round trip. Actual observations/hashes are in the foundation implementation record.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.
 Behavior evidence: symbol links in the knowledge base, COMMAND_PREVIEW.md and
 the current selection editing design. Existing verification is in TESTING.md;
-the bridge-specific test document contains future gates, not completed runs.
+the bridge-specific gate document distinguishes remaining requirements from
+[completed foundation checks](SERVER_BRIDGE_IMPLEMENTATION.md).
 
 For every future entry record checked date, supported tuple, direct source,
 commit/artifact hash when available, observed fact, our inference and test status.

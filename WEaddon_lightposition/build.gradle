@@ -142,3 +142,7 @@ publishing {
 
 sourceSets.main.java.srcDir('../shared/command-preview/src/main/java')
 sourceSets.main.java.srcDir('../shared/selection-editing/src/main/java')
+
+sourceSets.main.java.srcDir('../shared/server-bridge-protocol/src/main/java')
+
+sourceSets.main.java.srcDir('../shared/server-bridge-client/src/main/java')

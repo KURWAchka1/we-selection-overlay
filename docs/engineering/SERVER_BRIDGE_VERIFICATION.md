@@ -1,8 +1,11 @@
 # Server Bridge Verification Gates
 
-Status: **planned tests; not executed server-compatibility evidence**.
-Research date: 2026-10-11. Documentation-only work did not launch Minecraft,
-modify release JARs or test a server companion that does not exist yet.
+Status: **release gates, with partial foundation evidence**.
+Date: 2026-10-11. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
+contains Java 21/25 tests, six native-codec checks and a real Paper wire proof.
+Headless protocol clients are not Fabric/NeoForge gameplay clients. Remaining
+native joins, remote features and workload profiling are not marked passed.
+Published release JARs and the 1.8.0 tag remain unchanged.
 
 ## Evidence Record
 

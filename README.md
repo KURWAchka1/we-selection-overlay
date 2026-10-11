@@ -1,6 +1,6 @@
 # WorldEdit Selection Overlay
 
-Client-side selection visualization and inspection for WorldEdit. The current development version is **1.8.0**, adding live command-result preview and optional in-world cuboid resizing/movement in integrated singleplayer WorldEdit sessions.
+Client-side selection visualization and inspection for WorldEdit. The latest published version is **1.8.0**, adding live command-result preview and optional in-world cuboid resizing/movement in integrated singleplayer WorldEdit sessions.
 
 ## Supported release targets
 
@@ -35,6 +35,9 @@ these restrictions are documented in `tools/MANUAL_TEST.md`.
 | `shared/command-preview` | Memory-only command engine shared by all six runtimes |
 | `shared/selection-editing` | Pure cuboid drafting and server-thread WorldEdit selection transactions |
 | `shared/neoforge-cui` | Shared-protocol bridge and private fallback registration |
+| `shared/server-bridge-protocol` | Experimental bounded Java 21 application protocol |
+| `shared/server-bridge-client` | Experimental loader-independent connection state |
+| `server-bridge` | Optional read-only Paper transport prototype and isolated tests |
 
 The packagers keep incompatible Minecraft classes in separate relocated runtime packages. Runtime detection loads only the matching package. Fabric bundles version-scoped CUI protocol metadata. NeoForge uses the installed shared protocol or a privately relocated, version-matched fallback to avoid split-package conflicts. See the packager READMEs and `TESTING.md` for details and test coverage.
 
@@ -66,6 +69,7 @@ and preparation without opening a game window.
 ## Documentation
 
 - [Java, Minecraft API, and server integration knowledge base](docs/engineering/JAVA_MINECRAFT_KNOWLEDGE_BASE.md)
+- [Optional bridge prototype and its actual verification scope](server-bridge/README.md)
 - [User-facing description](WEaddon_lightposition/MOD_DESCRIPTION.md)
 - [Changelog](WEaddon_lightposition/CHANGELOG.md)
 - [1.8.0 release notes](changelog-1.8.0.md)

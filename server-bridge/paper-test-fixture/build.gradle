@@ -1,0 +1,11 @@
+repositories {
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
+    maven { url = 'https://maven.enginehub.org/repo/' }
+}
+dependencies {
+    compileOnly 'io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT'
+    compileOnly 'com.sk89q.worldedit:worldedit-bukkit:7.4.2'
+}
+tasks.named('jar') {
+    archiveFileName = 'weso-paper-test-fixture.jar'
+}

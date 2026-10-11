@@ -1,0 +1,8 @@
+name: WesoBridgeTestFixture
+version: '1'
+main: org.marshal.weaddon_lightposition.bridge.fixture.PaperBridgeFixture
+api-version: '1.21.11'
+depend: [WorldEdit, WorldEditSelectionOverlayBridge]
+commands:
+  wesofixture:
+    description: Console-only isolated bridge verification fixture
