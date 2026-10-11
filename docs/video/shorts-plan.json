@@ -1,0 +1,131 @@
+{
+  "master": "build/video/1.8.0/worldedit-selection-overlay-1.8-review-en.mp4",
+  "master_sha256": "cdf189737c6bfd981c065eb7cf5f42986c5e09bd8c643ba3467a33925691414a",
+  "timeline": "build/video/1.8.0/timeline.json",
+  "related_video": "https://www.youtube.com/watch?v=nZlb22H432E",
+  "creator": "Marshal_RF",
+  "shorts": [
+    {
+      "id": "01-before-enter",
+      "title": "This WorldEdit edit hasn't happened yet",
+      "alternate_title": "Don't press Enter in WorldEdit. Look first.",
+      "hook": "BEFORE ENTER",
+      "cover_text": "BEFORE ENTER",
+      "cover_source_time": 6.0,
+      "cover_view": "command",
+      "captions": {
+        "hook-01": ["Прежде чем менять дом,", "посмотрите на результат."],
+        "hook-02": ["Меняю песчаник", "на бирюзовую керамику.", "Пока только в предпросмотре."],
+        "hook-03": ["Не тот цвет?", "Нажмите Esc,", "и дом снова как прежде."]
+      },
+      "accent": "cyan",
+      "cues": ["hook-01", "hook-02", "hook-03"],
+      "default_view": "command",
+      "proof_times": [1.5, 6.0, 12.6],
+      "phases": {
+        "hook-01": "Check the original",
+        "hook-02": "Live command preview",
+        "hook-03": "Esc  /  Back to the original"
+      },
+      "description": "That replacement is still a visual draft. WorldEdit Selection Overlay shows the supported command result while you type; Escape restores the original view. The preview does not edit the world.\n\nLive command preview requires compatible local WorldEdit in singleplayer. Minecraft 1.21.11 and 26.1 / 26.1.1 / 26.1.2 / 26.2; choose the Fabric or NeoForge download. NeoForge local WorldEdit on 26.1.x requires 26.1.2.\n\n#Minecraft #WorldEdit #MinecraftMods",
+      "pinned_comment": "Which material would you try on this house? The full walkthrough is linked as the related video."
+    },
+    {
+      "id": "02-see-inside",
+      "title": "I hid the walls. The Minecraft house is still there.",
+      "alternate_title": "See inside your Minecraft build without breaking it",
+      "hook": "SEE INSIDE",
+      "cover_text": "SEE INSIDE",
+      "cover_source_time": 99.0,
+      "cover_view": "isolation",
+      "captions": {
+        "inspect-06": ["Чтобы заглянуть внутрь,", "отметьте нужные материалы."],
+        "inspect-07": ["Остальные блоки скрылись.", "Теперь можно заглянуть внутрь."],
+        "inspect-08": ["Выбирайте несколько материалов.", "Они останутся вверху списка."],
+        "inspect-09": ["Текстуры хорошо видны", "даже в тени."],
+        "inspect-11": ["Сами блоки на месте.", "Сбросьте отметки,", "и весь дом снова виден."]
+      },
+      "accent": "mint",
+      "cues": ["inspect-06", "inspect-07", "inspect-08", "inspect-09", "inspect-11"],
+      "default_view": "isolation",
+      "views": {"inspect-06": "inspector", "inspect-08": "inspector"},
+      "reveal_times": {"inspect-06": 88.666666666667},
+      "proof_times": [1.0, 5.0, 9.2, 14.0, 19.5],
+      "phases": {
+        "inspect-06": "B  /  Choose the materials",
+        "inspect-07": "Hidden only inside the selection",
+        "inspect-08": "Keep several materials visible",
+        "inspect-09": "See the textures clearly",
+        "inspect-11": "Reset  /  Nothing was deleted"
+      },
+      "description": "Pick the materials you want to inspect. Other blocks disappear visually only inside your WorldEdit selection, so you can look inside the build. Reset the checkboxes to see everything again. Real blocks and collisions stay unchanged.\n\nThis is a building inspection tool, not an ore finder. WorldEdit Selection Overlay 1.8.0 for Fabric and NeoForge.\n\n#Minecraft #WorldEdit #MinecraftBuilding",
+      "pinned_comment": "Would you use this to check an interior, a roof, or hidden supports? The full walkthrough is linked as the related video."
+    },
+    {
+      "id": "03-move-the-box",
+      "title": "Stop reselecting your WorldEdit build. Move the box.",
+      "alternate_title": "Move your WorldEdit selection without touching the build",
+      "hook": "MOVE THE BOX",
+      "cover_text": "MOVE THE BOX",
+      "cover_source_time": 187.8,
+      "cover_view": "move",
+      "captions": {
+        "edit-06": ["Передвинем всё выделение.", "Удержите G и выберите Move."],
+        "edit-07": ["Нажмите G,", "затем зажмите ЛКМ на выделении."],
+        "edit-08": ["Смотрите на объёмные оси", "в правом нижнем углу."],
+        "edit-09": ["Оси поворачиваются с камерой.", "Выбранная буква выделена."],
+        "edit-10": ["Нажмите X", "и крутите колёсико:", "область двигается вбок."],
+        "edit-11": ["Ось Y: вверх или вниз.", "Самому лететь не нужно."],
+        "edit-12": ["Отпустите мышь.", "Проверьте положение.", "Это всё ещё черновик."],
+        "edit-13": ["Нажмите G, чтобы применить.", "Двигаются только границы.", "Сам дом остаётся на месте."],
+        "edit-14": ["Положение не подходит?", "Esc отменит черновик."]
+      },
+      "accent": "cyan",
+      "cues": ["edit-06", "edit-07", "edit-08", "edit-09", "edit-10", "edit-11", "edit-12", "edit-13", "edit-14"],
+      "default_view": "move",
+      "compass_cues": ["edit-08", "edit-09", "edit-10", "edit-11"],
+      "proof_times": [1.3, 6.0, 10.4, 14.5, 18.3, 22.5, 27.0, 31.5, 36.0],
+      "phases": {
+        "edit-06": "Hold G  /  Choose Move",
+        "edit-07": "Tap G, then hold LMB",
+        "edit-08": "Live axes  /  Bottom-right",
+        "edit-09": "The chosen axis stays highlighted",
+        "edit-10": "X + Scroll  /  Move sideways",
+        "edit-11": "Y + Scroll  /  Move up or down",
+        "edit-12": "Release LMB  /  Inspect the draft",
+        "edit-13": "Tap G  /  Apply the bounds",
+        "edit-14": "Esc  /  Cancel the draft"
+      },
+      "description": "Move the WorldEdit cuboid selection instead of placing its corners again. Hold G to choose Move, tap G to enter editing, then hold the left mouse button on the box. Choose X, Y or Z and scroll. Tap G to apply; Escape cancels the draft. The 3D axis indicator turns with the camera.\n\nOnly the selection bounds move, not the building. Enable in-world editing in the mod settings. Requires compatible local WorldEdit in singleplayer. Controls shown are the defaults.\n\n#Minecraft #WorldEdit #MinecraftBuilding",
+      "pinned_comment": "The box moves; the house doesn't. X / Y / Z selects the axis, G applies, and Esc cancels. Full walkthrough in the related video."
+    },
+    {
+      "id": "04-check-the-copy",
+      "title": "Your WorldEdit copy is facing the wrong way? Check this.",
+      "alternate_title": "See your WorldEdit copy rotate before you commit",
+      "hook": "CHECK THE COPY",
+      "cover_text": "WRONG WAY?",
+      "cover_source_time": 237.0,
+      "cover_view": "clipboard",
+      "captions": {
+        "clipboard-02": ["После copy можно оценить", "постройку в позиции вставки."],
+        "clipboard-03": ["Введите rotate в чате,", "проверьте другой поворот."],
+        "clipboard-04": ["Или попробуйте flip:", "увидите зеркальную копию."],
+        "clipboard-05": ["Esc вернёт исходный вид.", "Настоящий буфер не изменён."]
+      },
+      "accent": "mint",
+      "cues": ["clipboard-02", "clipboard-03", "clipboard-04", "clipboard-05"],
+      "default_view": "clipboard",
+      "views": {"clipboard-02": "clipboard-wide"},
+      "proof_times": [1.6, 6.5, 11.0, 16.5],
+      "phases": {
+        "clipboard-02": "Copied build  /  Placement preview",
+        "clipboard-03": "//rotate 90  /  Preview the turn",
+        "clipboard-04": "//flip  /  Preview the reflection",
+        "clipboard-05": "Esc  /  Restore the preview"
+      },
+      "description": "Enable clipboard preview, copy your build, and check its placement view. While typing //rotate or //flip, WorldEdit Selection Overlay previews the new orientation without changing the real clipboard. Escape restores the preview.\n\nClipboard preview is off by default. Requires compatible local WorldEdit in singleplayer. WorldEdit Selection Overlay 1.8.0 for Fabric and NeoForge.\n\n#Minecraft #WorldEdit #MinecraftMods",
+      "pinned_comment": "Rotate, inspect, or try the reflected version before committing the transform. Full walkthrough in the related video."
+    }
+  ]
+}
