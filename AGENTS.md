@@ -12,6 +12,17 @@ For code discovery, prefer:
 
 Fall back to text/file search for string literals, error messages, config values, and non-code files, or when graph tools return insufficient results.
 
+## Java, WorldEdit, And Server Integration
+
+Before changing WorldEdit integration, networking, server access, permissions,
+or task scheduling, read `docs/engineering/JAVA_MINECRAFT_KNOWLEDGE_BASE.md`.
+For the optional server bridge also read `SERVER_BRIDGE_DESIGN.md` and
+`SERVER_BRIDGE_VERIFICATION.md` in that directory. They distinguish inspected
+behavior from proposed architecture and unverified compatibility. Recheck the
+versioned primary sources in `SOURCES.md` when dependencies or assumptions change.
+Update the affected knowledge entry and verification evidence with the change;
+do not turn a research proposal into a compatibility claim without tests.
+
 Before implementing or changing the mod's GUI screens, read `UI_REDESIGN_RESEARCH.md`.
 It records the user's compact-settings/full-screen-inspector requirements,
 reference research, animation constraints, and cross-version verification gates.

@@ -65,6 +65,7 @@ and preparation without opening a game window.
 
 ## Documentation
 
+- [Java, Minecraft API, and server integration knowledge base](docs/engineering/JAVA_MINECRAFT_KNOWLEDGE_BASE.md)
 - [User-facing description](WEaddon_lightposition/MOD_DESCRIPTION.md)
 - [Changelog](WEaddon_lightposition/CHANGELOG.md)
 - [1.8.0 release notes](changelog-1.8.0.md)
