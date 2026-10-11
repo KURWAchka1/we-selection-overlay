@@ -3,6 +3,7 @@
 This is production tooling, not a Minecraft runtime feature. It never ships
 inside the mod JAR. Read `docs/video/PRODUCTION.md` and repository `AGENTS.md`
 before recording. Never run the fixture on the owner's normal desktop.
+Read `docs/video/VOICE_STYLE.md` before changing spoken copy or translated captions.
 
 ## Local voice and captions
 
@@ -85,7 +86,6 @@ when any of its footage is used. Never ship the map in the mod or Git repository
 ```powershell
 $env:WESO_VIDEO_FRAMES = '120'
 .\tools\test-ui-layout.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Showcase -CreditedLocation
-python tools/video/edit.py --capture-log build/desktop-tests/WesoTest-EXACT_RUN.log
 python tools/video/fetch-editor.py
 ```
 
@@ -99,6 +99,20 @@ before `-Showcase -CreditedLocation`, then remove that environment variable.
 It captures rulers, editing axes, the mixed-width rule, preset confirmation and
 the reset menu under `capture-celestia-pickups/`. Pass its successful log as
 `--pickups-log`, and the separate beauty log as `--beauty-log` to `edit.py`.
+
+Record the continuous closing separately, with enough frames for its complete
+voice-derived chapter. The current chapter is 18 seconds; this pass records 22:
+
+```powershell
+$env:WESO_VIDEO_FRAMES = '660'
+.\tools\test-ui-layout.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Showcase -Beauty -CreditedLocation -Closing
+python tools/video/edit.py --capture-log build/desktop-tests/WesoTest-CORE.log --beauty-log build/desktop-tests/WesoTest-BEAUTY.log --pickups-log build/desktop-tests/WesoTest-PICKUPS.log --closing-log build/desktop-tests/WesoTest-CLOSING.log
+```
+
+Closing footage goes to `capture-celestia-closing/`, leaving all earlier sources
+untouched. Continuous chapter offsets advance across cue boundaries. A short
+source is rejected instead of looping or holding it. `--opening` does not need
+the closing log. Full output fades only after the final voice/caption tail.
 
 The edit produces an English AAC master with EN/RU subtitle streams, an RU-burned
 review, chapter metadata, a source-hashed manifest and an actual contact sheet.

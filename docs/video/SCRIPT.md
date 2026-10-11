@@ -5,522 +5,445 @@ Timings are supplied by the generated audio timeline, not estimated here.
 
 ## Before you press Enter
 
-Shot: Completed Celestia townhouse at a locked three-quarter camera: original sandstone -> typed cyan replacement -> Escape restores the house. No Enter, no altered blocks.
+Shot: Original townhouse, six-second cyan replacement reveal, distinct Escape restoration, then the native beauty orbit. Keep the complete selection clear of text.
 
 **hook-01**
 
-What if you could see a WorldEdit command before you pressed Enter?
+Before you change this house, take a look at the result.
 
-А если увидеть результат WorldEdit\
-ещё до нажатия Enter?
+Прежде чем менять этот дом,\
+посмотрите на результат.
 
 **hook-02**
 
-Type a replacement. Take a moment to check the result before committing.
+I'm swapping sandstone for cyan terracotta. This is still just a preview.
 
-Введите замену. Рассмотрите результат\
-до выполнения команды.
+Меняю песчаник на бирюзовую керамику.\
+Пока только в предпросмотре.
 
 **hook-03**
 
-Press Escape. The original view returns, and your actual build stays untouched.
+Not the color you wanted? Press Escape, and you're back to the original.
 
-Нажмите Esc. Исходный вид вернётся,\
-а постройка останется нетронутой.
+Не тот цвет? Нажмите Esc,\
+и дом снова выглядит как прежде.
 
 **hook-04**
 
-This is WorldEdit Selection Overlay. Here's what it adds to your workflow.
+That's WorldEdit Selection Overlay. Let's look at the rest.
 
 Это WorldEdit Selection Overlay.\
-Покажу, как он помогает строить.
+Посмотрим, что ещё он умеет.
 
 ## See and measure your selection
 
-Shot: Native townhouse bounds and ruler; open O, disable internal grid; all five native CUI shapes in consistent city framing.
+Shot: Native outline and corners, ruler, grid toggle, all five CUI shapes, ruler camera, rendering settings and deselect.
 
 **selection-01**
 
-First, stop guessing where your selection ends.
+With a large selection, it's easy to lose track of a corner.
 
-Сначала: больше не нужно угадывать\
-границы выделения.
+В большом выделении легко\
+потерять из виду один из углов.
 
 **selection-02**
 
-The overlay shows its shape, corner points, and exact bounds in the world.
+Here, the outline shows exactly what's selected, with the corners marked.
 
-Форма, угловые точки и границы\
-видны прямо в мире.
+Здесь сразу видны\
+и границы выделения, и его углы.
 
 **selection-03**
 
-The dimension ruler gives you the size without opening chat.
+The ruler gives you the dimensions right where you're working.
 
-Линейка показывает размеры\
-без открытия чата.
+Размеры тоже перед глазами:\
+их показывает линейка.
 
 **selection-04**
 
-Hide the internal grid for a cleaner view. The boundary and ruler can stay.
+If the grid gets in the way, hide it and keep the outline and ruler.
 
-Уберите сетку для чистого вида.\
-Границы и линейку можно оставить.
+Если сетка мешает, уберите её.\
+Контур и линейку можно оставить.
 
 **selection-05**
 
-Also see polygons, ellipsoids, cylinders, and convex shapes.
+That works with polygons, ellipsoids, cylinders, and convex selections too.
 
-Не только кубоиды: многоугольники,\
+Есть и другие формы: многоугольники,\
 эллипсоиды, цилиндры и многогранники.
 
 **selection-06**
 
-Keep the ruler fixed, or let its labels follow your viewing angle.
+Ruler labels can follow your view, or stay in a fixed position.
 
-Закрепите линейку или разрешите ей\
-следовать за углом обзора.
+Подписи линейки могут следовать\
+за камерой или оставаться на месте.
 
 **selection-07**
 
-Choose blocky or smooth rendering, and optional cuboid diagonals.
+Prefer a smoother shape? Switch styles, or add diagonals to a cuboid.
 
-Выберите блочную или плавную форму\
-и диагонали кубоида.
+Выберите плавную или блочную форму,\
+а у кубоида можно добавить диагонали.
 
 **selection-08**
 
-Press N to deselect. Every key shown here can be rebound.
+And when you're done with a selection, N clears it.
 
-N сбрасывает выделение.\
-Все показанные клавиши настраиваются.
+Закончили с выделением?\
+Нажмите N, чтобы его сбросить.
 
 ## Inspect and isolate materials
 
-Shot: Native B screen, search, #solid and separate fountain #fluid selection; sandstone and brick checkboxes pinned; native fullbright isolation at the same camera; reset.
+Shot: B inspector, counts and filter, two selected materials, vanilla isolation, bucket icon and overlay-off view, reset. Captions use the empty header.
 
 **inspect-01**
 
-Press B to inspect what's actually inside your selection.
+Before replacing a material, press B to check what's in the selection.
 
-Нажмите B: посмотрите,\
-что находится внутри выделения.
+Перед заменой нажмите B:\
+посмотрите, что попало в выделение.
 
 **inspect-02**
 
-Materials are grouped and counted, including air.
+You get a count for each block type, including the empty space.
 
-Материалы сгруппированы\
-и подсчитаны, включая воздух.
+Здесь подсчитан каждый тип блоков,\
+включая воздух.
 
 **inspect-03**
 
-Search by name, sort the list, or filter solids and fluids.
+Search by name, change the sort order, or filter by solids and fluids.
 
-Ищите по названию, сортируйте\
-или фильтруйте блоки и жидкости.
+Ищите по названию, сортируйте список\
+или отберите блоки и жидкости.
 
 **inspect-04**
 
-Loaded and unloaded counts tell you what the client can currently inspect.
+The loaded counts show how much of the area the client has checked.
 
-Счётчики загруженных чанков показывают,\
-какая часть уже доступна клиенту.
+По счётчикам видно, какую часть\
+области клиент уже проверил.
 
 **inspect-05**
 
-Want to find a material hidden in the build? Select its checkbox.
+To look inside the build, tick the materials you want to see.
 
-Нужно найти скрытый материал?\
-Отметьте его в списке.
+Чтобы заглянуть внутрь постройки,\
+отметьте нужные материалы.
 
 **inspect-06**
 
-Other blocks in the region hide, revealing your chosen materials.
+Now the other blocks in the selection are hidden. Take a look inside.
 
-Другие блоки внутри выделения\
-скроются, а выбранные останутся.
+Остальные блоки в выделении скрылись.\
+Теперь можно рассмотреть всё внутри.
 
 **inspect-07**
 
-Select several types at once. Their rows stay at the top of the list.
+Choose several materials together. They stay pinned at the top of the list.
 
-Можно выбрать несколько типов.\
-Их строки останутся в начале списка.
+Можно выбрать несколько материалов.\
+Они останутся вверху списка.
 
 **inspect-08**
 
-Their textures stay bright and readable. Unselected fluids are hidden too.
+Their textures stay bright, even in the shaded parts of the build.
 
-Текстуры остаются хорошо видны.\
-Неотмеченные жидкости тоже скрываются.
+Текстуры хорошо видны\
+даже в затенённых частях постройки.
 
 **inspect-09**
 
-Bucket icons identify fluids. Isolation also works with the overlay switched off.
+Fluids have bucket icons. You can inspect with the usual overlay hidden, too.
 
 Жидкости отмечены вёдрами. Изоляция\
-работает и без обычного оверлея.
+работает и с выключенным оверлеем.
 
 **inspect-10**
 
-This is visibility only: hidden blocks still exist and still collide.
+Nothing's been removed. Reset the checkboxes to see the whole house again.
 
-Это только видимость: скрытые блоки\
-остаются на месте и мешают проходу.
-
-**inspect-11**
-
-Reset the checkboxes to bring the full build back.
-
-Сбросьте отметки,\
-чтобы снова видеть всю постройку.
+Сами блоки на месте. Сбросьте отметки,\
+чтобы снова увидеть весь дом.
 
 ## Live command preview
 
-Shot: Real native chat drafts: //replace smooth_sandstone cyan_terracotta, //replace smooth_sandstone 70%smooth_sandstone,30%cyan_terracotta, //set 1, //set air, //walls glass, //outline glass. Original -> draft -> Escape, supported syntax only.
+Shot: Native chat replacement, WorldEdit numeric parser, percentage mix, removal, walls and outline, Escape restoration. Show useful examples rather than reciting command support.
 
 **commands-01**
 
-Now, the new live command preview. Keep chat open and start typing.
+Let's try a few commands on this house.
 
-Теперь живой предпросмотр команд.\
-Откройте чат и начните ввод.
+Попробуем несколько команд\
+на этом доме.
 
 **commands-02**
 
-Replace sandstone with cyan terracotta, and check the change before committing.
+Here's the wall color again. Edit the command to compare another material.
 
-Замените песчаник бирюзовой керамикой\
-и оцените результат до выполнения.
+Снова меняем стены. Поправьте команду,\
+чтобы сравнить другой материал.
 
 **commands-03**
 
-Original blocks hide behind the draft, including stairs and partial models.
+You can use block states, or the numeric IDs you already use in WorldEdit.
 
-Исходные блоки скрываются за превью,\
-в том числе у ступеней и малых моделей.
+Можно указывать состояния блоков\
+и привычные числовые ID WorldEdit.
 
 **commands-04**
 
-Block states and legacy numeric IDs use WorldEdit's parser.
+For a mixed wall, add percentages to the pattern.
 
-Состояния блоков и числовые ID\
-разбираются средствами WorldEdit.
+Хотите смешать материалы?\
+Укажите их доли в процентах.
 
 **commands-05**
 
-Percentage mixtures show a stable sample while you edit the command.
+Here's a seventy-thirty mix. You can see how the materials work together.
 
-Смеси с процентами показывают\
-стабильный пример во время ввода.
+Здесь смесь 70 на 30. Уже видно,\
+как материалы сочетаются.
 
 **commands-06**
 
-WorldEdit rolls randomness again when you execute, so exact placements may differ.
+The exact random positions can change when you run it.
 
-При выполнении случайность считается\
-заново: размещение может отличаться.
+При выполнении случайные позиции\
+блоков могут отличаться.
 
 **commands-07**
 
-Removal markers help you check commands that would clear blocks.
+Thinking of clearing an area? The removal markers show what would go.
 
-Маркеры удаления помогают проверить\
-команды, которые убирают блоки.
+Собираетесь очистить область?\
+Маркеры покажут, что будет убрано.
 
 **commands-08**
 
-Also preview walls, outlines, hollowing, lines, curves, and flora.
+Or check a wall or outline before building it.
 
-Есть стены, оболочки, пустоты,\
-линии, кривые и растительность.
+Так же можно заранее посмотреть\
+на стены или каркас.
 
 **commands-09**
 
-Supported commands are previewed, not every WorldEdit operation.
+F8 switches previews on and off. Escape brings back the original view.
 
-Это превью поддерживаемых команд,\
-а не всех операций WorldEdit.
+F8 включает и выключает превью.\
+Esc возвращает исходный вид.
 
 **commands-10**
 
-It uses loaded selection chunks. Large cold previews still need calculation.
+When you're happy with it, Enter runs the command as usual.
 
-Превью работает в загруженных чанках.\
-Большие области требуют расчёта.
-
-**commands-11**
-
-Escape restores the original view. F eight toggles command preview.
-
-Esc возвращает исходный вид.\
-F8 переключает предпросмотр команд.
-
-**commands-12**
-
-Enter runs your normal WorldEdit command. Preview never edits the world.
-
-Enter выполняет обычную команду.\
-Сам предпросмотр не изменяет мир.
+Результат устраивает?\
+Enter выполнит команду как обычно.
 
 ## Resize and move the bounds
 
-Shot: Enable bounds editing in O; free corner grab; hold G radial; Resize face draft then G apply; Move grip, Y and wheel raise box while camera stays low; Esc cancels. Track world blocks unchanged.
+Shot: Enable editing, corner grab, G precise mode, radial Resize/Move, face draft/apply, cancel, Move Y wheel. Only the selection bounds change.
 
 **edit-01**
 
-Adjust a cuboid directly, without replacing both points with the axe.
+Sometimes it's the selection that needs changing, not the build.
 
-Кубоид можно править напрямую,\
-не переставляя обе точки топором.
+Иногда нужно поправить\
+само выделение, а не постройку.
 
 **edit-02**
 
-Enable selection editing in settings. It's off by default.
+Turn on selection editing, and you can grab a corner right in the world.
 
-Включите редактирование в настройках.\
-По умолчанию оно выключено.
+Включите редактирование выделения:\
+теперь можно просто потянуть за угол.
 
 **edit-03**
 
-Grab a corner freely, or tap G to enter the precise editor.
+Tap G for precise editing, or hold it briefly to choose a mode.
 
-Потяните угол напрямую\
-или нажмите G для точного режима.
+Нажмите G для точной правки.\
+Удержите, чтобы выбрать режим.
 
 **edit-04**
 
-Hold G briefly to choose Resize or Move in the radial menu.
+Choose Resize to pull a face, or Move to shift the whole selection.
 
-Удержите G для выбора\
-изменения размера или перемещения.
+Resize меняет размер,\
+а Move перемещает всё выделение.
 
 **edit-05**
 
-In Resize, drag a face. Releasing the mouse keeps your draft; tap G to apply it.
+Tap G again to apply your precise edit. Escape cancels the draft.
 
-В точном режиме потяните грань.\
-Отпустите мышь; G применит весь черновик.
+Повторное G применит точную правку.\
+Esc отменит черновик.
 
 **edit-06**
 
-Escape cancels. Free corner grabs apply when you release the mouse.
+For a quick corner adjustment, just drag and release.
 
-Esc отменяет правку. Свободный захват\
-угла применяется при отпускании мыши.
+Для быстрой правки угла\
+достаточно потянуть и отпустить.
 
 **edit-07**
 
-In Move, grab the boundary or center, choose X, Y, or Z, and use the wheel.
+To move along an axis, grab the selection, choose X, Y, or Z, and scroll.
 
-Для перемещения захватите границу или\
-центр, выберите X/Y/Z и крутите колесо.
+Захватите выделение, выберите X/Y/Z\
+и перемещайте его колёсиком.
 
 **edit-08**
 
-Use Y to move vertically through terrain, without flying through it.
+Y lets you lift or lower the box while you stay where you are.
 
-Ось Y двигает выделение по высоте:\
-игроку не нужно пролетать сквозь землю.
+Ось Y поднимает и опускает область.\
+Самому игроку двигаться не нужно.
 
 **edit-09**
 
-The axis indicator follows your camera. Walking never drags the selection.
+Only the bounds move. The actual blocks stay put.
 
-Индикатор осей следует за камерой.\
-Ходьба не тянет выделение за игроком.
-
-**edit-10**
-
-You're changing selection bounds, not moving the blocks inside them.
-
-Меняются границы выделения,\
-а не блоки внутри них.
+Меняются только границы выделения.\
+Блоки остаются на месте.
 
 ## Preview the copied build
 
-Shot: Enable clipboard, //copy the townhouse; use a separate placement near the river; type //rotate 90 then //flip east; Escape restores the transform at identical camera. Nothing is pasted.
+Shot: Enable Clipboard Preview; copied townhouse, draft rotate/flip, Escape restore; region command priority then return. No discussion of rejected or absent features.
 
 **clipboard-01**
 
-For copied builds, enable Clipboard Preview. This also starts off by default.
+Copying a build? Turn on Clipboard Preview in settings.
 
-Для копий включите Clipboard Preview.\
-По умолчанию он тоже выключен.
+Копируете постройку?\
+Включите Clipboard Preview.
 
 **clipboard-02**
 
-Copy with WorldEdit to see a textured ghost at the placement position.
+You'll see the copy at its placement position before you commit to it.
 
-Скопируйте постройку: её текстурное\
-превью появится в позиции вставки.
+Копия появится в позиции вставки.\
+Можно заранее оценить размещение.
 
 **clipboard-03**
 
-Type rotate or flip, and the ghost updates before Enter, including oriented blocks.
+Try rotate or flip in chat, and check which way the build will face.
 
-При вводе rotate или flip превью\
-меняется вместе с ориентацией блоков.
+Введите rotate или flip:\
+посмотрите, куда будет обращён дом.
 
 **clipboard-04**
 
-Escape brings back the original transform. Your real clipboard hasn't changed.
+Escape restores the orientation, leaving the real clipboard alone.
 
-Esc вернёт исходное преобразование.\
-Настоящий буфер ещё не изменён.
+Esc вернёт исходную ориентацию.\
+Настоящий буфер пока не изменён.
 
 **clipboard-05**
 
-Region-command drafts temporarily take over, then the copied preview returns.
+Try a command on the selection, then go back to the copied preview.
 
-Превью команды области имеет приоритет.\
-После него превью копии возвращается.
-
-**clipboard-06**
-
-Large copies have safeguards. Cut and paste have no live command preview.
-
-У больших копий есть ограничения.\
-Живого превью cut и paste нет.
+Можно проверить команду для области,\
+а затем вернуться к превью копии.
 
 ## Make it readable your way
 
-Shot: Native O compact menu and pencil; editor's 3D scene, preset/confirmation, color and opacity, per-element width, global width equal rule, reset, Ctrl+Z/Y; Glass/Studio/Classic.
+Shot: O pencil, native 3D palette, color/opacity/width, ruler/axes, preset confirmation, reset, common width, Ctrl Z/Y and all three menu themes.
 
 **palette-01**
 
-Press O for settings, then the pencil for the full-screen palette editor.
+O opens settings. The pencil takes you into the palette editor.
 
-O открывает настройки. Карандаш\
-ведёт в полноэкранный редактор палитры.
+O открывает настройки.\
+Карандаш ведёт в редактор палитры.
 
 **palette-02**
 
-Its three-dimensional preview shows how the selection will actually look.
+Turn the 3D preview around and check the colors from another angle.
 
-Трёхмерное превью показывает,\
-как будет выглядеть выделение.
+Поверните 3D-превью:\
+посмотрите на цвета с другой стороны.
 
 **palette-03**
 
-Set color, transparency, and line thickness separately for each element.
+Change each element's color, opacity, and line thickness.
 
-Настройте цвет, прозрачность\
-и толщину каждого элемента отдельно.
+Меняйте цвет, прозрачность\
+и толщину каждого элемента.
 
 **palette-04**
 
-The same controls cover rulers and the editing axes.
+That includes the ruler and the axes you use while editing.
 
-Так же настраиваются\
-линейка и оси редактирования.
+Это касается и линейки,\
+и осей редактирования.
 
 **palette-05**
 
-Try a preset, with confirmation before replacing your settings.
+Start with a preset if you'd rather choose a ready-made combination.
 
-Шаблоны дают готовую основу.\
-Замена настроек требует подтверждения.
+Или начните с шаблона:\
+в нём цвета и толщины уже подобраны.
 
 **palette-06**
 
-Reset one element, all colors, all thicknesses, or everything.
+Reset an element on its own, or use the menu to reset a whole group.
 
-Сбросьте один элемент, все цвета,\
-толщины или всё сразу.
+Сбросьте отдельный элемент\
+или целую группу настроек через меню.
 
 **palette-07**
 
-The global thickness slider is available when the element thicknesses match.
+When the line widths match, the top slider adjusts them together.
 
-Общий ползунок толщины доступен,\
-когда толщины элементов одинаковы.
+Если толщины одинаковы,\
+верхний ползунок изменит их все сразу.
 
 **palette-08**
 
-Undo with Control Z. Redo with Control Y. A slider drag counts as one step.
+Changed your mind? Control Z undoes the edit. Control Y brings it back.
 
-Ctrl+Z отменяет, Ctrl+Y возвращает.\
-Перетаскивание ползунка: один шаг.
+Передумали? Ctrl+Z отменит правку,\
+а Ctrl+Y вернёт её.
 
 **palette-09**
 
-Choose Glass, Studio, or Classic. Modern styles have optional blur and motion.
+And there's a choice of Glass, Studio, or Classic for the menus.
 
-Выберите Glass, Studio или Classic.\
-Размытие и анимации: у новых стилей.
+Для самих меню есть три стиля:\
+Glass, Studio и Classic.
 
-## Compatibility and download
+## Try it on your next build
 
-Shot: Clean final townhouse/river; small exact-version/loader callout outside mod UI; final real preview comparison. Mark this as a 1.8 preview build until a public download is verified.
+Shot: One continuous native closing orbit, no source restart at cue boundaries. Precise version/API requirements belong in the description, not a spoken patch-by-patch checklist.
 
 **install-01**
 
-Commands, clipboard and bounds editing need local singleplayer WorldEdit.
+This is a preview of version one point eight.
 
-Превью команд, буфер и правка границ\
-нуждаются в WorldEdit в одиночной игре.
+Вы посмотрели предпросмотр\
+версии 1.8.
 
 **install-02**
 
-Server CUI supplies selection shapes, but not clipboard contents.
+For the full toolset, use local WorldEdit. Servers can show CUI selections.
 
-На серверах CUI показывает выделение,\
-но не передаёт содержимое буфера.
+Все инструменты доступны с локальным WE.\
+На серверах CUI показывает выделение.
 
 **install-03**
 
-Choose the Fabric or Neo Forge jar for your loader. Don't install both.
+You'll find the Fabric and NeoForge downloads and version details below.
 
-Выберите JAR для своего загрузчика:\
-Fabric или NeoForge. Не оба сразу.
+Ссылки на Fabric и NeoForge\
+и список версий есть в описании.
 
 **install-04**
 
-Targets start with Minecraft 1.21.11.
+Try it on your next build, and see the change before you make it.
 
-Поддержка начинается\
-с Minecraft 1.21.11.
-
-**install-05**
-
-Also 26.1.x and 26.2. Not every 1.21 release.
-
-Также 26.1.x и 26.2,\
-но не все версии ветки 1.21.
-
-**install-06**
-
-For local WorldEdit on NeoForge, check the patch version.
-
-Для локального WorldEdit на NeoForge\
-проверьте версию игры.
-
-**install-07**
-
-On 26.1, use 26.1.2 or newer.
-
-В ветке 26.1 нужна\
-версия 26.1.2 или новее.
-
-**install-08**
-
-Use compatible WorldEdit, and Fabric API on Fabric. GUI scale two is recommended.
-
-Нужен совместимый WorldEdit,\
-а на Fabric ещё API. Масштаб UI: 2.
-
-**install-09**
-
-This is a preview of version one point eight. Check release availability below.
-
-Это предпросмотр версии 1.8.\
-Доступность релиза указана в описании.
-
-**install-10**
-
-See what you're changing. Then decide when to make it real.
-
-Увидьте, что собираетесь изменить.\
-И только потом применяйте.
+Попробуйте на следующей постройке:\
+посмотрите на изменения заранее.

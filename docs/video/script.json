@@ -3,125 +3,312 @@
   "title": "See WorldEdit Before You Press Enter | Selection Overlay 1.8",
   "fps": 30,
   "voice": "af_heart",
-  "speed": 1.0,
-  "minimum_slots": {"hook-02": 6.0, "hook-03": 6.0},
+  "speed": 1,
+  "minimum_slots": {
+    "hook-02": 6,
+    "hook-03": 6
+  },
+  "chapter_pause": 0.4,
+  "final_pause": 0.9,
   "chapters": [
     {
-      "id": "hook", "title": "Before you press Enter", "position": "bottom",
-      "shot": "Completed Celestia townhouse at a locked three-quarter camera: original sandstone -> typed cyan replacement -> Escape restores the house. No Enter, no altered blocks.",
+      "id": "hook",
+      "title": "Before you press Enter",
+      "position": "bottom",
+      "shot": "Original townhouse, six-second cyan replacement reveal, distinct Escape restoration, then the native beauty orbit. Keep the complete selection clear of text.",
       "cues": [
-        ["What if you could see a WorldEdit command before you pressed Enter?", "А если увидеть результат WorldEdit\nещё до нажатия Enter?"],
-        ["Type a replacement. Take a moment to check the result before committing.", "Введите замену. Рассмотрите результат\nдо выполнения команды."],
-        ["Press Escape. The original view returns, and your actual build stays untouched.", "Нажмите Esc. Исходный вид вернётся,\nа постройка останется нетронутой."],
-        ["This is WorldEdit Selection Overlay. Here's what it adds to your workflow.", "Это WorldEdit Selection Overlay.\nПокажу, как он помогает строить."]
+        [
+          "Before you change this house, take a look at the result.",
+          "Прежде чем менять этот дом,\nпосмотрите на результат."
+        ],
+        [
+          "I'm swapping sandstone for cyan terracotta. This is still just a preview.",
+          "Меняю песчаник на бирюзовую керамику.\nПока только в предпросмотре."
+        ],
+        [
+          "Not the color you wanted? Press Escape, and you're back to the original.",
+          "Не тот цвет? Нажмите Esc,\nи дом снова выглядит как прежде."
+        ],
+        [
+          "That's WorldEdit Selection Overlay. Let's look at the rest.",
+          "Это WorldEdit Selection Overlay.\nПосмотрим, что ещё он умеет."
+        ]
       ]
     },
     {
-      "id": "selection", "title": "See and measure your selection", "position": "bottom",
-      "shot": "Native townhouse bounds and ruler; open O, disable internal grid; all five native CUI shapes in consistent city framing.",
+      "id": "selection",
+      "title": "See and measure your selection",
+      "position": "bottom",
+      "shot": "Native outline and corners, ruler, grid toggle, all five CUI shapes, ruler camera, rendering settings and deselect.",
       "cues": [
-        ["First, stop guessing where your selection ends.", "Сначала: больше не нужно угадывать\nграницы выделения."],
-        ["The overlay shows its shape, corner points, and exact bounds in the world.", "Форма, угловые точки и границы\nвидны прямо в мире."],
-        ["The dimension ruler gives you the size without opening chat.", "Линейка показывает размеры\nбез открытия чата."],
-        ["Hide the internal grid for a cleaner view. The boundary and ruler can stay.", "Уберите сетку для чистого вида.\nГраницы и линейку можно оставить."],
-        ["Also see polygons, ellipsoids, cylinders, and convex shapes.", "Не только кубоиды: многоугольники,\nэллипсоиды, цилиндры и многогранники."],
-        ["Keep the ruler fixed, or let its labels follow your viewing angle.", "Закрепите линейку или разрешите ей\nследовать за углом обзора."],
-        ["Choose blocky or smooth rendering, and optional cuboid diagonals.", "Выберите блочную или плавную форму\nи диагонали кубоида."],
-        ["Press N to deselect. Every key shown here can be rebound.", "N сбрасывает выделение.\nВсе показанные клавиши настраиваются."]
+        [
+          "With a large selection, it's easy to lose track of a corner.",
+          "В большом выделении легко\nпотерять из виду один из углов."
+        ],
+        [
+          "Here, the outline shows exactly what's selected, with the corners marked.",
+          "Здесь сразу видны\nи границы выделения, и его углы."
+        ],
+        [
+          "The ruler gives you the dimensions right where you're working.",
+          "Размеры тоже перед глазами:\nих показывает линейка."
+        ],
+        [
+          "If the grid gets in the way, hide it and keep the outline and ruler.",
+          "Если сетка мешает, уберите её.\nКонтур и линейку можно оставить."
+        ],
+        [
+          "That works with polygons, ellipsoids, cylinders, and convex selections too.",
+          "Есть и другие формы: многоугольники,\nэллипсоиды, цилиндры и многогранники."
+        ],
+        [
+          "Ruler labels can follow your view, or stay in a fixed position.",
+          "Подписи линейки могут следовать\nза камерой или оставаться на месте."
+        ],
+        [
+          "Prefer a smoother shape? Switch styles, or add diagonals to a cuboid.",
+          "Выберите плавную или блочную форму,\nа у кубоида можно добавить диагонали."
+        ],
+        [
+          "And when you're done with a selection, N clears it.",
+          "Закончили с выделением?\nНажмите N, чтобы его сбросить."
+        ]
       ]
     },
     {
-      "id": "inspect", "title": "Inspect and isolate materials", "position": "header",
-      "shot": "Native B screen, search, #solid and separate fountain #fluid selection; sandstone and brick checkboxes pinned; native fullbright isolation at the same camera; reset.",
+      "id": "inspect",
+      "title": "Inspect and isolate materials",
+      "position": "header",
+      "shot": "B inspector, counts and filter, two selected materials, vanilla isolation, bucket icon and overlay-off view, reset. Captions use the empty header.",
       "cues": [
-        ["Press B to inspect what's actually inside your selection.", "Нажмите B: посмотрите,\nчто находится внутри выделения."],
-        ["Materials are grouped and counted, including air.", "Материалы сгруппированы\nи подсчитаны, включая воздух."],
-        ["Search by name, sort the list, or filter solids and fluids.", "Ищите по названию, сортируйте\nили фильтруйте блоки и жидкости."],
-        ["Loaded and unloaded counts tell you what the client can currently inspect.", "Счётчики загруженных чанков показывают,\nкакая часть уже доступна клиенту."],
-        ["Want to find a material hidden in the build? Select its checkbox.", "Нужно найти скрытый материал?\nОтметьте его в списке."],
-        ["Other blocks in the region hide, revealing your chosen materials.", "Другие блоки внутри выделения\nскроются, а выбранные останутся."],
-        ["Select several types at once. Their rows stay at the top of the list.", "Можно выбрать несколько типов.\nИх строки останутся в начале списка."],
-        ["Their textures stay bright and readable. Unselected fluids are hidden too.", "Текстуры остаются хорошо видны.\nНеотмеченные жидкости тоже скрываются."],
-        ["Bucket icons identify fluids. Isolation also works with the overlay switched off.", "Жидкости отмечены вёдрами. Изоляция\nработает и без обычного оверлея."],
-        ["This is visibility only: hidden blocks still exist and still collide.", "Это только видимость: скрытые блоки\nостаются на месте и мешают проходу."],
-        ["Reset the checkboxes to bring the full build back.", "Сбросьте отметки,\nчтобы снова видеть всю постройку."]
+        [
+          "Before replacing a material, press B to check what's in the selection.",
+          "Перед заменой нажмите B:\nпосмотрите, что попало в выделение."
+        ],
+        [
+          "You get a count for each block type, including the empty space.",
+          "Здесь подсчитан каждый тип блоков,\nвключая воздух."
+        ],
+        [
+          "Search by name, change the sort order, or filter by solids and fluids.",
+          "Ищите по названию, сортируйте список\nили отберите блоки и жидкости."
+        ],
+        [
+          "The loaded counts show how much of the area the client has checked.",
+          "По счётчикам видно, какую часть\nобласти клиент уже проверил."
+        ],
+        [
+          "To look inside the build, tick the materials you want to see.",
+          "Чтобы заглянуть внутрь постройки,\nотметьте нужные материалы."
+        ],
+        [
+          "Now the other blocks in the selection are hidden. Take a look inside.",
+          "Остальные блоки в выделении скрылись.\nТеперь можно рассмотреть всё внутри."
+        ],
+        [
+          "Choose several materials together. They stay pinned at the top of the list.",
+          "Можно выбрать несколько материалов.\nОни останутся вверху списка."
+        ],
+        [
+          "Their textures stay bright, even in the shaded parts of the build.",
+          "Текстуры хорошо видны\nдаже в затенённых частях постройки."
+        ],
+        [
+          "Fluids have bucket icons. You can inspect with the usual overlay hidden, too.",
+          "Жидкости отмечены вёдрами. Изоляция\nработает и с выключенным оверлеем."
+        ],
+        [
+          "Nothing's been removed. Reset the checkboxes to see the whole house again.",
+          "Сами блоки на месте. Сбросьте отметки,\nчтобы снова увидеть весь дом."
+        ]
       ]
     },
     {
-      "id": "commands", "title": "Live command preview", "position": "bottom",
-      "shot": "Real native chat drafts: //replace smooth_sandstone cyan_terracotta, //replace smooth_sandstone 70%smooth_sandstone,30%cyan_terracotta, //set 1, //set air, //walls glass, //outline glass. Original -> draft -> Escape, supported syntax only.",
+      "id": "commands",
+      "title": "Live command preview",
+      "position": "bottom",
+      "shot": "Native chat replacement, WorldEdit numeric parser, percentage mix, removal, walls and outline, Escape restoration. Show useful examples rather than reciting command support.",
       "cues": [
-        ["Now, the new live command preview. Keep chat open and start typing.", "Теперь живой предпросмотр команд.\nОткройте чат и начните ввод."],
-        ["Replace sandstone with cyan terracotta, and check the change before committing.", "Замените песчаник бирюзовой керамикой\nи оцените результат до выполнения."],
-        ["Original blocks hide behind the draft, including stairs and partial models.", "Исходные блоки скрываются за превью,\nв том числе у ступеней и малых моделей."],
-        ["Block states and legacy numeric IDs use WorldEdit's parser.", "Состояния блоков и числовые ID\nразбираются средствами WorldEdit."],
-        ["Percentage mixtures show a stable sample while you edit the command.", "Смеси с процентами показывают\nстабильный пример во время ввода."],
-        ["WorldEdit rolls randomness again when you execute, so exact placements may differ.", "При выполнении случайность считается\nзаново: размещение может отличаться."],
-        ["Removal markers help you check commands that would clear blocks.", "Маркеры удаления помогают проверить\nкоманды, которые убирают блоки."],
-        ["Also preview walls, outlines, hollowing, lines, curves, and flora.", "Есть стены, оболочки, пустоты,\nлинии, кривые и растительность."],
-        ["Supported commands are previewed, not every WorldEdit operation.", "Это превью поддерживаемых команд,\nа не всех операций WorldEdit."],
-        ["It uses loaded selection chunks. Large cold previews still need calculation.", "Превью работает в загруженных чанках.\nБольшие области требуют расчёта."],
-        ["Escape restores the original view. F eight toggles command preview.", "Esc возвращает исходный вид.\nF8 переключает предпросмотр команд."],
-        ["Enter runs your normal WorldEdit command. Preview never edits the world.", "Enter выполняет обычную команду.\nСам предпросмотр не изменяет мир."]
+        [
+          "Let's try a few commands on this house.",
+          "Попробуем несколько команд\nна этом доме."
+        ],
+        [
+          "Here's the wall color again. Edit the command to compare another material.",
+          "Снова меняем стены. Поправьте команду,\nчтобы сравнить другой материал."
+        ],
+        [
+          "You can use block states, or the numeric IDs you already use in WorldEdit.",
+          "Можно указывать состояния блоков\nи привычные числовые ID WorldEdit."
+        ],
+        [
+          "For a mixed wall, add percentages to the pattern.",
+          "Хотите смешать материалы?\nУкажите их доли в процентах."
+        ],
+        [
+          "Here's a seventy-thirty mix. You can see how the materials work together.",
+          "Здесь смесь 70 на 30. Уже видно,\nкак материалы сочетаются."
+        ],
+        [
+          "The exact random positions can change when you run it.",
+          "При выполнении случайные позиции\nблоков могут отличаться."
+        ],
+        [
+          "Thinking of clearing an area? The removal markers show what would go.",
+          "Собираетесь очистить область?\nМаркеры покажут, что будет убрано."
+        ],
+        [
+          "Or check a wall or outline before building it.",
+          "Так же можно заранее посмотреть\nна стены или каркас."
+        ],
+        [
+          "F8 switches previews on and off. Escape brings back the original view.",
+          "F8 включает и выключает превью.\nEsc возвращает исходный вид."
+        ],
+        [
+          "When you're happy with it, Enter runs the command as usual.",
+          "Результат устраивает?\nEnter выполнит команду как обычно."
+        ]
       ]
     },
     {
-      "id": "edit", "title": "Resize and move the bounds", "position": "top",
-      "shot": "Enable bounds editing in O; free corner grab; hold G radial; Resize face draft then G apply; Move grip, Y and wheel raise box while camera stays low; Esc cancels. Track world blocks unchanged.",
+      "id": "edit",
+      "title": "Resize and move the bounds",
+      "position": "top",
+      "shot": "Enable editing, corner grab, G precise mode, radial Resize/Move, face draft/apply, cancel, Move Y wheel. Only the selection bounds change.",
       "cues": [
-        ["Adjust a cuboid directly, without replacing both points with the axe.", "Кубоид можно править напрямую,\nне переставляя обе точки топором."],
-        ["Enable selection editing in settings. It's off by default.", "Включите редактирование в настройках.\nПо умолчанию оно выключено."],
-        ["Grab a corner freely, or tap G to enter the precise editor.", "Потяните угол напрямую\nили нажмите G для точного режима."],
-        ["Hold G briefly to choose Resize or Move in the radial menu.", "Удержите G для выбора\nизменения размера или перемещения."],
-        ["In Resize, drag a face. Releasing the mouse keeps your draft; tap G to apply it.", "В точном режиме потяните грань.\nОтпустите мышь; G применит весь черновик."],
-        ["Escape cancels. Free corner grabs apply when you release the mouse.", "Esc отменяет правку. Свободный захват\nугла применяется при отпускании мыши."],
-        ["In Move, grab the boundary or center, choose X, Y, or Z, and use the wheel.", "Для перемещения захватите границу\nили центр, выберите X/Y/Z и крутите колесо."],
-        ["Use Y to move vertically through terrain, without flying through it.", "Ось Y двигает выделение по высоте:\nигроку не нужно пролетать сквозь землю."],
-        ["The axis indicator follows your camera. Walking never drags the selection.", "Индикатор осей следует за камерой.\nХодьба не тянет выделение за игроком."],
-        ["You're changing selection bounds, not moving the blocks inside them.", "Меняются границы выделения,\nа не блоки внутри них."]
+        [
+          "Sometimes it's the selection that needs changing, not the build.",
+          "Иногда нужно поправить\nсамо выделение, а не постройку."
+        ],
+        [
+          "Turn on selection editing, and you can grab a corner right in the world.",
+          "Включите редактирование выделения:\nтеперь можно просто потянуть за угол."
+        ],
+        [
+          "Tap G for precise editing, or hold it briefly to choose a mode.",
+          "Нажмите G для точной правки.\nУдержите, чтобы выбрать режим."
+        ],
+        [
+          "Choose Resize to pull a face, or Move to shift the whole selection.",
+          "Resize меняет размер,\nа Move перемещает всё выделение."
+        ],
+        [
+          "Tap G again to apply your precise edit. Escape cancels the draft.",
+          "Повторное G применит точную правку.\nEsc отменит черновик."
+        ],
+        [
+          "For a quick corner adjustment, just drag and release.",
+          "Для быстрой правки угла\nдостаточно потянуть и отпустить."
+        ],
+        [
+          "To move along an axis, grab the selection, choose X, Y, or Z, and scroll.",
+          "Захватите выделение, выберите X/Y/Z\nи перемещайте его колёсиком."
+        ],
+        [
+          "Y lets you lift or lower the box while you stay where you are.",
+          "Ось Y поднимает и опускает область.\nСамому игроку двигаться не нужно."
+        ],
+        [
+          "Only the bounds move. The actual blocks stay put.",
+          "Меняются только границы выделения.\nБлоки остаются на месте."
+        ]
       ]
     },
     {
-      "id": "clipboard", "title": "Preview the copied build", "position": "bottom",
-      "shot": "Enable clipboard, //copy the townhouse; use a separate placement near the river; type //rotate 90 then //flip east; Escape restores the transform at identical camera. Nothing is pasted.",
+      "id": "clipboard",
+      "title": "Preview the copied build",
+      "position": "bottom",
+      "shot": "Enable Clipboard Preview; copied townhouse, draft rotate/flip, Escape restore; region command priority then return. No discussion of rejected or absent features.",
       "cues": [
-        ["For copied builds, enable Clipboard Preview. This also starts off by default.", "Для копий включите Clipboard Preview.\nПо умолчанию он тоже выключен."],
-        ["Copy with WorldEdit to see a textured ghost at the placement position.", "Скопируйте постройку: её текстурное\nпревью появится в позиции вставки."],
-        ["Type rotate or flip, and the ghost updates before Enter, including oriented blocks.", "При вводе rotate или flip превью\nменяется вместе с ориентацией блоков."],
-        ["Escape brings back the original transform. Your real clipboard hasn't changed.", "Esc вернёт исходное преобразование.\nНастоящий буфер ещё не изменён."],
-        ["Region-command drafts temporarily take over, then the copied preview returns.", "Превью команды области имеет приоритет.\nПосле него превью копии возвращается."],
-        ["Large copies have safeguards. Cut and paste have no live command preview.", "У больших копий есть ограничения.\nЖивого превью cut и paste нет."]
+        [
+          "Copying a build? Turn on Clipboard Preview in settings.",
+          "Копируете постройку?\nВключите Clipboard Preview."
+        ],
+        [
+          "You'll see the copy at its placement position before you commit to it.",
+          "Копия появится в позиции вставки.\nМожно заранее оценить размещение."
+        ],
+        [
+          "Try rotate or flip in chat, and check which way the build will face.",
+          "Введите rotate или flip:\nпосмотрите, куда будет обращён дом."
+        ],
+        [
+          "Escape restores the orientation, leaving the real clipboard alone.",
+          "Esc вернёт исходную ориентацию.\nНастоящий буфер пока не изменён."
+        ],
+        [
+          "Try a command on the selection, then go back to the copied preview.",
+          "Можно проверить команду для области,\nа затем вернуться к превью копии."
+        ]
       ]
     },
     {
-      "id": "palette", "title": "Make it readable your way", "position": "bottom",
-      "shot": "Native O compact menu and pencil; editor's 3D scene, preset/confirmation, color and opacity, per-element width, global width equal rule, reset, Ctrl+Z/Y; Glass/Studio/Classic.",
+      "id": "palette",
+      "title": "Make it readable your way",
+      "position": "bottom",
+      "shot": "O pencil, native 3D palette, color/opacity/width, ruler/axes, preset confirmation, reset, common width, Ctrl Z/Y and all three menu themes.",
       "cues": [
-        ["Press O for settings, then the pencil for the full-screen palette editor.", "O открывает настройки. Карандаш\nведёт в полноэкранный редактор палитры."],
-        ["Its three-dimensional preview shows how the selection will actually look.", "Трёхмерное превью показывает,\nкак будет выглядеть выделение."],
-        ["Set color, transparency, and line thickness separately for each element.", "Настройте цвет, прозрачность\nи толщину каждого элемента отдельно."],
-        ["The same controls cover rulers and the editing axes.", "Так же настраиваются\nлинейка и оси редактирования."],
-        ["Try a preset, with confirmation before replacing your settings.", "Шаблоны дают готовую основу.\nЗамена настроек требует подтверждения."],
-        ["Reset one element, all colors, all thicknesses, or everything.", "Сбросьте один элемент, все цвета,\nтолщины или всё сразу."],
-        ["The global thickness slider is available when the element thicknesses match.", "Общий ползунок толщины доступен,\nкогда толщины элементов одинаковы."],
-        ["Undo with Control Z. Redo with Control Y. A slider drag counts as one step.", "Ctrl+Z отменяет, Ctrl+Y возвращает.\nПеретаскивание ползунка: один шаг."],
-        ["Choose Glass, Studio, or Classic. Modern styles have optional blur and motion.", "Выберите Glass, Studio или Classic.\nРазмытие и анимации: у новых стилей."]
+        [
+          "O opens settings. The pencil takes you into the palette editor.",
+          "O открывает настройки.\nКарандаш ведёт в редактор палитры."
+        ],
+        [
+          "Turn the 3D preview around and check the colors from another angle.",
+          "Поверните 3D-превью:\nпосмотрите на цвета с другой стороны."
+        ],
+        [
+          "Change each element's color, opacity, and line thickness.",
+          "Меняйте цвет, прозрачность\nи толщину каждого элемента."
+        ],
+        [
+          "That includes the ruler and the axes you use while editing.",
+          "Это касается и линейки,\nи осей редактирования."
+        ],
+        [
+          "Start with a preset if you'd rather choose a ready-made combination.",
+          "Или начните с шаблона:\nв нём цвета и толщины уже подобраны."
+        ],
+        [
+          "Reset an element on its own, or use the menu to reset a whole group.",
+          "Сбросьте отдельный элемент\nили целую группу настроек через меню."
+        ],
+        [
+          "When the line widths match, the top slider adjusts them together.",
+          "Если толщины одинаковы,\nверхний ползунок изменит их все сразу."
+        ],
+        [
+          "Changed your mind? Control Z undoes the edit. Control Y brings it back.",
+          "Передумали? Ctrl+Z отменит правку,\nа Ctrl+Y вернёт её."
+        ],
+        [
+          "And there's a choice of Glass, Studio, or Classic for the menus.",
+          "Для самих меню есть три стиля:\nGlass, Studio и Classic."
+        ]
       ]
     },
     {
-      "id": "install", "title": "Compatibility and download", "position": "bottom",
-      "shot": "Clean final townhouse/river; small exact-version/loader callout outside mod UI; final real preview comparison. Mark this as a 1.8 preview build until a public download is verified.",
+      "id": "install",
+      "title": "Try it on your next build",
+      "position": "bottom",
+      "shot": "One continuous native closing orbit, no source restart at cue boundaries. Precise version/API requirements belong in the description, not a spoken patch-by-patch checklist.",
       "cues": [
-        ["Commands, clipboard and bounds editing need local singleplayer WorldEdit.", "Превью команд, буфер и правка границ\nнуждаются в WorldEdit в одиночной игре."],
-        ["Server CUI supplies selection shapes, but not clipboard contents.", "На серверах CUI показывает выделение,\nно не передаёт содержимое буфера."],
-        ["Choose the Fabric or Neo Forge jar for your loader. Don't install both.", "Выберите JAR для своего загрузчика:\nFabric или NeoForge. Не оба сразу."],
-        ["Targets start with Minecraft 1.21.11.", "Поддержка начинается\nс Minecraft 1.21.11."],
-        ["Also 26.1.x and 26.2. Not every 1.21 release.", "Также 26.1.x и 26.2,\nно не все версии ветки 1.21."],
-        ["For local WorldEdit on NeoForge, check the patch version.", "Для локального WorldEdit на NeoForge\nпроверьте версию игры."],
-        ["On 26.1, use 26.1.2 or newer.", "В ветке 26.1 нужна\nверсия 26.1.2 или новее."],
-        ["Use compatible WorldEdit, and Fabric API on Fabric. GUI scale two is recommended.", "Нужен совместимый WorldEdit,\nа на Fabric ещё API. Масштаб UI: 2."],
-        ["This is a preview of version one point eight. Check release availability below.", "Это предпросмотр версии 1.8.\nДоступность релиза указана в описании."],
-        ["See what you're changing. Then decide when to make it real.", "Увидьте, что собираетесь изменить.\nИ только потом применяйте."]
+        [
+          "This is a preview of version one point eight.",
+          "Вы посмотрели предпросмотр\nверсии 1.8."
+        ],
+        [
+          "For the full toolset, use local WorldEdit. Servers can show CUI selections.",
+          "Все инструменты доступны с локальным WE.\nНа серверах CUI показывает выделение."
+        ],
+        [
+          "You'll find the Fabric and NeoForge downloads and version details below.",
+          "Ссылки на Fabric и NeoForge\nи список версий есть в описании."
+        ],
+        [
+          "Try it on your next build, and see the change before you make it.",
+          "Попробуйте на следующей постройке:\nпосмотрите на изменения заранее."
+        ]
       ]
     }
   ]

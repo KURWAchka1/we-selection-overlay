@@ -6,6 +6,11 @@ does not establish mod compatibility or performance; repository tests do that.
 
 ## Direction
 
+For the 2026-10-11 spoken-script revision, use `VOICE_STYLE.md`: primary linguistic
+research, professional read-for-the-ear guidance, Russian caption treatment and
+the continuous-ending decision. It supersedes the earlier exhaustive spoken
+installation checklist, not the factual compatibility requirements.
+
 Make a builder's product demonstration, not a trailer of unrelated cinematic
 Minecraft shots. Show a useful result immediately, then show the real action
 that produces it. English narration, professionally readable Russian captions,

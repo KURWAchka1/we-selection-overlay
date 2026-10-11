@@ -7,10 +7,33 @@ import tempfile
 import unittest
 
 from prepare import ROOT, spoken, timestamp, wrap_caption
-from edit import decoded_frames, frame_count, imageio_ffmpeg, segment_filters, split_frames, weighted_frames
+from edit import continuous_trim, decoded_frames, frame_count, imageio_ffmpeg, segment_filters, split_frames, weighted_frames
 
 
 class PipelineChecks(unittest.TestCase):
+    def test_closing_is_one_continuous_shot(self):
+        plan = json.loads((ROOT / "docs/video/edit-plan.json").read_text(encoding="utf-8"))
+        source = plan['continuous_chapters']['install']['source']
+        self.assertEqual(source, '53-closing-orbit')
+        for cue, shots in plan['cues'].items():
+            if cue.startswith('install-'):
+                self.assertEqual(shots, [source])
+        offset = 0
+        for length in (100,170,140,130):
+            self.assertEqual(continuous_trim(offset / 30, length, 900), offset)
+            offset += length
+        for seconds, length in ((29,31),(-1,30),(.01,30)):
+            with self.assertRaises(ValueError): continuous_trim(seconds,length,900)
+
+    def test_narration_has_no_development_or_absent_feature_checklist(self):
+        script = json.loads((ROOT / "docs/video/script.json").read_text(encoding="utf-8"))
+        text = ' '.join(pair[0] for chapter in script['chapters'] for pair in chapter['cues']).lower()
+        for phrase in ('cut and paste', 'no live command preview', 'cold previews', 'not every',
+                       '26.1.2', 'fixed a bug', 'walking never drags', 'stairs and partial'):
+            self.assertNotIn(phrase, text)
+        self.assertIn('random positions can change', text)
+        self.assertIn('local worldedit', text)
+
     def test_padding_produces_the_requested_decoded_frames(self):
         with tempfile.TemporaryDirectory() as folder:
             movie = Path(folder) / "timing.mp4"
@@ -78,6 +101,7 @@ class PipelineChecks(unittest.TestCase):
         self.assertIn("twenty six point one point two", text)
         self.assertIn("one point twenty one point eleven", text)
         self.assertNotIn("26.1", text)
+        self.assertEqual(spoken('F8 and CUI'), 'F eight and see you eye')
 
     def test_generated_timeline_if_present(self):
         path = ROOT / "build/video/1.8.0/timeline.json"
@@ -94,6 +118,9 @@ class PipelineChecks(unittest.TestCase):
             self.assertLessEqual(cue["end"] - cue["start"], 7)
             last = cue["slot_end"]
         self.assertAlmostEqual(last, timeline["duration"], places=6)
+        plan = json.loads((ROOT / "docs/video/edit-plan.json").read_text(encoding="utf-8"))
+        fade = plan['continuous_chapters']['install']['fade_out']
+        self.assertGreaterEqual(last - fade, timeline['cues'][-1]['end'])
 
 
 if __name__ == "__main__":

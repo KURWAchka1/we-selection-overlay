@@ -80,6 +80,7 @@ and preparation without opening a game window.
 - [Full-mod video production brief](docs/video/PRODUCTION.md)
 - [Video research and decisions](docs/video/RESEARCH.md)
 - [English script with Russian translation](docs/video/SCRIPT.md)
+- [Conversational narration and closing treatment](docs/video/VOICE_STYLE.md)
 
 ## License
 

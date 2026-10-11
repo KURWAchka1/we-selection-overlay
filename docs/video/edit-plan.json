@@ -1,82 +1,232 @@
 {
   "source_directory": "capture-celestia",
-  "pickup_sources": ["46-ruler-palette", "47-editing-palette", "48-element-thickness", "49-global-thickness", "50-preset-confirm", "51-preset-applied", "52-reset-menu"],
-  "notes": "Native offline sampled footage, not a latency/FPS benchmark. Original cadence is retained; short source takes hold their final frame rather than fabricating motion. All review text stays outside native controls.",
+  "pickup_sources": [
+    "46-ruler-palette",
+    "47-editing-palette",
+    "48-element-thickness",
+    "49-global-thickness",
+    "50-preset-confirm",
+    "51-preset-applied",
+    "52-reset-menu"
+  ],
+  "notes": "Native offline sampled footage, not a latency/FPS benchmark. Short explanatory takes may hold their final frame; the closing orbit is continuous, without restarts or holds. Text stays outside native controls and the selected object.",
   "cues": {
-    "hook-01": ["01-house-original"],
-    "hook-02": ["02-replace-preview"],
-    "hook-03": ["02-replace-preview", "03-replace-cancelled"],
-    "hook-04": ["03-replace-cancelled"],
-    "selection-01": ["01-house-original"],
-    "selection-02": ["01-house-original"],
-    "selection-03": ["05-grid-ruler"],
-    "selection-04": ["06-boundary-ruler"],
-    "selection-05": ["08-shape-polygon", "08-shape-ellipsoid", "08-shape-cylinder", "08-shape-convex"],
-    "selection-06": ["07-ruler-camera"],
-    "selection-07": ["09-render-settings"],
-    "selection-08": ["10-deselected", "01-house-original"],
-    "inspect-01": ["11-inspector"],
-    "inspect-02": ["11-inspector"],
-    "inspect-03": ["12-inspector-filter"],
-    "inspect-04": ["11-inspector"],
-    "inspect-05": ["13-inspector-selected"],
-    "inspect-06": ["14-isolated-materials"],
-    "inspect-07": ["13-inspector-selected"],
-    "inspect-08": ["14-isolated-materials"],
-    "inspect-09": ["17-fluid-inspector", "15-isolation-overlay-off"],
-    "inspect-10": ["14-isolated-materials"],
-    "inspect-11": ["16-isolation-reset"],
-    "commands-01": ["02-replace-preview"],
-    "commands-02": ["02-replace-preview"],
-    "commands-03": ["18-partial-models"],
-    "commands-04": ["19-numeric-id"],
-    "commands-05": ["20-random-mixture"],
-    "commands-06": ["20-random-mixture"],
-    "commands-07": ["21-removal"],
-    "commands-08": ["22-walls", "23-outline"],
-    "commands-09": ["09-render-settings"],
-    "commands-10": ["01-house-original"],
-    "commands-11": ["03-replace-cancelled"],
-    "commands-12": ["01-house-original"],
-    "edit-01": ["24-edit-settings"],
-    "edit-02": ["24-edit-settings"],
-    "edit-03": ["26-resize-face"],
-    "edit-04": ["25-radial-resize", "29-radial-move"],
-    "edit-05": ["26-resize-face", "27-resize-held", "28-resize-applied"],
-    "edit-06": ["32-edit-cancelled"],
-    "edit-07": ["30-move-y-wheel"],
-    "edit-08": ["30-move-y-wheel"],
-    "edit-09": ["31-move-held"],
-    "edit-10": ["32-edit-cancelled"],
-    "clipboard-01": ["39-settings"],
-    "clipboard-02": ["33-clipboard-original"],
-    "clipboard-03": ["34-clipboard-rotate", "35-clipboard-flip"],
-    "clipboard-04": ["36-clipboard-restored"],
-    "clipboard-05": ["37-preview-priority", "38-clipboard-returned"],
-    "clipboard-06": ["38-clipboard-returned"],
-    "palette-01": ["39-settings", "40-palette-editor"],
-    "palette-02": ["40-palette-editor"],
-    "palette-03": ["41-palette-color", "48-element-thickness"],
-    "palette-04": ["46-ruler-palette", "47-editing-palette"],
-    "palette-05": ["44-presets", "50-preset-confirm", "51-preset-applied"],
-    "palette-06": ["52-reset-menu"],
-    "palette-07": ["48-element-thickness", "49-global-thickness"],
-    "palette-08": ["42-palette-undo", "43-palette-redo"],
-    "palette-09": ["44a-appearance", "44b-studio", "44c-classic"],
-    "install-01": ["45-final-house"],
-    "install-02": ["01-house-original"],
-    "install-03": ["45-final-house"],
-    "install-04": ["45-final-house"],
-    "install-05": ["45-final-house"],
-    "install-06": ["45-final-house"],
-    "install-07": ["45-final-house"],
-    "install-08": ["39-settings"],
-    "install-09": ["45-final-house"],
-    "install-10": ["01-house-original", "02-replace-preview", "03-replace-cancelled"]
+    "hook-01": [
+      "01-house-original"
+    ],
+    "hook-02": [
+      "02-replace-preview"
+    ],
+    "hook-03": [
+      "02-replace-preview",
+      "03-replace-cancelled"
+    ],
+    "hook-04": [
+      "03-replace-cancelled"
+    ],
+    "selection-01": [
+      "01-house-original"
+    ],
+    "selection-02": [
+      "01-house-original"
+    ],
+    "selection-03": [
+      "05-grid-ruler"
+    ],
+    "selection-04": [
+      "06-boundary-ruler"
+    ],
+    "selection-05": [
+      "08-shape-polygon",
+      "08-shape-ellipsoid",
+      "08-shape-cylinder",
+      "08-shape-convex"
+    ],
+    "selection-06": [
+      "07-ruler-camera"
+    ],
+    "selection-07": [
+      "09-render-settings"
+    ],
+    "selection-08": [
+      "10-deselected",
+      "01-house-original"
+    ],
+    "inspect-01": [
+      "11-inspector"
+    ],
+    "inspect-02": [
+      "11-inspector"
+    ],
+    "inspect-03": [
+      "12-inspector-filter"
+    ],
+    "inspect-04": [
+      "11-inspector"
+    ],
+    "inspect-05": [
+      "13-inspector-selected"
+    ],
+    "inspect-06": [
+      "14-isolated-materials"
+    ],
+    "inspect-07": [
+      "13-inspector-selected"
+    ],
+    "inspect-08": [
+      "14-isolated-materials"
+    ],
+    "inspect-09": [
+      "17-fluid-inspector",
+      "15-isolation-overlay-off"
+    ],
+    "inspect-10": [
+      "16-isolation-reset"
+    ],
+    "commands-01": [
+      "02-replace-preview"
+    ],
+    "commands-02": [
+      "02-replace-preview"
+    ],
+    "commands-03": [
+      "19-numeric-id"
+    ],
+    "commands-04": [
+      "20-random-mixture"
+    ],
+    "commands-05": [
+      "20-random-mixture"
+    ],
+    "commands-06": [
+      "20-random-mixture"
+    ],
+    "commands-07": [
+      "21-removal"
+    ],
+    "commands-08": [
+      "22-walls",
+      "23-outline"
+    ],
+    "commands-09": [
+      "03-replace-cancelled"
+    ],
+    "commands-10": [
+      "01-house-original"
+    ],
+    "edit-01": [
+      "24-edit-settings"
+    ],
+    "edit-02": [
+      "26-resize-face"
+    ],
+    "edit-03": [
+      "25-radial-resize"
+    ],
+    "edit-04": [
+      "25-radial-resize",
+      "29-radial-move"
+    ],
+    "edit-05": [
+      "27-resize-held",
+      "28-resize-applied"
+    ],
+    "edit-06": [
+      "32-edit-cancelled"
+    ],
+    "edit-07": [
+      "30-move-y-wheel"
+    ],
+    "edit-08": [
+      "31-move-held"
+    ],
+    "edit-09": [
+      "32-edit-cancelled"
+    ],
+    "clipboard-01": [
+      "39-settings"
+    ],
+    "clipboard-02": [
+      "33-clipboard-original"
+    ],
+    "clipboard-03": [
+      "34-clipboard-rotate",
+      "35-clipboard-flip"
+    ],
+    "clipboard-04": [
+      "36-clipboard-restored"
+    ],
+    "clipboard-05": [
+      "37-preview-priority",
+      "38-clipboard-returned"
+    ],
+    "palette-01": [
+      "39-settings",
+      "40-palette-editor"
+    ],
+    "palette-02": [
+      "40-palette-editor"
+    ],
+    "palette-03": [
+      "41-palette-color",
+      "48-element-thickness"
+    ],
+    "palette-04": [
+      "46-ruler-palette",
+      "47-editing-palette"
+    ],
+    "palette-05": [
+      "44-presets",
+      "50-preset-confirm",
+      "51-preset-applied"
+    ],
+    "palette-06": [
+      "52-reset-menu"
+    ],
+    "palette-07": [
+      "48-element-thickness",
+      "49-global-thickness"
+    ],
+    "palette-08": [
+      "42-palette-undo",
+      "43-palette-redo"
+    ],
+    "palette-09": [
+      "44a-appearance",
+      "44b-studio",
+      "44c-classic"
+    ],
+    "install-01": [
+      "53-closing-orbit"
+    ],
+    "install-02": [
+      "53-closing-orbit"
+    ],
+    "install-03": [
+      "53-closing-orbit"
+    ],
+    "install-04": [
+      "53-closing-orbit"
+    ]
   },
-  "cut_weights": {"hook-03": [1,5]},
-  "beauty_cues": {"hook-04": ["04-hero-orbit"]},
+  "cut_weights": {
+    "hook-03": [
+      1,
+      5
+    ]
+  },
+  "beauty_cues": {
+    "hook-04": [
+      "04-hero-orbit"
+    ]
+  },
   "callouts": {
     "hook-04": "WorldEdit Selection Overlay"
+  },
+  "continuous_chapters": {
+    "install": {
+      "source": "53-closing-orbit",
+      "fade_out": 0.6
+    }
   }
 }

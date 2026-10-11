@@ -43,6 +43,7 @@ public final class VideoShowcase implements FabricClientGameTest {
     private final int frames = Integer.getInteger("weso.video.frames", 90);
     private final boolean beauty = Boolean.getBoolean("weso.video.beauty");
     private final boolean pickups = Boolean.getBoolean("weso.video.pickups");
+    private final boolean closing = Boolean.getBoolean("weso.video.closing");
     private final String locationMode = System.getProperty("weso.video.location", "none");
     private final boolean location = !locationMode.equals("none");
 
@@ -364,6 +365,13 @@ public final class VideoShowcase implements FabricClientGameTest {
             capturePalettePickups();
             if (!before.equals(houseFingerprint(world))) throw new AssertionError("Palette changed world blocks");
             System.out.println("VIDEO WORLD VERIFY PASS: palette pickups left every source block unchanged");
+            return;
+        }
+        if (closing) {
+            if (!beauty) throw new AssertionError("Closing requires the separate beauty profile");
+            orbit("53-closing-orbit",416,85,-188,421,86,-184,438,78,-207);
+            if (!before.equals(houseFingerprint(world))) throw new AssertionError("Closing changed world blocks");
+            System.out.println("VIDEO WORLD VERIFY PASS: continuous closing left every source block unchanged");
             return;
         }
         shot("01-house-original");

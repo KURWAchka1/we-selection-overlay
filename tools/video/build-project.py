@@ -164,6 +164,24 @@ def source_assembly(scene, manifest, decisions, plan, timeline, font):
                 decision['cue']+' / last-frame hold',native_path(still),1,cursor+moving)
             freeze.frame_final_duration = decision['last_frame_hold']
         cursor += decision['frames']
+    if decisions[-1].get('continuous'):
+        spec = plan['continuous_chapters'][timeline[-1]['chapter']]
+        duration = frames(spec['fade_out'])
+        fade = scene.sequence_editor.strips.new_effect(
+            'Editable closing fade','COLOR',2,cursor-duration,frame_end=cursor)
+        fade.color = (0,0,0)
+        fade.blend_type = 'ALPHA_OVER'
+        if not scene.animation_data:
+            scene.animation_data_create()
+        if not scene.animation_data.action:
+            scene.animation_data.action = bpy.data.actions.new(scene.name+'Action')
+        curve = scene.animation_data.action.fcurve_ensure_for_datablock(
+            scene,fade.path_from_id('blend_alpha'))
+        for frame,value in ((cursor-duration,0),(cursor-1,1)):
+            point = curve.keyframe_points.insert(frame,value,options={'FAST'})
+            point.interpolation = 'LINEAR'
+        curve.update()
+        fade.invalidate_cache('COMPOSITE')
     for cue in timeline:
         text = plan['callouts'].get(cue['id'])
         if not text:
@@ -235,6 +253,7 @@ def main():
     render_check(original,title.frame_final_start,directory/'blender-title-fade-start.png')
     if not args.opening:
         render_check(russian,frames(58)+1,directory/'blender-inspector-caption-check.png')
+        render_check(original,original.frame_end,directory/'blender-closing-fade-check.png')
     bpy.context.window.scene = russian
     bpy.ops.file.make_paths_relative()
     bpy.ops.wm.save_as_mainfile(filepath=str(output),relative_remap=True)

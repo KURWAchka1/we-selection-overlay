@@ -37,6 +37,7 @@ def timestamp(seconds, ass=False):
 
 def spoken(text):
     return (text.replace("WorldEdit", "World Edit").replace("NeoForge", "Neo Forge")
+            .replace("F8", "F eight").replace("CUI", "see you eye")
             .replace("1.21.11", "one point twenty one point eleven")
             .replace("26.1.2", "twenty six point one point two")
             .replace("26.1.x", "twenty six point one")
@@ -106,7 +107,8 @@ def main():
     audio_dir.mkdir(parents=True, exist_ok=True)
     timeline, track = [], []
     offset = 0.0
-    for cue in cues[:args.limit]:
+    selected = cues[:args.limit]
+    for index, cue in enumerate(selected):
         key = hashlib.sha256(json.dumps([spoken(cue["en"]), voice, script["speed"],
                             "kokoro-onnx-0.6.1"], ensure_ascii=False).encode()).hexdigest()[:16]
         path = audio_dir / f"{cue['id']}-{key}.wav"
@@ -122,10 +124,15 @@ def main():
         duration = len(samples) / rate
         ru_length = len(cue["ru"].replace("\n", " "))
         caption_duration = max(duration + 0.12, ru_length / 17, 1.2)
-        caption_duration = max(caption_duration, script.get("minimum_slots", {}).get(cue["id"], 0) - .18)
+        pause = 0.12
+        if index + 1 == len(selected):
+            pause = script.get("final_pause", 0.9)
+        elif selected[index + 1]["chapter"] != cue["chapter"]:
+            pause = script.get("chapter_pause", 0.4)
+        caption_duration = max(caption_duration, script.get("minimum_slots", {}).get(cue["id"], 0) - pause)
         if caption_duration > 7:
             raise ValueError(f"Split long cue before production: {cue['id']} ({caption_duration:.2f}s)")
-        total = math.ceil((caption_duration + 0.18) * script["fps"]) / script["fps"]
+        total = math.ceil((caption_duration + pause) * script["fps"]) / script["fps"]
         item = {**cue, "start": offset, "voice_end": offset + duration,
                 "end": offset + caption_duration, "slot_end": offset + total,
                 "wav": str(path.relative_to(out)), "russian_cps": ru_length / caption_duration}

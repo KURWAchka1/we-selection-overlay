@@ -36,13 +36,13 @@ On NeoForge's 26.1 branch, local WorldEdit requires 26.1.2 or newer.
 Fabric also needs compatible Fabric API. Recommended GUI scale: 2x.
 
 00:00 Before you press Enter
-00:20 See and measure your selection
-00:54 Inspect and isolate materials
-01:42 Live command preview
-02:39 Resize and move the bounds
-03:26 Preview the copied build
-03:57 Make it readable your way
-04:39 Compatibility and download
+00:19 See and measure your selection
+00:52 Inspect and isolate materials
+01:36 Live command preview
+02:16 Resize and move the bounds
+02:55 Preview the copied build
+03:16 Make it readable your way
+03:54 Try it on your next build
 
 Filming location: Celestia Town by Fireless007 / leolerenard.
 Download the creator's map: https://www.curseforge.com/minecraft/worlds/celestia-town

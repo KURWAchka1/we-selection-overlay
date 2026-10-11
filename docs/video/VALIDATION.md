@@ -14,6 +14,9 @@ Logs are local ignored artifacts under `build/desktop-tests/`:
   Successful separate shader run, four 120-frame takes at distance 12.
 - Palette pickups: `WesoTest-81edcd94f35b4aae9c417548069987d6.log`.
   Successful vanilla run, seven 90-frame takes, including preset confirmation.
+- Continuous closing: `WesoTest-776975536f414955b790bd3c38f85af9.log`.
+  Successful separate guarded shader run, one 660-frame take, 637 chunks at
+  distance 12 downloaded and rendered. Every source house block remains unchanged.
 - All runs require the private desktop and cursor-isolation agent. No normal
   desktop activation, system input, user-save edits or cursor confinement.
 - The core assertion compares every selected house block state after all drafts;
@@ -26,19 +29,19 @@ Only the exact successful retake logs above may be used for the corrected edit.
 ## Export Checks
 
 The complete English master and Russian-captioned review each decode to exactly
-9,851 frames: 328.3667 seconds, 1920x1080, 30 fps. There are 93 frame-aligned
-cut decisions, eight chapters, 70 voice/caption cues, 57 retained vanilla source
-clips and four separate beauty sources. Replacement is held for six seconds;
+7,567 frames: 252.2333 seconds, 1920x1080, 30 fps. There are 79 frame-aligned
+cut decisions, eight chapters, 59 voice/caption cues, 55 retained vanilla source
+clips and five separate beauty sources. Replacement is held for six seconds;
 Escape restoration is separate. Source cadence is not artificially accelerated.
 
 English MP4 SHA-256:
-`1cd6d35deef64dfe5606d17ee4e511cb447928e29256247942ec1a11d1c08f9e`.
+`b674ca7f3621112e12f873ab9631e2e09a81363b79a8d027727609db181620ff`.
 
 Russian review MP4 SHA-256:
-`17a4a6485aae78e8c016b819ee97799b17db788377e24b8feb6d857bc0b1d4e7`.
+`fe3daf5c1416c662f057dc73c6c70db0f091af5cf3278ceb30007da33aa74d7e`.
 
-AAC audio measured from the actual English master: integrated -16.15 LUFS,
-true peak -3.84 dBTP, loudness range 2.30 LU. English narration is synthetic;
+AAC audio measured from the actual English master: integrated -16.12 LUFS,
+true peak -3.86 dBTP, loudness range 2.40 LU. English narration is synthetic;
 the owner approved the opening voice/pace, not yet the whole finished review.
 Russian captions are limited to two 42-character lines and 17 characters/second.
 
@@ -49,9 +52,23 @@ English feature callouts are removed. Inspector RU captions use the free header,
 editing captions stay above the HUD, and palette captions sit below its preview.
 This does not certify a full audiovisual watchthrough or every possible frame.
 
+The earlier 5:28 review is superseded and retained locally under
+`build/video/1.8.0/revisions/20261011-before-voice-revision/`. It is not the current
+publication candidate. The revised 688-word English script and Russian translation
+follow `VOICE_STYLE.md`; development fixes and the cut/paste exclusion checklist
+are removed. Exact installation requirements remain in the description.
+
+The closing is 18.0333 seconds, consuming 541 consecutive native frames with
+offsets 0, 79, 253 and 395 across its four cues. Every closing decision has zero
+freeze padding; a short source is rejected. The final voice ends at 250.877s,
+the last caption at 251.308s, and the 0.6-second fade starts at 251.633s. Neither
+speech nor the last caption is cut off. The approved voice and base speed remain;
+the owner has not yet auditioned the complete revised narration.
+
 ## Tooling
 
-Nine pipeline tests pass, including an actual FFmpeg frame-padding regression.
+Eleven pipeline tests pass, including actual FFmpeg frame-padding, continuous
+closing offsets/overrun rejection, narration-scope and final-caption/fade checks.
 Python compilation and guarded PowerShell runner parsing pass. Blender 4.5.9
 builds the three-scene full and opening projects in background mode with two
 threads and Python failures mapped to a nonzero exit code. Native editable title

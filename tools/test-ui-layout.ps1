@@ -6,17 +6,19 @@ param(
     [switch]$Beauty,
     [switch]$LocationPreview,
     [switch]$CreditedLocation,
+    [switch]$Closing,
     [switch]$DesktopWorker
 )
 $ErrorActionPreference = 'Stop'
 if ($Beauty -and !$Showcase) { throw '-Beauty requires -Showcase' }
 if ($LocationPreview -and !$Showcase) { throw '-LocationPreview requires -Showcase' }
 if ($CreditedLocation -and !$Showcase) { throw '-CreditedLocation requires -Showcase' }
+if ($Closing -and !($Showcase -and $Beauty -and $CreditedLocation)) { throw '-Closing requires -Showcase -Beauty -CreditedLocation' }
 if ($LocationPreview -and $CreditedLocation) { throw 'Choose scout or full capture, not both' }
 . (Join-Path $PSScriptRoot 'test-desktop.ps1')
 if (!$DesktopWorker) {
     & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
-    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Performance=[bool]$Performance; Showcase=[bool]$Showcase; Beauty=[bool]$Beauty; LocationPreview=[bool]$LocationPreview; CreditedLocation=[bool]$CreditedLocation; DesktopWorker=$true}
+    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Performance=[bool]$Performance; Showcase=[bool]$Showcase; Beauty=[bool]$Beauty; LocationPreview=[bool]$LocationPreview; CreditedLocation=[bool]$CreditedLocation; Closing=[bool]$Closing; DesktopWorker=$true}
     return
 }
 Assert-WesoTestDesktop
@@ -26,10 +28,12 @@ $log = Join-Path $logDirectory $(if ($Showcase) { 'showcase.log' } else { 'layou
 $previousJava = $env:JAVA_HOME
 $previousBeauty = $env:WESO_VIDEO_BEAUTY
 $previousLocation = $env:WESO_VIDEO_LOCATION
+$previousClosing = $env:WESO_VIDEO_CLOSING
 Push-Location (Join-Path (Split-Path -Parent $PSScriptRoot) 'WEaddon_fabric_26.2')
 try {
     $env:JAVA_HOME = $Java25
     $env:WESO_VIDEO_BEAUTY = [string][int][bool]$Beauty
+    $env:WESO_VIDEO_CLOSING = [string][int][bool]$Closing
     $env:WESO_VIDEO_LOCATION = if ($CreditedLocation) { 'full' } elseif ($LocationPreview) { 'scout' } else { 'none' }
     $arguments = if ($Showcase) {
         @('-I', '../tools/video/showcase.init.gradle', 'testVideoShowcase', '--offline', '--no-daemon', '--max-workers=2', '--console=plain')
@@ -49,4 +53,5 @@ try {
     $env:JAVA_HOME = $previousJava
     $env:WESO_VIDEO_BEAUTY = $previousBeauty
     $env:WESO_VIDEO_LOCATION = $previousLocation
+    $env:WESO_VIDEO_CLOSING = $previousClosing
 }

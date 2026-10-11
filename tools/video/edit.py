@@ -80,13 +80,22 @@ def segment_filters(skip, hold):
     return [f"trim=start_frame={skip}", f"tpad=stop_mode=clone:stop={hold}", "setpts=N/(30*TB)"]
 
 
+def continuous_trim(seconds, allocated, source_frames, fps=30):
+    skip = round(seconds * fps)
+    if skip < 0 or abs(skip / fps - seconds) > .000001:
+        raise ValueError("Continuous shot offset is not on a native frame")
+    if allocated < 1 or skip + allocated > source_frames:
+        raise ValueError("Continuous shot is too short; record a longer take, never loop or freeze it")
+    return skip
+
+
 def source_manifest(plan, cues, log, opening, names_override=None):
     text = log.read_text(encoding="utf-8-sig", errors="replace")
     if "CURSOR ISOLATION GUARD PASS:" not in text:
         raise ValueError("No cursor-isolated native capture evidence")
     if not opening and "WESO VIDEO CAPTURE PASS:" not in text:
         raise ValueError("Full source capture did not finish successfully")
-    if plan['source_directory'] == 'capture-celestia-beauty' and 'VIDEO TERRAIN READY:' not in text:
+    if plan['source_directory'] in ('capture-celestia-beauty', 'capture-celestia-closing') and 'VIDEO TERRAIN READY:' not in text:
         raise ValueError('Beauty footage has no full native terrain-readiness evidence')
     directory = OUT / plan["source_directory"]
     if not directory.resolve().is_relative_to(OUT.resolve()):
@@ -122,6 +131,7 @@ def main():
     parser.add_argument("--capture-log", type=Path, required=True)
     parser.add_argument("--beauty-log", type=Path, help="Completed separate native opening; core evidence remains vanilla")
     parser.add_argument("--pickups-log", type=Path, help="Completed separate vanilla UI pickups")
+    parser.add_argument("--closing-log", type=Path, help="Completed continuous native closing orbit")
     parser.add_argument("--opening", action="store_true", help="Opening chapter only; never publish as the full review")
     args = parser.parse_args()
     plan = json.loads((ROOT / "docs/video/edit-plan.json").read_text(encoding="utf-8"))
@@ -130,17 +140,21 @@ def main():
     if set(plan["cues"]) != {cue["id"] for cue in all_cues}:
         raise ValueError("Every narration cue needs an explicit shot decision")
     cues = [cue for cue in all_cues if cue["chapter"] == "hook"] if args.opening else all_cues
+    continuous = {} if args.opening else plan.get("continuous_chapters", {})
+    if continuous and not args.closing_log:
+        raise ValueError("The continuous ending requires its completed native capture log")
+    continuous_names = {spec['source'] for spec in continuous.values()}
     names = {name for cue in cues for name in plan['cues'][cue['id']]}
     pickups = names.intersection(plan.get('pickup_sources',[]))
     if pickups and not args.pickups_log:
         raise ValueError('This edit requires the completed UI pickup log')
-    manifest = source_manifest(plan,cues,args.capture_log,args.opening,names-pickups)
+    manifest = source_manifest(plan,cues,args.capture_log,args.opening,names-pickups-continuous_names)
     if pickups:
         pickups_plan = {**plan,'source_directory':'capture-celestia-pickups'}
         pickup_manifest = source_manifest(pickups_plan,cues,args.pickups_log,False,pickups)
         manifest['native_sources'].update(pickup_manifest['native_sources'])
         manifest['pickup_capture_log_sha256'] = pickup_manifest['capture_log_sha256']
-    beauty_sources = None
+    beauty_sources = {}
     beauty_cues = {**plan['cues'], **plan.get('beauty_cues', {})}
     if args.beauty_log:
         opening_plan = {**plan,"source_directory":"capture-celestia-beauty", "cues":beauty_cues}
@@ -149,6 +163,12 @@ def main():
         beauty_sources = beauty_manifest["native_sources"]
         manifest["beauty_sources"] = beauty_sources
         manifest["beauty_capture_log_sha256"] = beauty_manifest["capture_log_sha256"]
+    if continuous:
+        closing_plan = {**plan, 'source_directory': 'capture-celestia-closing'}
+        closing_manifest = source_manifest(closing_plan,cues,args.closing_log,False,continuous_names)
+        beauty_sources.update(closing_manifest['native_sources'])
+        manifest['beauty_sources'] = beauty_sources
+        manifest['closing_capture_log_sha256'] = closing_manifest['capture_log_sha256']
     directory = OUT / ("opening-edit" if args.opening else "full-edit")
     directory.mkdir(parents=True, exist_ok=True)
     font = ROOT / "build/video-tools/fonts/seguisb.ttf"
@@ -158,8 +178,11 @@ def main():
     base = [ffmpeg, "-hide_banner", "-nostdin", "-y", "-threads", "2", "-filter_threads", "1"]
     segments, decisions = [], []
     for cue in cues:
-        profile = "beauty" if beauty_sources and cue["chapter"] == "hook" else "vanilla"
-        shot_names = (beauty_cues if profile == 'beauty' else plan['cues'])[cue['id']]
+        sustained = continuous.get(cue['chapter'])
+        profile = "beauty" if sustained or (args.beauty_log and cue["chapter"] == "hook") else "vanilla"
+        shot_names = [sustained['source']] if sustained else (beauty_cues if profile == 'beauty' else plan['cues'])[cue['id']]
+        if sustained and plan['cues'][cue['id']] != shot_names:
+            raise ValueError("Continuous chapter must use exactly one unbroken source")
         length = frame_count(cue["slot_end"] - cue["start"])
         allocations = split_frames(length, len(shot_names))
         if cue["id"] in plan.get("cut_weights", {}):
@@ -171,7 +194,16 @@ def main():
             # Preserve the end of a gesture if a short matched-cut slot trims the take.
             skip = max(0, source["frames"] - allocated) if name.startswith(("26-", "30-")) else 0
             hold = max(0, allocated - source["frames"])
+            if sustained:
+                first = next(c for c in cues if c['chapter'] == cue['chapter'])
+                skip = continuous_trim(cue['start'] - first['start'], allocated, source['frames'])
+                hold = 0
             filters = segment_filters(skip, hold)
+            if sustained and cue is cues[-1] and sustained.get('fade_out'):
+                fade = sustained['fade_out']
+                if not 0 < fade < allocated / 30:
+                    raise ValueError("Invalid closing fade duration")
+                filters.append(f"fade=t=out:st={allocated / 30 - fade:.9f}:d={fade}")
             label = plan["callouts"].get(cue["id"])
             if label:
                 label_path = directory / f"{cue['id']}.txt"
@@ -201,7 +233,7 @@ def main():
             decoded_frames(path, allocated)
             segments.append(path)
             decisions.append({"cue":cue["id"],"source":name,"profile":profile,"frames":allocated,"trim_frames":skip,
-                              "last_frame_hold":hold,"segment":path.name})
+                              "last_frame_hold":hold,"continuous":bool(sustained),"segment":path.name})
         print(f"CUT: {cue['id']}, {length} frames", flush=True)
     total = cues[-1]["slot_end"]
     concat = directory / "concat.txt"
