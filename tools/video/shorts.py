@@ -64,6 +64,9 @@ def build_cuts(spec, timeline):
         view = spec.get("views", {}).get(cue_id, spec["default_view"])
         if view not in VIEWS:
             raise ValueError(f"Unknown crop: {view}")
+        chat = spec.get("chat_insets", {}).get(cue_id)
+        if chat is not None:
+            validate_chat_inset(chat, (end-start)/FPS)
         cuts.append({"cue": cue_id, "source_start_frame": start,
                      "frames": end - start, "output_start_frame": cursor,
                      "view": view, "compass": cue_id in spec.get("compass_cues", []),
@@ -71,11 +74,35 @@ def build_cuts(spec, timeline):
                      "voice_duration": cue["voice_end"]-cue["start"],
                      "first": cue_id == spec["cues"][0], "last": cue_id == spec["cues"][-1],
                      "reveal_time": spec.get("reveal_times", {}).get(cue_id),
+                     "chat_inset": chat,
                      "caption_end": min(cue["end"] - cue["start"], (end-start)/FPS)})
         cursor += end - start
     if cursor / FPS >= 60:
         raise ValueError("This series is intentionally shorter than one minute per Short")
     return cuts
+
+
+def chat_size(inset):
+    _, _, width, height = inset["crop"]
+    target_width = inset["width"]
+    if min(width, height, target_width) <= 0:
+        raise ValueError("Invalid native chat size")
+    return target_width, round(height*target_width/width/2)*2
+
+
+def validate_chat_inset(inset, duration):
+    x, y, width, height = inset["crop"]
+    px, py = inset["position"]
+    tw, th = chat_size(inset)
+    if (min(x, y) < 0 or min(width, height, tw, th) <= 0 or
+            x+width > 1920 or y+height > 1080 or
+            any(value % 2 for value in (x, y, width, height, tw, px, py))):
+        raise ValueError("Invalid native chat crop")
+    if px < 48 or py < 80 or px+tw > 936 or py+th > 1640:
+        raise ValueError("Chat inset crosses the Shorts safe area")
+    start, end, fade = inset["start"], inset["end"], inset["fade"]
+    if not 0 <= start < end <= duration or not 0 < fade <= (end-start)/2:
+        raise ValueError("Invalid chat inset clock")
 
 
 def wrap_measured(text, face, width, max_lines=2):
@@ -162,8 +189,13 @@ def overlay_events(spec, cut):
 def filter_graph(cut, events=()):
     x, y, width, height = VIEWS[cut["view"]]
     graph = []
+    split_outputs = ["scene"]
     if cut["compass"]:
-        graph.append("[0:v]split=2[scene][detail]")
+        split_outputs.append("detail")
+    if cut.get("chat_inset"):
+        split_outputs.append("chat")
+    if len(split_outputs) > 1:
+        graph.append(f"[0:v]split={len(split_outputs)}"+"".join(f"[{name}]" for name in split_outputs))
         source = "scene"
     else:
         source = "0:v"
@@ -184,6 +216,18 @@ def filter_graph(cut, events=()):
         graph.append(f"[detail]crop={width}:{height}:{x}:{y},scale={pw}:{ph}:flags=lanczos[axes]")
         graph.append(f"[{current}][axes]overlay={px}:{py}:shortest=1[focused]")
         current = "focused"
+    if cut.get("chat_inset"):
+        inset = cut["chat_inset"]
+        x, y, width, height = inset["crop"]
+        px, py = inset["position"]
+        start, end, fade = inset["start"], inset["end"], inset["fade"]
+        graph.append(f"[chat]crop={width}:{height}:{x}:{y},"
+                     f"scale={inset['width']}:-2:flags=neighbor,setsar=1,format=rgba,"
+                     f"fade=t=in:st={start:.6f}:d={fade:.6f}:alpha=1,"
+                     f"fade=t=out:st={end-fade:.6f}:d={fade:.6f}:alpha=1[chat_zoom]")
+        graph.append(f"[{current}][chat_zoom]overlay={px}:{py}:shortest=1:"
+                     f"enable='gte(t,{start:.6f})*lt(t,{end:.6f})'[with_chat]")
+        current = "with_chat"
     for index, event in enumerate(events, 1):
         graph.append(f"[{current}][{index}:v]overlay=0:0:shortest=1:"
                      f"enable='gte(t,{event['start']:.6f})*lt(t,{event['end']:.6f})'[art{index}]")

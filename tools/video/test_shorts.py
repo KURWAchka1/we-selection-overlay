@@ -140,6 +140,54 @@ class ShortsTests(unittest.TestCase):
                                             y=event["y"], size=event["size"])
                     self.assertLess(max(item["box"][3] for item in bounds), 250)
 
+    def test_chat_insets_are_synchronized_native_pixel_crops(self):
+        found = []
+        for spec in self.plan["shorts"]:
+            for cut in shorts.build_cuts(spec, self.timeline):
+                inset = cut["chat_inset"]
+                if inset is None:
+                    continue
+                found.append(inset["observed_command"])
+                graph = shorts.filter_graph(cut, shorts.overlay_events(spec, cut))
+                self.assertIn("[0:v]split=2[scene][chat]", graph)
+                self.assertIn("[chat]crop=", graph)
+                self.assertIn("flags=neighbor", graph)
+                self.assertIn("fade=t=in", graph)
+                self.assertIn("fade=t=out", graph)
+                self.assertNotIn("drawtext", graph)
+                self.assertNotIn(inset["observed_command"], graph)
+                self.assertEqual(inset["crop"][1]+inset["crop"][3], 1080)
+        self.assertEqual(found, ["//replace smooth_sandstone cyan_terracotta", "//rotate 90", "//flip east"])
+
+    def test_chat_insets_do_not_cover_captions_or_the_subject(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            for spec in self.plan["shorts"]:
+                for cut in shorts.build_cuts(spec, self.timeline):
+                    inset = cut["chat_inset"]
+                    if inset is None:
+                        continue
+                    px, py = inset["position"]
+                    width, height = shorts.chat_size(inset)
+                    self.assertLessEqual(py+height, 250 if cut["view"] == "command" else 420)
+                    for event in shorts.overlay_events(spec, cut):
+                        if event["end"] <= inset["start"] or event["start"] >= inset["end"]:
+                            continue
+                        bounds = shorts.graphic(spec, event["text"], Path(temporary)/"art.png",
+                                                y=event["y"], size=event["size"])
+                        for item in bounds:
+                            left, top, right, bottom = item["box"]
+                            self.assertTrue(right <= px or left >= px+width or
+                                            bottom+12 <= py or top >= py+height+12)
+
+    def test_invalid_chat_crop_or_clock_is_rejected(self):
+        inset = self.plan["shorts"][0]["chat_insets"]["hook-02"]
+        shorts.validate_chat_inset(inset, 6)
+        for changes in ({"crop": [4, 1060, 492, 30]}, {"position": [600, 184]},
+                        {"crop": [4, 1050, 0, 30]}, {"crop": [4, 1050, 492, 0]},
+                        {"end": 7}, {"fade": 3}, {"width": 0}):
+            with self.assertRaises(ValueError):
+                shorts.validate_chat_inset(dict(inset, **changes), 6)
+
     def test_subtitles_retime_after_the_isolation_jump(self):
         spec = self.plan["shorts"][1]
         cuts = shorts.build_cuts(spec, self.timeline)

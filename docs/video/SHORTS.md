@@ -67,6 +67,16 @@ not by fabricating or repainting gameplay. Captions prefer one measured line;
 longer phrases use at most two. The command captions occupy the sky above the
 selection, with a separately spaced opening hook.
 
+Relevant command moments additionally show an enlarged crop of the **actual
+native chat input** from the same frame and clock as the scene. The full
+`//replace smooth_sandstone cyan_terracotta` line is kept intact; shorter
+`//rotate 90` and `//flip east` lines use a larger enlargement. Nearest-neighbor
+scaling retains the pixel font. The native background, argument coloring and
+caret remain part of the recording. No command is retyped, reconstructed,
+substituted or composited from a different take. The crop fades in/out over
+0.16 seconds, stays away from the subtitles and subject, and disappears after
+its demonstration. It is not added to unrelated isolation or movement shots.
+
 Each topic has explicit crop decisions. The block inspector focuses on native
 checkboxes and material names. Isolation opens with a 1.1-second glimpse of
 the actual isolated result, then shows the native checkbox interaction, under
