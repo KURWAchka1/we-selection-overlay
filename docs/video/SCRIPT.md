@@ -245,7 +245,7 @@ Enter выполнит команду как обычно.
 
 ## Resize and move the bounds
 
-Shot: Enable editing, corner grab, G precise mode, radial Resize/Move, face draft/apply, cancel, Move Y wheel. Only the selection bounds change.
+Shot: Separate corner and face edits from a step-by-step Move demonstration. Native grip, bottom-right 3D compass, camera turn, X/Y wheel, release, apply, separate cancellation. Brief relevant key hints; never cover the house or compass.
 
 **edit-01**
 
@@ -256,59 +256,94 @@ Sometimes it's the selection that needs changing, not the build.
 
 **edit-02**
 
-Turn on selection editing, and you can grab a corner right in the world.
+For a quick adjustment, grab a corner and release it where you want it.
 
-Включите редактирование выделения:\
-теперь можно просто потянуть за угол.
+Для быстрой правки потяните за угол\
+и отпустите в нужном месте.
 
 **edit-03**
 
-Tap G for precise editing, or hold it briefly to choose a mode.
+Hold G to choose Resize or Move.
 
-Нажмите G для точной правки.\
-Удержите, чтобы выбрать режим.
+Удержите G, чтобы выбрать\
+изменение размера или перемещение.
 
 **edit-04**
 
-Choose Resize to pull a face, or Move to shift the whole selection.
+In Resize, tap G, then drag a face with the mouse.
 
-Resize меняет размер,\
-а Move перемещает всё выделение.
+В режиме Resize нажмите G\
+и потяните за грань мышкой.
 
 **edit-05**
 
-Tap G again to apply your precise edit. Escape cancels the draft.
+Release the mouse to check the draft. Tap G again to apply it.
 
-Повторное G применит точную правку.\
-Esc отменит черновик.
+Отпустите мышь и проверьте черновик.\
+Ещё одно G применит правку.
 
 **edit-06**
 
-For a quick corner adjustment, just drag and release.
+Now let's move the whole selection. Hold G and choose Move.
 
-Для быстрой правки угла\
-достаточно потянуть и отпустить.
+Теперь передвинем всё выделение.\
+Удержите G и выберите Move.
 
 **edit-07**
 
-To move along an axis, grab the selection, choose X, Y, or Z, and scroll.
+Tap G to start, then hold the left mouse button on the box.
 
-Захватите выделение, выберите X/Y/Z\
-и перемещайте его колёсиком.
+Нажмите G, затем зажмите\
+левую кнопку мыши на выделении.
 
 **edit-08**
 
-Y lets you lift or lower the box while you stay where you are.
+Look at the little three-dimensional axes in the bottom-right corner.
 
-Ось Y поднимает и опускает область.\
-Самому игроку двигаться не нужно.
+Обратите внимание на объёмные оси\
+в правом нижнем углу.
 
 **edit-09**
 
-Only the bounds move. The actual blocks stay put.
+They turn with the camera. The highlighted letter shows your chosen axis.
 
-Меняются только границы выделения.\
-Блоки остаются на месте.
+Оси поворачиваются вслед за камерой.\
+Выбранная буква выделена.
+
+**edit-10**
+
+Press X and scroll to shift the box sideways.
+
+Нажмите X и крутите колёсико,\
+чтобы передвинуть область вбок.
+
+**edit-11**
+
+Choose Y to raise or lower it, without flying up or down.
+
+Ось Y поднимает и опускает область.\
+Самому лететь вверх или вниз не нужно.
+
+**edit-12**
+
+Release the mouse to inspect the position. The move is still a draft.
+
+Отпустите мышь и проверьте положение.\
+Это всё ещё черновик.
+
+**edit-13**
+
+Tap G to keep it. Only the bounds move; the house stays where it is.
+
+Нажмите G, чтобы применить. Двигаются\
+только границы, сам дом остаётся.
+
+**edit-14**
+
+And if the position isn't right, Escape cancels the draft.
+
+Если положение не подходит,\
+Esc отменит черновик.
 
 ## Preview the copied build
 
@@ -418,7 +453,7 @@ Glass, Studio и Classic.
 
 ## Try it on your next build
 
-Shot: One continuous native closing orbit, no source restart at cue boundaries. Precise version/API requirements belong in the description, not a spoken patch-by-patch checklist.
+Shot: One continuous native closing orbit, no source restart at cue boundaries. After voice and subtitles, show the product name and Downloads in the description in the clear upper sky, then fade together. Exact requirements belong below the video.
 
 **install-01**
 

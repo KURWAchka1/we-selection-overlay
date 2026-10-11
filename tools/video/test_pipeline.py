@@ -61,6 +61,68 @@ class PipelineChecks(unittest.TestCase):
         plan = json.loads((ROOT / "docs/video/edit-plan.json").read_text(encoding="utf-8"))
         self.assertEqual(plan["callouts"], {"hook-04": "WorldEdit Selection Overlay"})
 
+    def test_interaction_story_and_graphics(self):
+        from graphics import graphic_spec, filter_graph
+        script=json.loads((ROOT/'docs/video/script.json').read_text(encoding='utf-8'))
+        chapter=next(c for c in script['chapters'] if c['id']=='edit')
+        text=' '.join(pair[0] for pair in chapter['cues']).lower()
+        for phrase in ('bottom-right corner','turn with the camera','press x','choose y','still a draft'):
+            self.assertIn(phrase,text)
+        self.assertEqual(chapter['position'],'header')
+        plan=json.loads((ROOT/'docs/video/edit-plan.json').read_text(encoding='utf-8'))
+        self.assertEqual(plan['cues']['edit-02'],['54-quick-corner'])
+        self.assertEqual(plan['compass_insets'],['edit-08','edit-09','edit-10','edit-11'])
+        self.assertEqual(len(plan['key_hints']),9)
+        self.assertTrue(set(plan['key_hints']).issubset(plan['cues']))
+        for cue in json.loads((ROOT/'build/video/1.8.0/timeline.json').read_text(encoding='utf-8'))['cues']:
+            spec=graphic_spec(plan,cue)
+            if spec:
+                self.assertLess(spec['start'],spec['end'])
+                self.assertLessEqual(spec['end'],cue['slot_end']-cue['start']+.00001)
+                if spec['kind']=='closing':
+                    self.assertGreater(cue['start']+spec['start'],cue['end'])
+        with self.assertRaises(ValueError):
+            graphic_spec(plan,{'id':'install-04','chapter':'install','start':0,'end':3,'slot_end':4})
+        graph=filter_graph(segment_filters(0,0),inset=True,duration=4)
+        self.assertIn('crop=112:112:1780:882',graph)
+        self.assertIn('[out]',graph)
+        graph=filter_graph(segment_filters(0,0),inset=True,duration=4,inset_fades=(False,False))
+        self.assertNotIn('fade=',graph)
+
+    def test_native_compass_composition_decodes(self):
+        from graphics import filter_graph
+        with tempfile.TemporaryDirectory() as folder:
+            movie=Path(folder)/'compass.mp4'
+            command=[imageio_ffmpeg.get_ffmpeg_exe(),'-v','error','-nostdin','-y','-threads','2',
+                     '-f','lavfi','-i','color=c=black:s=1920x1080:r=30:d=1',
+                     '-filter_complex_threads','1','-filter_complex',
+                     filter_graph(segment_filters(0,0),inset=True,duration=1),
+                     '-map','[out]','-frames:v','30','-an','-c:v','libx264','-threads','2',str(movie)]
+            result=subprocess.run(command,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(decoded_frames(movie,30),30)
+
+    def test_graphic_bounds_leave_house_and_native_hud_clear(self):
+        from graphics import graphic_spec, asset
+        from PIL import Image
+        plan=json.loads((ROOT/'docs/video/edit-plan.json').read_text(encoding='utf-8'))
+        timeline=json.loads((ROOT/'build/video/1.8.0/timeline.json').read_text(encoding='utf-8'))
+        with tempfile.TemporaryDirectory() as folder:
+            for cue in timeline['cues']:
+                spec=graphic_spec(plan,cue)
+                if not spec:
+                    continue
+                with Image.open(asset(spec,Path(folder))) as image:
+                    self.assertEqual(image.size,(1920,1080))
+                    left,top,right,bottom=image.getbbox()
+                    if spec['kind']=='key':
+                        self.assertGreaterEqual(left,90)
+                        self.assertLessEqual(right,640)
+                        self.assertGreaterEqual(top,800)
+                        self.assertLessEqual(bottom,870)
+                    else:
+                        self.assertLess(bottom,200)
+
     def test_frame_allocation_preserves_exact_length(self):
         for count in (118,142,141,1,300):
             for parts in range(1,min(count,5)+1):

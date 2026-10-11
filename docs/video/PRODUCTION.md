@@ -62,7 +62,7 @@ the command demonstration. Do not change production render behavior for filming.
 | Inspect | Open B, search, filter, show loaded counts | Real material list; air is counted, not invented as a visible block |
 | Isolation | Select two materials, return to the world, reset | Multi-select, full-bright textures, collision unchanged, selected rows pinned |
 | Commands | Replace -> mixed pattern -> air -> walls/flora examples | State/legacy support, supported scope, stable illustrative randomness, F8/Escape |
-| Edit | Enable editing, G radial, resize face, apply; Move Y wheel | Draft/apply/cancel, axis switch, no player-follow movement, bounds only |
+| Edit | Separate corner/face edits; then Move grip, compass, camera turn, X/Y wheel, release/apply/cancel | Focused nearly one-minute walkthrough; relevant short key hints; actual HUD detail |
 | Clipboard | Enable, copy the townhouse, type rotate/flip, cancel | Default off, oriented states, unchanged true buffer before Enter, no live cut/paste |
 | Customize | O pencil; preset confirmation, RGBA, thickness, undo; themes | Native 3D editor, per-element reset, global rules, all shipped UI styles |
 | Close | One continuous townhouse orbit and a short invitation to try the mod | Preview status and local/server scope; exact version/API requirements in the description |
@@ -93,6 +93,11 @@ facts without false universality claims. Exact patch/API requirements remain in
 the description. The closing chapter is one continuous separately recorded
 native orbit: no short-take restarts or frozen padding. Its frame ranges must
 cover every closing cue, and the fade starts only after the final caption.
+`INTERACTION_EDIT.md` extends the ending with one two-line product/download
+lockup after the voice and captions, held in free sky before fading. It also
+records the focused Move sequence, short key hints and native compass close-up.
+Editing captions use the free top header; neither graphics nor captions may
+cover the selected house, its bounds, central status or bottom-right compass.
 
 Local tooling: verified official portable Blender LTS 4.5.9 and FFmpeg. Blender
 provides an editable VSE project, with no visible app or system changes required.
@@ -139,7 +144,7 @@ translation and at most two 42-character lines. Aim at <=17 Russian chars/sec.
 - [x] Scope/claims reconciled with current README, release notes and feature docs.
 - [x] Research decisions recorded in `RESEARCH.md`.
 - [x] Full-mod coverage included, not only new 1.8.0 features.
-- [x] Full native coverage captured: 50 core takes, four beauty takes, seven palette pickups.
+- [x] Full native coverage captured: 50 core takes, four beauty takes, seven palette pickups, ten editing pickups and one continuous closing take.
 - [x] Output contact sheet and targeted title/caption/layout frames visually checked.
 - [ ] Complete source and finished-edit audiovisual watchthrough approved.
 - [x] Full narration generated; owner approved opening voice and pace.
@@ -147,7 +152,7 @@ translation and at most two 42-character lines. Aim at <=17 Russian chars/sec.
 - [ ] Russian caption timing/translation checked at full and phone size.
 - [ ] Complete edit watched start to finish; no source/ghost flicker, blank frames or UI clipping.
 - [x] Review exports fully decoded: exact frame count, cadence, dimensions and chapters.
-- [x] Revised final AAC measured: -16.12 LUFS integrated, -3.86 dBTP; no clipping.
+- [x] Revised final AAC measured: -16.12 LUFS integrated, -3.86 dBTP, 2.30 LU range; no clipping.
 - [ ] Final publication rights/account/processing checks passed.
 - [ ] Public 1.8.0 download exists, or video explicitly says preview build.
 - [ ] Authenticated channel verified; processed upload reviewed and made public.

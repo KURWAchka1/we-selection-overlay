@@ -10,6 +10,8 @@ For the 2026-10-11 spoken-script revision, use `VOICE_STYLE.md`: primary linguis
 research, professional read-for-the-ear guidance, Russian caption treatment and
 the continuous-ending decision. It supersedes the earlier exhaustive spoken
 installation checklist, not the factual compatibility requirements.
+`INTERACTION_EDIT.md` adds focused interaction pacing, short relevant key hints,
+an actual native compass close-up, and a closing lockup outside the selected build.
 
 Make a builder's product demonstration, not a trailer of unrelated cinematic
 Minecraft shots. Show a useful result immediately, then show the real action

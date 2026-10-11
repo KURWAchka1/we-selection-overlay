@@ -10,6 +10,7 @@ import subprocess
 import sys
 
 from prepare import ROOT, digest, timestamp
+from graphics import asset, graphic_spec, filter_graph
 
 sys.path.insert(0, str(ROOT / "build/video-tools/python"))
 import imageio_ffmpeg
@@ -95,8 +96,8 @@ def source_manifest(plan, cues, log, opening, names_override=None):
         raise ValueError("No cursor-isolated native capture evidence")
     if not opening and "WESO VIDEO CAPTURE PASS:" not in text:
         raise ValueError("Full source capture did not finish successfully")
-    if plan['source_directory'] in ('capture-celestia-beauty', 'capture-celestia-closing') and 'VIDEO TERRAIN READY:' not in text:
-        raise ValueError('Beauty footage has no full native terrain-readiness evidence')
+    if plan['source_directory'] in ('capture-celestia-beauty', 'capture-celestia-closing', 'capture-celestia-editing') and 'VIDEO TERRAIN READY:' not in text:
+        raise ValueError('Footage has no full native terrain-readiness evidence')
     directory = OUT / plan["source_directory"]
     if not directory.resolve().is_relative_to(OUT.resolve()):
         raise ValueError("Source directory escaped production storage")
@@ -132,6 +133,7 @@ def main():
     parser.add_argument("--beauty-log", type=Path, help="Completed separate native opening; core evidence remains vanilla")
     parser.add_argument("--pickups-log", type=Path, help="Completed separate vanilla UI pickups")
     parser.add_argument("--closing-log", type=Path, help="Completed continuous native closing orbit")
+    parser.add_argument("--editing-log", type=Path, help="Completed separate native interaction walkthrough")
     parser.add_argument("--opening", action="store_true", help="Opening chapter only; never publish as the full review")
     args = parser.parse_args()
     plan = json.loads((ROOT / "docs/video/edit-plan.json").read_text(encoding="utf-8"))
@@ -146,9 +148,20 @@ def main():
     continuous_names = {spec['source'] for spec in continuous.values()}
     names = {name for cue in cues for name in plan['cues'][cue['id']]}
     pickups = names.intersection(plan.get('pickup_sources',[]))
+    editing = names.intersection(plan.get('editing_sources',[]))
     if pickups and not args.pickups_log:
         raise ValueError('This edit requires the completed UI pickup log')
-    manifest = source_manifest(plan,cues,args.capture_log,args.opening,names-pickups-continuous_names)
+    if editing and not args.editing_log:
+        raise ValueError('This edit requires its completed interaction capture log')
+    manifest = source_manifest(plan,cues,args.capture_log,args.opening,names-pickups-editing-continuous_names)
+    if editing:
+        editing_plan = {**plan,'source_directory':'capture-celestia-editing'}
+        editing_manifest = source_manifest(editing_plan,cues,args.editing_log,False,editing)
+        evidence = args.editing_log.read_text(encoding='utf-8-sig',errors='replace')
+        if 'VIDEO EDITING VERIFY PASS:' not in evidence or 'VIDEO WORLD VERIFY PASS:' not in evidence:
+            raise ValueError('Interaction footage did not verify actual WorldEdit apply/cancel behavior')
+        manifest['native_sources'].update(editing_manifest['native_sources'])
+        manifest['editing_capture_log_sha256'] = editing_manifest['capture_log_sha256']
     if pickups:
         pickups_plan = {**plan,'source_directory':'capture-celestia-pickups'}
         pickup_manifest = source_manifest(pickups_plan,cues,args.pickups_log,False,pickups)
@@ -199,11 +212,12 @@ def main():
                 skip = continuous_trim(cue['start'] - first['start'], allocated, source['frames'])
                 hold = 0
             filters = segment_filters(skip, hold)
+            closing_fade = None
             if sustained and cue is cues[-1] and sustained.get('fade_out'):
                 fade = sustained['fade_out']
                 if not 0 < fade < allocated / 30:
                     raise ValueError("Invalid closing fade duration")
-                filters.append(f"fade=t=out:st={allocated / 30 - fade:.9f}:d={fade}")
+                closing_fade = f"fade=t=out:st={(allocated - 1) / 30 - fade:.9f}:d={fade}"
             label = plan["callouts"].get(cue["id"])
             if label:
                 label_path = directory / f"{cue['id']}.txt"
@@ -220,11 +234,22 @@ def main():
                                    f"textfile='{label_path.relative_to(ROOT).as_posix()}':"
                                    "fontcolor=0x182e2a:fontsize=32:line_spacing=9:x=76:y=175:"
                                    "alpha='min(1,t/0.2)'")
-            key = hashlib.sha256(json.dumps([source["sha256"],allocated,skip,filters,"review-v6"],
+            spec = graphic_spec(plan,cue)
+            if spec and len(shot_names) != 1:
+                raise ValueError('A timed key hint requires one coherent native take')
+            graphic = asset(spec,directory) if spec else None
+            inset = cue['id'] in plan.get('compass_insets',[])
+            inset_fades = (cue['id']==plan['compass_insets'][0],cue['id']==plan['compass_insets'][-1]) if inset else (False,False)
+            graph = filter_graph(filters,spec,inset,allocated/30,inset_fades)
+            if closing_fade:
+                graph = graph.replace('[out]', '[unfaded]') + f';[unfaded]{closing_fade}[out]'
+            key = hashlib.sha256(json.dumps([source["sha256"],allocated,skip,graph,
+                                             digest(graphic) if graphic else None,"review-v7"],
                                            sort_keys=True).encode()).hexdigest()[:16]
             path = directory / f"{cue['id']}-{index}-{key}.mp4"
             if not path.is_file():
-                run(base + ["-i", source["path"], "-vf", ",".join(filters), "-frames:v", str(allocated),
+                inputs = ["-i",source['path']] + (["-loop","1","-framerate","30","-i",str(graphic)] if graphic else [])
+                run(base + inputs + ["-filter_complex_threads","1","-filter_complex",graph,"-map","[out]","-frames:v", str(allocated),
                             "-an", "-c:v", "libx264", "-threads", "2", "-preset", "fast", "-crf", "18",
                             "-r", "30", "-fps_mode", "cfr",
                             "-pix_fmt", "yuv420p", "-colorspace", "bt709", "-color_primaries", "bt709",
@@ -233,7 +258,9 @@ def main():
             decoded_frames(path, allocated)
             segments.append(path)
             decisions.append({"cue":cue["id"],"source":name,"profile":profile,"frames":allocated,"trim_frames":skip,
-                              "last_frame_hold":hold,"continuous":bool(sustained),"segment":path.name})
+                              "last_frame_hold":hold,"continuous":bool(sustained),"segment":path.name,
+                              "graphic":{**spec,"path":str(graphic.relative_to(ROOT)).replace('\\','/'),"sha256":digest(graphic)} if spec else None,
+                              "compass_inset":inset,"compass_fades":inset_fades})
         print(f"CUT: {cue['id']}, {length} frames", flush=True)
     total = cues[-1]["slot_end"]
     concat = directory / "concat.txt"

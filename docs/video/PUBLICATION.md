@@ -40,14 +40,14 @@ Fabric also needs compatible Fabric API. Recommended GUI scale: 2x.
 00:52 Inspect and isolate materials
 01:36 Live command preview
 02:16 Resize and move the bounds
-02:55 Preview the copied build
-03:16 Make it readable your way
-03:54 Try it on your next build
+03:13 Preview the copied build
+03:34 Make it readable your way
+04:12 Try it on your next build
 
 Filming location: Celestia Town by Fireless007 / leolerenard.
 Download the creator's map: https://www.curseforge.com/minecraft/worlds/celestia-town
 
-Core demonstrations use vanilla lighting. The opening uses restrained
+Core demonstrations use vanilla lighting. The opening and closing use restrained
 Complementary Reimagined lighting through Iris; shaders are not required by
 the addon. English synthetic narration; English and Russian subtitle tracks.
 Controlled native frame capture is not a performance benchmark.
@@ -63,6 +63,8 @@ Controlled native frame capture is not a performance benchmark.
   accepted edit. Dependencies/map/font binaries stay local and are not redistributed.
 - Recheck chapter times against the final `chapters.txt` if narration changes.
 - Confirm the source-hashed full retake is used; the first full review is superseded.
+- Check the focused Move sequence, native compass close-up, short key hints and
+  closing title against `INTERACTION_EDIT.md`; do not publish an earlier conform.
 - Confirm the displayed account/channel matches the authorized handle.
 - Review the full picture, audio and Russian captions before upload/publication.
 - Check HD processing, caption language assignments, thumbnail and description

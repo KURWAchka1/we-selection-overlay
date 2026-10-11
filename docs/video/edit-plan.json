@@ -1,5 +1,17 @@
 {
   "source_directory": "capture-celestia",
+  "editing_sources": [
+    "54-quick-corner",
+    "59-move-menu",
+    "60-move-grab",
+    "61-move-compass",
+    "62-move-camera",
+    "63-move-x",
+    "64-move-y",
+    "65-move-release",
+    "66-move-apply",
+    "67-move-cancel"
+  ],
   "pickup_sources": [
     "46-ruler-palette",
     "47-editing-palette",
@@ -118,30 +130,44 @@
       "24-edit-settings"
     ],
     "edit-02": [
-      "26-resize-face"
+      "54-quick-corner"
     ],
     "edit-03": [
       "25-radial-resize"
     ],
     "edit-04": [
-      "25-radial-resize",
-      "29-radial-move"
+      "26-resize-face"
     ],
     "edit-05": [
       "27-resize-held",
       "28-resize-applied"
     ],
     "edit-06": [
-      "32-edit-cancelled"
+      "59-move-menu"
     ],
     "edit-07": [
-      "30-move-y-wheel"
+      "60-move-grab"
     ],
     "edit-08": [
-      "31-move-held"
+      "61-move-compass"
     ],
     "edit-09": [
-      "32-edit-cancelled"
+      "62-move-camera"
+    ],
+    "edit-10": [
+      "63-move-x"
+    ],
+    "edit-11": [
+      "64-move-y"
+    ],
+    "edit-12": [
+      "65-move-release"
+    ],
+    "edit-13": [
+      "66-move-apply"
+    ],
+    "edit-14": [
+      "67-move-cancel"
     ],
     "clipboard-01": [
       "39-settings"
@@ -222,6 +248,24 @@
   },
   "callouts": {
     "hook-04": "WorldEdit Selection Overlay"
+  },
+  "key_hints": {
+    "edit-02": {"keys": ["LMB"], "label": "Drag a corner", "start": 0.6, "duration": 2.8},
+    "edit-03": {"keys": ["G"], "label": "Hold to choose a mode", "start": 0.1, "duration": 2.6},
+    "edit-04": {"keys": ["G", "LMB"], "label": "Tap, then drag a face", "start": 0.2, "duration": 3.0},
+    "edit-06": {"keys": ["G"], "label": "Hold to choose Move", "start": 0.6, "duration": 2.8},
+    "edit-07": {"keys": ["G", "LMB"], "label": "Tap, then hold to grip", "start": 0.1, "duration": 3.2},
+    "edit-10": {"keys": ["X", "Scroll"], "label": "Move along X", "start": 0.2, "duration": 3.0},
+    "edit-11": {"keys": ["Y", "Scroll"], "label": "Move up or down", "start": 0.2, "duration": 3.2},
+    "edit-13": {"keys": ["G"], "label": "Apply the draft", "start": 0.4, "duration": 2.8},
+    "edit-14": {"keys": ["Esc"], "label": "Cancel the draft", "start": 0.2, "duration": 2.8}
+  },
+  "compass_insets": ["edit-08", "edit-09", "edit-10", "edit-11"],
+  "closing_title": {
+    "cue": "install-04",
+    "lines": ["WorldEdit Selection Overlay", "Downloads in the description"],
+    "after_caption": 0.2,
+    "fade_in": 0.35
   },
   "continuous_chapters": {
     "install": {

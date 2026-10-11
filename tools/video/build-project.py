@@ -9,6 +9,9 @@ import sys
 
 import bpy
 
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from graphics import COMPASS_CROP, COMPASS_RECT
+
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "build/video/1.8.0"
 FPS = 30
@@ -46,6 +49,21 @@ def setup_scene(name, duration, chapters):
     return scene
 
 
+def fade_strip(scene,strip,start,end,attack,release):
+    if not scene.animation_data:
+        scene.animation_data_create()
+    if not scene.animation_data.action:
+        scene.animation_data.action=bpy.data.actions.new(scene.name+'Action')
+    curve=scene.animation_data.action.fcurve_ensure_for_datablock(scene,strip.path_from_id('blend_alpha'))
+    points=[(start,0),(start+attack,1)] if attack else [(start,1)]
+    points += [(end-release,1),(end-1,0)] if release else [(end-1,1)]
+    for frame,value in points:
+        point=curve.keyframe_points.insert(frame,value,options={'FAST'})
+        point.interpolation='LINEAR'
+    curve.update()
+    strip.invalidate_cache('COMPOSITE')
+
+
 def text_strip(scene, font, name, text, start, end, channel, size, x, y, color, anchor='TOP', fade=False):
     strip = scene.sequence_editor.strips.new_effect(name,'TEXT',channel,start,frame_end=end)
     strip.text = text
@@ -61,16 +79,7 @@ def text_strip(scene, font, name, text, start, end, channel, size, x, y, color, 
     strip.wrap_width = 1
     if fade:
         bpy.context.window.scene = scene
-        if not scene.animation_data:
-            scene.animation_data_create()
-        if not scene.animation_data.action:
-            scene.animation_data.action = bpy.data.actions.new(scene.name+'Action')
-        curve = scene.animation_data.action.fcurve_ensure_for_datablock(
-            scene,strip.path_from_id('blend_alpha'))
-        for frame,value in ((start,0),(start+10,1),(max(start+11,end-8),1),(end-1,0)):
-            curve.keyframe_points.insert(frame,value,options={'FAST'})
-        curve.update()
-        strip.invalidate_cache('COMPOSITE')
+        fade_strip(scene,strip,start,end,10,8)
     return strip
 
 
@@ -153,6 +162,39 @@ def source_assembly(scene, manifest, decisions, plan, timeline, font):
         strip.frame_offset_start = decision['trim_frames']
         strip.frame_final_start = cursor
         strip.frame_final_duration = moving
+        if decision.get('compass_inset'):
+            inset = scene.sequence_editor.strips.new_movie(
+                'Editable native compass detail '+decision['cue'],native_path(path),3,cursor)
+            inset.frame_offset_start = decision['trim_frames']
+            inset.frame_final_start = cursor
+            inset.frame_final_duration = decision['frames']
+            x,y,w,h=COMPASS_CROP
+            px,py,pw,ph=COMPASS_RECT
+            inset.crop.min_x=x
+            inset.crop.max_x=1920-x-w
+            inset.crop.min_y=1080-y-h
+            inset.crop.max_y=y
+            inset.transform.scale_x=pw/w
+            inset.transform.scale_y=ph/h
+            # VSE cropping preserves the original full-frame coordinate origin.
+            inset.transform.offset_x=px+pw/2-960-(x+w/2-960)*pw/w
+            inset.transform.offset_y=540-py-ph/2-(540-y-h/2)*ph/h
+            inset.blend_type='ALPHA_OVER'
+            attack,release=decision.get('compass_fades',(True,True))
+            fade_strip(scene,inset,cursor,cursor+decision['frames'],6 if attack else 0,6 if release else 0)
+        graphic = decision.get('graphic')
+        if graphic:
+            path_graphic=ROOT/graphic['path']
+            if hashlib.sha256(path_graphic.read_bytes()).hexdigest()!=graphic['sha256']:
+                raise ValueError('Editorial graphic changed after the verified render')
+            start=cursor+frames(graphic['start'])
+            end=cursor+frames(graphic['end'])
+            overlay=scene.sequence_editor.strips.new_image(
+                'Editable '+graphic['kind']+' graphic '+decision['cue'],native_path(path_graphic),4,start)
+            overlay.frame_final_duration=end-start
+            overlay.blend_type='ALPHA_OVER'
+            release=0 if graphic['kind']=='closing' else frames(graphic['fade_out'])
+            fade_strip(scene,overlay,start,end,frames(graphic['fade_in']),release)
         if decision['last_frame_hold']:
             still = stills/(source['sha256'][:16]+'.png')
             if not still.is_file():
@@ -168,7 +210,7 @@ def source_assembly(scene, manifest, decisions, plan, timeline, font):
         spec = plan['continuous_chapters'][timeline[-1]['chapter']]
         duration = frames(spec['fade_out'])
         fade = scene.sequence_editor.strips.new_effect(
-            'Editable closing fade','COLOR',2,cursor-duration,frame_end=cursor)
+            'Editable closing fade','COLOR',6,cursor-duration,frame_end=cursor)
         fade.color = (0,0,0)
         fade.blend_type = 'ALPHA_OVER'
         if not scene.animation_data:
@@ -253,6 +295,10 @@ def main():
     render_check(original,title.frame_final_start,directory/'blender-title-fade-start.png')
     if not args.opening:
         render_check(russian,frames(58)+1,directory/'blender-inspector-caption-check.png')
+        for identifier,label in (('edit-07','key-hint'),('edit-09','compass'),('install-04','closing-title')):
+            cue=next(c for c in timeline if c['id']==identifier)
+            moment=cue['slot_end']-2 if identifier=='install-04' else cue['start']+2
+            render_check(original,frames(moment)+1,directory/f'blender-{label}-check.png')
         render_check(original,original.frame_end,directory/'blender-closing-fade-check.png')
     bpy.context.window.scene = russian
     bpy.ops.file.make_paths_relative()

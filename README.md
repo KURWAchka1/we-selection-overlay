@@ -81,6 +81,7 @@ and preparation without opening a game window.
 - [Video research and decisions](docs/video/RESEARCH.md)
 - [English script with Russian translation](docs/video/SCRIPT.md)
 - [Conversational narration and closing treatment](docs/video/VOICE_STYLE.md)
+- [Focused interaction walkthrough and key hints](docs/video/INTERACTION_EDIT.md)
 
 ## License
 

@@ -44,6 +44,7 @@ public final class VideoShowcase implements FabricClientGameTest {
     private final boolean beauty = Boolean.getBoolean("weso.video.beauty");
     private final boolean pickups = Boolean.getBoolean("weso.video.pickups");
     private final boolean closing = Boolean.getBoolean("weso.video.closing");
+    private final boolean editingPickups = Boolean.getBoolean("weso.video.editingPickups");
     private final String locationMode = System.getProperty("weso.video.location", "none");
     private final boolean location = !locationMode.equals("none");
 
@@ -360,6 +361,13 @@ public final class VideoShowcase implements FabricClientGameTest {
                 visibleChunks.size()+", distance=12");
         configureOverlay(); houseSelection(server);
         String before = houseFingerprint(world);
+        if (editingPickups) {
+            if (beauty || pickups || closing) throw new AssertionError("Editing evidence requires its own vanilla pass");
+            captureEditingPickups(server);
+            if (!before.equals(houseFingerprint(world))) throw new AssertionError("Editing changed world blocks");
+            System.out.println("VIDEO WORLD VERIFY PASS: editing pickups changed only WorldEdit bounds");
+            return;
+        }
         if (pickups) {
             if (beauty) throw new AssertionError("UI evidence must be recorded without shaders");
             capturePalettePickups();
@@ -520,6 +528,116 @@ public final class VideoShowcase implements FabricClientGameTest {
         context.runOnClient(client -> nativeCall(client.mouseHandler,"onButton",client.getWindow().handle(),new MouseButtonInfo(0,0),0));
         shot("31-move-held"); key(256,1); key(256,0); context.waitTicks(12); shot("32-edit-cancelled");
         context.runOnClient(client -> call(editing,"configure",false,1,8));
+    }
+
+    private void captureEditingPickups(net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext server) {
+        Object editing = field(overlay,"selectionEditController");
+        context.runOnClient(client -> {
+            setField(client.getWindow(),"focused",true);
+            setField(client.mouseHandler,"mouseGrabbed",true);
+            call(editing,"configure",true,1,8);
+        });
+        context.waitFor(client -> field(editing,"shown") != null);
+        server.runCommand("tp @p 438.5 80.38 -178 180 5"); context.waitTicks(16);
+        // Aim at a real visible corner, then use the shipped direct-corner input path.
+        context.runOnClient(client -> {
+            var eye=client.gameRenderer.mainCamera().position();
+            double dx=431-eye.x, dy=88-eye.y, dz=-199-eye.z;
+            client.player.setYRot((float) Math.toDegrees(Math.atan2(-dx,dz)));
+            client.player.setXRot((float) -Math.toDegrees(Math.atan2(dy,Math.hypot(dx,dz))));
+        });
+        context.waitTicks(8);
+        context.waitFor(client -> {
+            Object renderer=field(editing,"renderer");
+            return call(renderer,"cornerHit",call(field(editing,"shown"),"bounds"),call(renderer,"view",client))!=null;
+        });
+        shot("54-quick-corner",frame -> {
+            if (frame == frames/5) {
+                mouseButton(1);
+                context.runOnClient(client -> {
+                    if (!(boolean) call(editing,"dragging")) throw new AssertionError("Quick-corner take did not grip a corner");
+                });
+            }
+            if (frame > frames/5 && frame < frames*3/5) context.runOnClient(client ->
+                    client.player.setXRot(client.player.getXRot()-0.10f));
+            if (frame == frames*3/5) mouseButton(0);
+        });
+        context.waitFor(client -> !(boolean) call(editing,"pending"));
+        houseSelection(server);
+        server.runCommand("tp @p 438.5 80.38 -178 180 5"); context.waitTicks(12);
+        chooseEditingMode(editing,true,"59-move-menu");
+        shot("60-move-grab",frame -> {
+            if (frame == frames/6) tapG();
+            if (frame == frames/3) mouseButton(1);
+        });
+        context.waitFor(client -> (boolean) call(editing,"dragging"));
+        shot("61-move-compass");
+        Object draftBeforeTurn = context.computeOnClient(client -> call(editing,"draft"));
+        shot("62-move-camera",frame -> {
+            double t = Math.clamp((frame-frames/6.0)/(frames*2.0/3),0,1);
+            t = t*t*(3-2*t);
+            float yaw = (float) (180-10*t);
+            context.runOnClient(client -> client.player.setYRot(yaw));
+        });
+        context.runOnClient(client -> {
+            if (!draftBeforeTurn.equals(call(editing,"draft"))) throw new AssertionError("Camera turn moved the selection");
+        });
+        shot("63-move-x",frame -> {
+            if (frame == frames/6) { key(88,1); key(88,0); }
+            if (frame == frames/3 || frame == frames/2 || frame == frames*2/3) scroll(1);
+        });
+        context.runOnClient(client -> {
+            Object draft = call(editing,"draft");
+            if (((Number) call(draft,"minX")).intValue()!=434 || ((Number) call(draft,"minY")).intValue()!=70)
+                throw new AssertionError("Filmed X scroll did not change only X");
+        });
+        shot("64-move-y",frame -> {
+            if (frame == frames/6) { key(89,1); key(89,0); }
+            if (frame == frames/3 || frame == frames/2 || frame == frames*2/3) scroll(1);
+        });
+        context.runOnClient(client -> {
+            Object draft = call(editing,"draft");
+            if (((Number) call(draft,"minX")).intValue()!=434 || ((Number) call(draft,"minY")).intValue()!=73)
+                throw new AssertionError("Filmed Y scroll did not retain X and lift Y");
+        });
+        shot("65-move-release",frame -> { if (frame == frames/6) mouseButton(0); });
+        context.runOnClient(client -> {
+            if (!(boolean) call(editing,"active")) throw new AssertionError("Move applied on mouse release");
+        });
+        shot("66-move-apply",frame -> { if (frame == frames/3) tapG(); });
+        context.waitFor(client -> !(boolean) call(editing,"pending"));
+        server.runOnServer(nativeServer -> {
+            var actor = FabricAdapter.get().fromNativePlayer(nativeServer.getPlayerList().getPlayers().getFirst());
+            try {
+                var bounds = WorldEdit.getInstance().getSessionManager().get(actor).getSelection(actor.getWorld());
+                if (bounds.getMinimumPoint().x()!=434 || bounds.getMinimumPoint().y()!=73)
+                    throw new AssertionError("G did not apply the demonstrated WorldEdit bounds");
+            } catch (com.sk89q.worldedit.IncompleteRegionException ex) { throw new AssertionError(ex); }
+        });
+        context.waitFor(client -> field(editing,"shown") != null);
+        tapG(); mouseButton(1); key(89,1); key(89,0); scroll(-2); mouseButton(0);
+        shot("67-move-cancel",frame -> { if (frame == frames/3) { key(256,1); key(256,0); } });
+        context.runOnClient(client -> {
+            if ((boolean) call(editing,"active")) throw new AssertionError("Escape did not cancel the draft");
+        });
+        server.runOnServer(nativeServer -> {
+            var actor = FabricAdapter.get().fromNativePlayer(nativeServer.getPlayerList().getPlayers().getFirst());
+            try {
+                if (WorldEdit.getInstance().getSessionManager().get(actor).getSelection(actor.getWorld()).getMinimumPoint().y()!=73)
+                    throw new AssertionError("Cancellation changed the applied WorldEdit bounds");
+            } catch (com.sk89q.worldedit.IncompleteRegionException ex) { throw new AssertionError(ex); }
+        });
+        System.out.println("VIDEO EDITING VERIFY PASS: camera stable, X/Y scroll, mouse release, G apply, Escape cancel");
+        context.runOnClient(client -> call(editing,"configure",false,1,8));
+        houseSelection(server);
+    }
+
+    private void mouseButton(int action) {
+        context.runOnClient(client -> nativeCall(client.mouseHandler,"onButton",client.getWindow().handle(),new MouseButtonInfo(0,0),action));
+    }
+
+    private void scroll(double amount) {
+        context.runOnClient(client -> nativeCall(client.mouseHandler,"onScroll",client.getWindow().handle(),0.0,amount));
     }
 
     private void captureHouseClipboard(net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext server) {

@@ -7,6 +7,7 @@ allprojects {
         def location = System.getenv('WESO_VIDEO_LOCATION') ?: 'none'
         def pickups = System.getenv('WESO_VIDEO_PICKUPS') == '1'
         def closing = System.getenv('WESO_VIDEO_CLOSING') == '1'
+        def editingPickups = System.getenv('WESO_VIDEO_EDITING_PICKUPS') == '1'
         def shaderRoot = file('../build/video-tools/shaders')
         def tests = sourceSets.create('videoTest') {
             java.srcDir(new File(root, 'java'))
@@ -33,12 +34,13 @@ allprojects {
             runDir = file(beauty ? 'run-video-beauty-test' : 'run-video-test')
             jvmArgs.addAll('-Xmx2G', '-Dfabric.client.gametest', '-Dfabric.debug.disableModShuffle=true',
                 "-javaagent:${guard.absolutePath}")
-            def directory = closing ? 'capture-celestia-closing' : pickups ? 'capture-celestia-pickups' : location == 'full' ? (beauty ? 'capture-celestia-beauty' : 'capture-celestia') :
+            def directory = editingPickups ? 'capture-celestia-editing' : closing ? 'capture-celestia-closing' : pickups ? 'capture-celestia-pickups' : location == 'full' ? (beauty ? 'capture-celestia-beauty' : 'capture-celestia') :
                 location == 'scout' ? 'capture-location' : beauty ? 'capture-beauty' : 'capture'
             jvmArgs.add("-Dweso.video.output=${file('../build/video/1.8.0/' + directory).absolutePath}")
             jvmArgs.add("-Dweso.video.beauty=${beauty}")
             jvmArgs.add("-Dweso.video.pickups=${pickups}")
             jvmArgs.add("-Dweso.video.closing=${closing}")
+            jvmArgs.add("-Dweso.video.editingPickups=${editingPickups}")
             jvmArgs.add("-Dweso.video.location=${location}")
             jvmArgs.add("-Dweso.video.map=${file('../build/video-tools/celestia-town.zip').absolutePath}")
             jvmArgs.add("-Dweso.video.ffmpeg=${System.getenv('WESO_VIDEO_FFMPEG') ?: ''}")
@@ -49,6 +51,7 @@ allprojects {
                 if (minecraft_version != '26.2') throw new GradleException('Filming fixture is scoped to 26.2')
                 if (pickups && (beauty || location != 'full')) throw new GradleException('Pickups require credited vanilla location')
                 if (closing && (!beauty || pickups || location != 'full')) throw new GradleException('Closing requires credited beauty location without UI pickups')
+                if (editingPickups && (beauty || pickups || closing || location != 'full')) throw new GradleException('Editing pickups require a separate credited vanilla location')
                 if (beauty) {
                     def assets = new groovy.json.JsonSlurper().parse(new File(shaderRoot, 'manifest.json'))
                     assets.each { asset ->

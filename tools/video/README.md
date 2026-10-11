@@ -4,6 +4,8 @@ This is production tooling, not a Minecraft runtime feature. It never ships
 inside the mod JAR. Read `docs/video/PRODUCTION.md` and repository `AGENTS.md`
 before recording. Never run the fixture on the owner's normal desktop.
 Read `docs/video/VOICE_STYLE.md` before changing spoken copy or translated captions.
+Read `docs/video/INTERACTION_EDIT.md` for the focused movement walkthrough,
+timed key hints, native compass detail and unobscured closing lockup.
 
 ## Local voice and captions
 
@@ -101,7 +103,7 @@ the reset menu under `capture-celestia-pickups/`. Pass its successful log as
 `--pickups-log`, and the separate beauty log as `--beauty-log` to `edit.py`.
 
 Record the continuous closing separately, with enough frames for its complete
-voice-derived chapter. The current chapter is 18 seconds; this pass records 22:
+voice-derived chapter, including the silent closing-title tail. This pass records 22:
 
 ```powershell
 $env:WESO_VIDEO_FRAMES = '660'
@@ -113,6 +115,14 @@ Closing footage goes to `capture-celestia-closing/`, leaving all earlier sources
 untouched. Continuous chapter offsets advance across cue boundaries. A short
 source is rejected instead of looping or holding it. `--opening` does not need
 the closing log. Full output fades only after the final voice/caption tail.
+
+For the separate native interaction pass, use `$env:WESO_VIDEO_FRAMES = '120'`
+and `-Showcase -CreditedLocation -EditingPickups`. This records corner adjustment,
+Move grip, native camera-relative compass, X/Y scroll, release, apply and cancel
+under `capture-celestia-editing/`. Add its successful `--editing-log` to the full
+edit command. WorldEdit bounds and unchanged world blocks are asserted. The
+full cut rejects unverified sources. `graphics.py` shares timing/layout with the
+editable project; key hints are short editorial overlays, not changes to the mod.
 
 The edit produces an English AAC master with EN/RU subtitle streams, an RU-burned
 review, chapter metadata, a source-hashed manifest and an actual contact sheet.
