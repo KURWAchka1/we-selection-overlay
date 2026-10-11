@@ -86,7 +86,7 @@ and preparation without opening a game window.
 
 ## License
 
-Copyright (c) 2026 Karefanchik. Project-owned source code is licensed under [GPL-3.0-or-later](LICENSE). Bundled and optional dependencies retain their own licenses; see [third-party notices](THIRD_PARTY.md).
+Copyright (c) 2026 Marshal_RF. Project-owned source code is licensed under [GPL-3.0-or-later](LICENSE). Bundled and optional dependencies retain their own licenses; see [third-party notices](THIRD_PARTY.md).
 
 Release sources are preserved by version tags, starting with `1.8.0`. Download
 the tagged tree, rather than the changing development branch, to rebuild a

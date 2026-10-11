@@ -1,7 +1,7 @@
 # Release Source Access
 
 Project-owned code is licensed under GPL-3.0-or-later. Copyright remains with
-Karefanchik; opening the repository does not place the code in the public domain.
+Marshal_RF; opening the repository does not place the code in the public domain.
 Third-party components retain the terms recorded in [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## Version 1.8.0
