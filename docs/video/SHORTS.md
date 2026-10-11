@@ -1,5 +1,10 @@
 # Four Shorts From the Full Review
 
+All four were published publicly on Marshal_RF's authorized YouTube channel
+on 2026-10-11. See [publication record](SHORTS_PUBLICATION.md) for the exact
+video links, uploaded artifact hashes, verified settings and platform limits.
+Rendering again does not update or replace those published videos.
+
 ## Editorial Direction
 
 One true, useful promise per video. No invented feature, performance claim,
