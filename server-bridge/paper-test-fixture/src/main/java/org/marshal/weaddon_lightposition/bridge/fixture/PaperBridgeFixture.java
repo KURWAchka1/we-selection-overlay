@@ -15,12 +15,14 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /** Never distributed; seeds metadata and explicit grants in a loopback-only test server. */
 public final class PaperBridgeFixture extends JavaPlugin implements Listener {
     private final Map<UUID, PermissionAttachment> grants = new HashMap<>();
+    private FixtureMeasurements measurements;
 
     @Override public void onEnable() {
         if (!Boolean.getBoolean("weso.bridge.fixture") || getServer().getOnlineMode()
@@ -31,6 +33,8 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         }
         Objects.requireNonNull(getCommand("wesofixture")).setExecutor(this);
         getServer().getPluginManager().registerEvents(this, this);
+        measurements = new FixtureMeasurements(this);
+        getServer().getPluginManager().registerEvents(measurements, this);
     }
 
     @EventHandler public void join(PlayerJoinEvent event) {
@@ -38,7 +42,8 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         if (!player.getName().startsWith("Weso")) return;
         var attachment = player.addAttachment(this);
         grants.put(player.getUniqueId(), attachment);
-        boolean allowed = player.getName().equals("WesoAllowed") || player.getName().equals("WesoSecond");
+        boolean allowed = player.getName().equals("WesoAllowed") || player.getName().equals("WesoSecond")
+                || player.getName().matches("WesoLoad[0-9]{2}");
         attachment.setPermission("weso.bridge.selection", allowed);
         for (String node : new String[]{"pos", "expand", "contract", "shift"})
             attachment.setPermission("worldedit.selection." + node, allowed);
@@ -50,6 +55,7 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         var player = Objects.requireNonNull(getServer().getPlayerExact(name));
         var actor = BukkitAdapter.adapt(player);
         int x = name.equals("WesoSecond") ? -30 : 10;
+        if (name.matches("WesoLoad[0-9]{2}")) x = 100 + Integer.parseInt(name.substring(8)) * 16;
         var session = WorldEdit.getInstance().getSessionManager().get(actor);
         session.setRegionSelector(actor.getWorld(), new CuboidRegionSelector(actor.getWorld(),
                 BlockVector3.at(x, 64, 20), BlockVector3.at(x + 5, 70, 27)));
@@ -59,8 +65,17 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         grants.remove(event.getPlayer().getUniqueId());
     }
 
+    @EventHandler public void respawn(PlayerRespawnEvent event) {
+        if (grants.containsKey(event.getPlayer().getUniqueId()))
+            getLogger().info("WESO_FIXTURE_RESPAWN " + event.getPlayer().getName());
+    }
+
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof ConsoleCommandSender) || args.length != 2) return true;
+        if (args[0].equals("measure")) {
+            measurements.start(args[1]);
+            return true;
+        }
         var player = getServer().getPlayerExact(args[1]);
         if (player == null || !grants.containsKey(player.getUniqueId())) return true;
         switch (args[0]) {
@@ -72,6 +87,17 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
                         .setRegionSelector(actor.getWorld(), new CuboidRegionSelector(actor.getWorld()));
             }
             case "seed" -> seed(player.getName());
+            case "kill" -> player.setHealth(0);
+            case "stopwe" -> getServer().getPluginManager().disablePlugin(
+                    Objects.requireNonNull(getServer().getPluginManager().getPlugin("WorldEdit")));
+            case "channels" -> {
+                var plugin = getServer().getPluginManager().getPlugin("WorldEditSelectionOverlayBridge");
+                String channel = "worldedit_selection_overlay:bridge";
+                if (plugin == null || plugin.isEnabled()
+                        || getServer().getMessenger().isIncomingChannelRegistered(plugin, channel)
+                        || getServer().getMessenger().isOutgoingChannelRegistered(plugin, channel))
+                    throw new IllegalStateException("Disabled bridge retained channel ownership");
+            }
             default -> { return true; }
         }
         getLogger().info("WESO_FIXTURE_OK " + args[0] + " " + args[1]);

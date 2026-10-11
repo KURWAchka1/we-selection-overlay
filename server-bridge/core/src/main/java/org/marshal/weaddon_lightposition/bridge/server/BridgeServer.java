@@ -143,6 +143,12 @@ public final class BridgeServer {
     }
 
     public void disconnect(UUID player) { checkThread(); peers.remove(player); }
+    /** Drop session data without resetting the budget of a still-open connection. */
+    public void resetContext(UUID player) {
+        checkThread();
+        Peer peer = peers.get(player);
+        if (peer != null) invalidate(peer);
+    }
     public void close() { checkThread(); peers.clear(); }
     public Metrics metrics() {
         checkThread();

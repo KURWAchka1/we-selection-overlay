@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { createWriteStream, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { createWriteStream, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { setPriority, constants } from 'node:os';
 import { resolve, relative, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { createServer } from 'node:net';
+import { channel, frame, hello, request, decode } from './wire-codec.mjs';
 
 const [javaHome, serverDirectory, dependencyDirectory] = process.argv.slice(2);
 assert(javaHome && serverDirectory && dependencyDirectory, 'Expected JDK home, isolated server directory, dependency directory');
@@ -20,13 +22,17 @@ assert.match(properties, /^online-mode=false$/m);
 const require = createRequire(join(resolve(dependencyDirectory), 'package.json'));
 const minecraft = require('minecraft-protocol');
 assert.equal(require('minecraft-protocol/package.json').version, '1.68.0');
-const channel = 'worldedit_selection_overlay:bridge';
+const portProbe = createServer();
+await new Promise((accept, reject) => { portProbe.once('error', reject); portProbe.listen(25579, '127.0.0.1', accept); });
+await new Promise((accept, reject) => portProbe.close(error => error ? reject(error) : accept()));
+rmSync(join(serverDir, 'wire-proof.json'), { force: true });
 const clients = [];
 const checks = [];
 const record = name => { checks.push(name); console.log(`PASS: ${name}`); };
 const output = createWriteStream(join(serverDir, 'wire-server.log'));
 const lines = [];
-let partial = '', exited = false, cancelled = false;
+const partial = { out: '', err: '' };
+let exited = false, cancelled = false, successReport;
 process.on('SIGINT', () => { cancelled = true; });
 process.on('SIGTERM', () => { cancelled = true; });
 const java = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-XX:ActiveProcessorCount=2',
@@ -35,17 +41,17 @@ const java = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-X
 });
 java.on('exit', () => { exited = true; });
 java.on('error', error => { lines.push(`LAUNCH_ERROR ${error.message}`); exited = true; });
-function capture(bytes) {
+function capture(source, bytes) {
   output.write(bytes);
-  partial += bytes.toString();
+  partial[source] += bytes.toString();
   let end;
-  while ((end = partial.indexOf('\n')) >= 0) {
-    lines.push(partial.slice(0, end).replace(/\r$/, ''));
-    partial = partial.slice(end + 1);
+  while ((end = partial[source].indexOf('\n')) >= 0) {
+    lines.push(partial[source].slice(0, end).replace(/\r$/, ''));
+    partial[source] = partial[source].slice(end + 1);
   }
 }
-java.stdout.on('data', capture);
-java.stderr.on('data', capture);
+java.stdout.on('data', bytes => capture('out', bytes));
+java.stderr.on('data', bytes => capture('err', bytes));
 async function waitFor(predicate, label, timeout = 15000) {
   const deadline = Date.now() + timeout;
   while (!predicate()) {
@@ -71,35 +77,8 @@ async function metrics() {
     throttled: number(a, 'throttled'), malformed: number(a, 'malformed'),
     reads: number(b, 'reads'), replies: number(b, 'replies') };
 }
-function frame(opcode, body) { return Buffer.concat([Buffer.from('5745534f01' + opcode.toString(16).padStart(2, '0'), 'hex'), body]); }
-function hello(nonce, major = 1) {
-  const body = Buffer.alloc(24);
-  nonce.copy(body); body.writeUInt16BE(major, 16); body.writeUInt32BE(1, 20);
-  return frame(1, body);
-}
-function request(epoch, id) {
-  const body = Buffer.alloc(24); epoch.copy(body); body.writeBigInt64BE(BigInt(id), 16);
-  return frame(3, body);
-}
-function decode(bytes) {
-  assert(bytes.length >= 6 && bytes.length <= 256);
-  assert.equal(bytes.subarray(0, 5).toString('hex'), '5745534f01');
-  if (bytes[5] === 2) {
-    assert.equal(bytes.length, 49);
-    return { opcode: 2, nonce: bytes.subarray(6, 22), epoch: bytes.subarray(22, 38),
-      status: bytes[38], major: bytes.readUInt16BE(39), minor: bytes.readUInt16BE(41),
-      capabilities: bytes.readUInt32BE(43), frameBytes: bytes.readUInt16BE(47) };
-  }
-  assert.equal(bytes[5], 4);
-  const result = { opcode: 4, epoch: bytes.subarray(6, 22), id: bytes.readBigInt64BE(22), status: bytes[30] };
-  assert.equal(bytes.length, result.status === 0 ? 64 : 31);
-  if (result.status === 0) {
-    result.bounds = Array.from({ length: 6 }, (_, i) => bytes.readInt32BE(31 + i * 4));
-    result.minY = bytes.readInt32BE(55); result.maxY = bytes.readInt32BE(59); result.permissions = bytes[63];
-  }
-  return result;
-}
 async function connect(name, advertise = true) {
+  const joinStart = lines.length;
   const client = minecraft.createClient({ host: '127.0.0.1', port: 25579, username: name,
     auth: 'offline', version: '1.21.11', profilesFolder: false,
     clientSettings: { viewDistance: 2 }, disableChatSigning: true });
@@ -115,7 +94,7 @@ async function connect(name, advertise = true) {
     if (packet.channel === channel) peer.frames.push(Buffer.from(packet.data));
     if (packet.channel === 'worldedit:cui') peer.cui.push(packet.data.toString());
   });
-  await waitFor(() => lines.some(s => s.includes(`WESO_FIXTURE_JOIN ${name}`)), `join ${name}`);
+  await waitFor(() => lines.slice(joinStart).some(s => s.includes(`WESO_FIXTURE_JOIN ${name}`)), `join ${name}`);
   if (advertise) client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(channel) });
   await waitFor(() => peer.advertised, 'Paper advertised channel');
   peer.send = bytes => { assert(!peer.ended, peer.errors.join(', ')); client.write('custom_payload', { channel, data: bytes }); };
@@ -198,18 +177,60 @@ try {
   record('empty/recreated selection, oversized/unknown payload and incompatible major fail safely');
   const stable = await metrics(); await delay(2000); const idle = await metrics();
   assert.equal(idle.reads, stable.reads); assert.equal(idle.replies, stable.replies);
-  for (const peer of clients) { assert(!peer.ended, peer.errors.join(', ')); peer.client.end('verification complete'); }
+
+  const beforeUnregister = await metrics();
+  first.client.write('custom_payload', { channel: 'minecraft:unregister', data: Buffer.from('worldedit:cui') });
+  await delay(300);
+  assert.equal((await metrics()).connections, beforeUnregister.connections, 'Unrelated channel must not clear the bridge');
+  first.client.write('custom_payload', { channel: 'minecraft:unregister', data: Buffer.from(channel) });
+  await delay(300);
+  assert.equal((await metrics()).connections, beforeUnregister.connections, 'Open connection must retain its admission budget');
+  first.client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(channel) });
+  await silent(first, request(renewed.epoch, 3));
+  const afterRegister = await negotiate(first);
+  assert.notDeepEqual(afterRegister.epoch, renewed.epoch);
+  record('channel unregister drops cached state/epoch, preserves admission budget; unrelated channels do not reset context');
+
+  const respawnStart = lines.length;
+  await consoleAction('kill', 'WesoAllowed');
+  first.client.write('client_command', { actionId: 0 });
+  await waitFor(() => lines.slice(respawnStart).some(s => s.includes('WESO_FIXTURE_RESPAWN WesoAllowed')), 'actual same-world respawn');
+  await silent(first, request(afterRegister.epoch, 1));
+  assert.equal((await metrics()).reads, idle.reads);
+  const afterRespawn = await negotiate(first);
+  assert.notDeepEqual(afterRespawn.epoch, afterRegister.epoch);
+  assert.equal((await first.exchange(request(afterRespawn.epoch, 1))).value.status, 0);
+  record('real same-world death/respawn invalidates epoch before metadata disclosure');
+
+  first.client.end('same-process reconnect test');
+  await waitFor(() => first.ended, 'first connection closes');
+  const reconnected = await connect('WesoAllowed');
+  await silent(reconnected, request(afterRespawn.epoch, 2));
+  const newConnection = await negotiate(reconnected);
+  assert.notDeepEqual(newConnection.epoch, afterRespawn.epoch);
+  assert.equal((await reconnected.exchange(request(newConnection.epoch, 1))).value.status, 0);
+  record('same offline identity reconnects in this server process without retaining old epoch');
+
+  for (const peer of clients) if (peer !== first && peer !== reconnected) {
+    assert(!peer.ended, peer.errors.join(', ')); peer.client.end('verification complete');
+  }
+  await waitFor(() => clients.filter(p => p !== reconnected).every(p => p.ended), 'other clients disconnect');
+  await delay(200);
+  assert.equal((await metrics()).connections, 1);
+  await consoleAction('stopwe', 'WesoAllowed');
+  await consoleAction('channels', 'WesoAllowed');
+  await silent(reconnected, request(newConnection.epoch, 2));
+  record('WorldEdit disable also disables companion and unregisters both channel directions');
+  reconnected.client.end('verification complete');
   await waitFor(() => clients.every(p => p.ended), 'client disconnect');
   await delay(200);
-  const finalMetrics = await metrics(); assert.equal(finalMetrics.connections, 0);
-  record('no idle source work and all connection state released on disconnect');
+  record('no idle source work; remaining clients leave cleanly after dependency shutdown');
   const hashes = Object.fromEntries(readdirSync(join(serverDir, 'plugins')).filter(f => f.endsWith('.jar'))
     .map(f => [f, createHash('sha256').update(readFileSync(join(serverDir, 'plugins', f))).digest('hex')]));
-  writeFileSync(join(serverDir, 'wire-proof.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
+  successReport = { checkedAt: new Date().toISOString(),
     minecraft: '1.21.11', minecraftProtocol: '1.68.0', server: lines.find(s => /This server is running Paper/.test(s)),
-    hashes, checks, metrics: idle, finalMetrics,
-    nativeClients: 'not launched; separate native codec tests required' }, null, 2));
-  console.log('PAPER BRIDGE WIRE PROOF PASS');
+    hashes, checks, metricsBeforeLifecycle: idle,
+    nativeClients: 'not launched; separate native tests required' };
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
@@ -219,7 +240,16 @@ try {
     java.stdin.write('stop\n');
     const deadline = Date.now() + 20000;
     while (!exited && Date.now() < deadline) await delay(50);
-    if (!exited) { java.kill(); await new Promise(r => java.once('exit', r)); }
+    if (!exited) {
+      java.kill();
+      const killDeadline = Date.now() + 10000;
+      while (!exited && Date.now() < killDeadline) await delay(50);
+    }
   }
   await new Promise(r => output.end(r));
+}
+assert(exited, `Owned Paper PID ${java.pid} did not stop`);
+if (successReport && !process.exitCode) {
+  writeFileSync(join(serverDir, 'wire-proof.json'), JSON.stringify(successReport, null, 2));
+  console.log('PAPER BRIDGE WIRE PROOF PASS; owned server stopped');
 }

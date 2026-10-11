@@ -99,6 +99,28 @@ and a separate disposable loopback server under `build/bridge-native-proof/`.
 See [native results and limits](../docs/engineering/NATIVE_PAPER_REGRESSION_2026-10-11.md).
 It does not establish 26.x server hosts or performance under a busy-server load.
 
+The extended wire fixture also exercises actual same-world death/respawn,
+same-process reconnect, bridge channel unregister/register and WorldEdit disable.
+It verifies that stale epochs cannot read metadata, unrelated channel changes
+do not reset the bridge, and dependency shutdown unregisters both directions.
+These headless lifecycle checks are not a native-client respawn/recovery claim.
+
+For repeated, bounded server-cost experiments (pinned wire dependencies required):
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Players 16 -Samples 600 -Repetitions 2 -AcceptEula
+```
+
+This uses a separate `build/bridge-load-proof/` server, the same stationary
+headless players, two reversed-order absent/installed comparisons, and phases
+for silent connections, negotiated idle, one/many active requesters, flood and
+recovery. Each phase collects bounded tick samples and owner-thread CPU/allocation
+snapshots; JFR runs in every comparison. It checks own-player data, ordinary
+requester progress, admission bounds, zero idle reads/transfers, chunk generation
+and disconnect cleanup. No native window or system input is involved. It is
+a read-only metadata workload, not clipboard/simulation or production-gameplay
+benchmarking. The test-only fixture must never be deployed to ordinary servers.
+
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge
 clients discover the channel only when advertised. No player gets the new
@@ -115,7 +137,9 @@ negotiation and writes the result to the client log. It does not enable a
 preview or poll the selection. `/wesobridge` shows server counters to console
 or a user with `weso.bridge.admin` (default OP); it does not scan the world.
 
-Restart/disconnect/world-context change clears connection data. Denied/absent
+Restart/disconnect clears connection data. World-context change, respawn and
+channel unregistration drop session tokens/caches without refilling the budget
+of a still-open connection. WorldEdit disable also disables the companion. Denied/absent
 bridges do not disable normal CUI or local sources. Native gameplay and wire
 round trips must still pass the [verification gates](../docs/engineering/SERVER_BRIDGE_VERIFICATION.md)
 before distributing this as a supported companion.

@@ -16,6 +16,12 @@ passes six actual Fabric/NeoForge 1.21.11 connections, including denied and abse
 companions. It also records the standalone NeoForge CUI fix, stronger protocol
 fuzzing, exact later candidate hashes and remaining host/performance gates.
 
+The later [lifecycle and 16-player load pilot](BRIDGE_LOAD_AND_LIFECYCLE_2026-10-11.md)
+adds reproduced old-epoch cleanup fixes, real respawn/reconnect/dependency-disable
+checks, 33 pure tests per JVM and repeated metadata workloads with JFR. It records
+baseline spread and an unattributed long tick; it does not close production
+performance or automatic native lifecycle-recovery gates.
+
 ## Implemented Boundary
 
 Pure Java 21 messages, bounded codec, client state machine and owning-thread

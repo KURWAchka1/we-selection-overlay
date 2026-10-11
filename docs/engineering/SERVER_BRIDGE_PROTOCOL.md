@@ -64,7 +64,10 @@ Either an authorization check or the host read returning DENIED invalidates the
 server epoch. Restored permission requires a new hello/context negotiation.
 
 Server epoch belongs to that player's negotiated context, never a JVM object.
-A changed hello nonce rotates it; disconnect/world change clears it. Request IDs
+A changed hello nonce rotates it; disconnect, world change, respawn and bridge
+channel unregistration clear it. A still-open connection retains only its bounded
+admission record across context resets: unregistration/respawn cannot refill its
+request budget. Actual disconnect removes that record too. Request IDs
 are positive, increasing i64 values within the epoch. The server only caches the
 last reply: the same ID returns its original result; older IDs are dropped.
 The client has at most one pending read and accepts only its matching ID/epoch.

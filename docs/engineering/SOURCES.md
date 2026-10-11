@@ -250,6 +250,45 @@ but received no CUI before this fix. That failed native run is regression eviden
 not a failed bridge handshake. Packaged-bytecode checks cover handler order in all
 three runtimes; native Paper results are recorded separately.
 
+## S33 Paper Lifecycle Events
+
+[PlayerUnregisterChannelEvent 1.21.11](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/player/PlayerUnregisterChannelEvent.html),
+[PlayerRespawnEvent 1.21.11](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/player/PlayerRespawnEvent.html)
+and [PluginDisableEvent 1.21.11](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/server/PluginDisableEvent.html).
+Checked 2026-10-11. Observe real platform events; do not construct internal event
+objects or infer a respawn from a timer. Our host drops session tokens/caches on
+respawn/unregistration, retains the live connection's admission budget, and
+disables when WorldEdit disables. Actual Paper lifecycle evidence is recorded
+separately from native-client recovery, which still needs its own matrix.
+
+## S34 Bounded Test Measurements
+
+[ServerTickEndEvent 1.21.11](https://jd.papermc.io/paper/1.21.11/com/destroystokyo/paper/event/server/ServerTickEndEvent.html),
+[ThreadMXBean Java 21](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.management/com/sun/management/ThreadMXBean.html)
+and [ChunkLoadEvent 1.21.11](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/world/ChunkLoadEvent.html).
+Checked 2026-10-11. Paper tick duration is milliseconds; owner-thread CPU is a
+cumulative counter, and allocation is an approximation, not retained heap.
+The fixture samples a bounded array and writes results after the measured window.
+Chunk-load events distinguish generation. The fixture and its monitoring hooks
+are not bundled in production; event/counter/recorder overhead exists in every
+comparison condition. A loopback idle-world experiment is not a busy-server SLA.
+
+## S35 JFR Command
+
+[Official Java 21 jfr command](https://docs.oracle.com/en/java/javase/21/docs/specs/man/jfr.html).
+Checked 2026-10-11. `summary` reports recording/event statistics; `print --json`
+supports structured event filtering and explicit stack depth. Use recorded
+measurement intervals to separate startup from workload samples. Sample counts
+and allocation weights are not exact per-call CPU/allocation attribution, and
+zero observed samples cannot establish zero overhead. Local recordings are not
+automatically uploaded to a profiling service or committed to Git.
+
+[RecordingFile Java 21](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordingFile.html)
+and [RecordedEvent](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedEvent.html)
+provide streaming event access. Our analysis uses them instead of materializing
+all recursive classloader/stack metadata as a giant JSON document, keeps a
+bounded set of time windows and excludes the test fixture from bridge attribution.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

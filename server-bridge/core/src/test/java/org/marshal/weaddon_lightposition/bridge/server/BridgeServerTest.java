@@ -173,6 +173,40 @@ class BridgeServerTest {
         assertEquals(0, target.metrics().selectionReads());
     }
 
+    @Test void contextResetDropsCachedSelectionAndEpochButRetainsConnectionAdmission() {
+        allowed.add(player);
+        Welcome original = hello(player);
+        assertNotNull(exchange(server, player, new SelectionRequest(original.epoch(), 1)));
+        server.resetContext(player);
+        assertNull(exchange(server, player, new SelectionRequest(original.epoch(), 1)));
+        assertEquals(1, reads);
+        Welcome renewed = hello(player);
+        assertNotEquals(original.epoch(), renewed.epoch());
+        assertNotNull(exchange(server, player, new SelectionRequest(renewed.epoch(), 1)));
+        assertEquals(2, reads);
+        server.resetContext(player);
+        server.resetContext(second);
+        assertEquals(1, server.metrics().connections());
+        server.disconnect(player);
+        assertEquals(0, server.metrics().connections());
+    }
+
+    @Test void repeatedContextResetsCannotRefillPlayerBudgetOrStarveAnotherPlayer() {
+        BridgeServer target = server(new BridgeServer.Limits(10, 100, 100, 4, 4));
+        allowed.add(player); allowed.add(second);
+        for (int attempt = 0; attempt < 1000; attempt++) {
+            target.resetContext(player);
+            var reply = exchange(target, player, new Hello(nonce, 1, 0, 1));
+            if (attempt < 4) assertNotNull(reply); else assertNull(reply);
+        }
+        assertEquals(4, target.metrics().admitted());
+        assertEquals(996, target.metrics().throttled());
+        assertNotNull(exchange(target, second, new Hello(nonce, 1, 0, 1)));
+        assertEquals(0, reads);
+        time.addAndGet(250_000_000L);
+        assertNotNull(exchange(target, player, new Hello(nonce, 1, 0, 1)));
+    }
+
     @Test void offThreadCallsFailBeforeSessionOrStorageAccess() throws InterruptedException {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread worker = new Thread(() -> {

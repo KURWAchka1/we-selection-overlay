@@ -16,6 +16,9 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRespawnEvent;
+import org.bukkit.event.player.PlayerUnregisterChannelEvent;
+import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 
@@ -85,7 +88,21 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
     }
 
     @EventHandler public void onWorldChange(PlayerChangedWorldEvent event) {
-        if (bridge != null) bridge.disconnect(event.getPlayer().getUniqueId());
+        if (bridge != null) bridge.resetContext(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler public void onRespawn(PlayerRespawnEvent event) {
+        if (bridge != null) bridge.resetContext(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler public void onChannelUnregister(PlayerUnregisterChannelEvent event) {
+        if (bridge != null && BridgeCodec.CHANNEL.equals(event.getChannel()))
+            bridge.resetContext(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler public void onDependencyDisable(PluginDisableEvent event) {
+        if (event.getPlugin().getName().equals("WorldEdit"))
+            getServer().getPluginManager().disablePlugin(this);
     }
 
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
