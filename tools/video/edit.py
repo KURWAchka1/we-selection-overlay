@@ -96,7 +96,7 @@ def source_manifest(plan, cues, log, opening, names_override=None):
         raise ValueError("No cursor-isolated native capture evidence")
     if not opening and "WESO VIDEO CAPTURE PASS:" not in text:
         raise ValueError("Full source capture did not finish successfully")
-    if plan['source_directory'] in ('capture-celestia-beauty', 'capture-celestia-closing', 'capture-celestia-editing') and 'VIDEO TERRAIN READY:' not in text:
+    if plan['source_directory'] in ('capture-celestia-beauty', 'capture-celestia-closing', 'capture-celestia-editing', 'capture-celestia-overview') and 'VIDEO TERRAIN READY:' not in text:
         raise ValueError('Footage has no full native terrain-readiness evidence')
     directory = OUT / plan["source_directory"]
     if not directory.resolve().is_relative_to(OUT.resolve()):
@@ -134,6 +134,7 @@ def main():
     parser.add_argument("--pickups-log", type=Path, help="Completed separate vanilla UI pickups")
     parser.add_argument("--closing-log", type=Path, help="Completed continuous native closing orbit")
     parser.add_argument("--editing-log", type=Path, help="Completed separate native interaction walkthrough")
+    parser.add_argument("--overview-log", type=Path, help="Completed native selection/typing/execution overview pickups")
     parser.add_argument("--opening", action="store_true", help="Opening chapter only; never publish as the full review")
     args = parser.parse_args()
     plan = json.loads((ROOT / "docs/video/edit-plan.json").read_text(encoding="utf-8"))
@@ -149,11 +150,23 @@ def main():
     names = {name for cue in cues for name in plan['cues'][cue['id']]}
     pickups = names.intersection(plan.get('pickup_sources',[]))
     editing = names.intersection(plan.get('editing_sources',[]))
+    overview = names.intersection(plan.get('overview_sources',[]))
     if pickups and not args.pickups_log:
         raise ValueError('This edit requires the completed UI pickup log')
     if editing and not args.editing_log:
         raise ValueError('This edit requires its completed interaction capture log')
-    manifest = source_manifest(plan,cues,args.capture_log,args.opening,names-pickups-editing-continuous_names)
+    if overview and not args.overview_log:
+        raise ValueError('This edit requires its completed overview capture log')
+    manifest = source_manifest(plan,cues,args.capture_log,args.opening,names-pickups-editing-overview-continuous_names)
+    if overview:
+        overview_plan = {**plan,'source_directory':'capture-celestia-overview'}
+        overview_manifest = source_manifest(overview_plan,cues,args.overview_log,False,overview)
+        evidence = args.overview_log.read_text(encoding='utf-8-sig',errors='replace')
+        if 'VIDEO OVERVIEW VERIFY PASS:' not in evidence or 'VIDEO WORLD VERIFY PASS:' not in evidence:
+            raise ValueError('Overview footage did not verify real execution and WorldEdit undo')
+        manifest['native_sources'].update(overview_manifest['native_sources'])
+        manifest['overview_capture_log_sha256'] = overview_manifest['capture_log_sha256']
+        manifest['explicit_execution_sources'] = ['75-command-execute','76-command-applied','77-command-undone']
     if editing:
         editing_plan = {**plan,'source_directory':'capture-celestia-editing'}
         editing_manifest = source_manifest(editing_plan,cues,args.editing_log,False,editing)

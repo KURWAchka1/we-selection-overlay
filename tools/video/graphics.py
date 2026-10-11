@@ -21,7 +21,7 @@ def graphic_spec(plan, cue):
         end = min(start + hint['duration'], length - .1)
         if start < 0 or end - start < 1.2:
             raise ValueError('Key hint has insufficient readable time')
-        if not hint['keys'] or any(key not in ('G','LMB','X','Y','Scroll','Esc') for key in hint['keys']):
+        if not hint['keys'] or any(key not in ('G','LMB','X','Y','Scroll','Esc','B','N','F8','Enter') for key in hint['keys']):
             raise ValueError('Unreviewed key hint')
         return {'kind':'key', 'keys':hint['keys'], 'label':hint['label'],
                 'start':start, 'end':end, 'fade_in':.18, 'fade_out':.18}

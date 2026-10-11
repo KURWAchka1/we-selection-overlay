@@ -294,12 +294,18 @@ def main():
     title = next(s for s in original.sequence_editor.strips if s.name.startswith('Editable product title'))
     render_check(original,title.frame_final_start,directory/'blender-title-fade-start.png')
     if not args.opening:
-        render_check(russian,frames(58)+1,directory/'blender-inspector-caption-check.png')
+        inspector=next(c for c in timeline if c['id']=='inspect-01')
+        render_check(russian,frames(inspector['start']+2)+1,directory/'blender-inspector-caption-check.png')
         for identifier,label in (('edit-07','key-hint'),('edit-09','compass'),('install-04','closing-title')):
             cue=next(c for c in timeline if c['id']==identifier)
             moment=cue['slot_end']-2 if identifier=='install-04' else cue['start']+2
             render_check(original,frames(moment)+1,directory/f'blender-{label}-check.png')
         render_check(original,original.frame_end,directory/'blender-closing-fade-check.png')
+        if 'overview_capture_log_sha256' in manifest:
+            for identifier,label in (('commands-02','typing'),('commands-11','flora'),
+                                     ('commands-14','executed'),('clipboard-04','reflection')):
+                cue=next(c for c in timeline if c['id']==identifier)
+                render_check(original,frames(cue['slot_end']-0.6)+1,directory/f'blender-{label}-check.png')
     bpy.context.window.scene = russian
     bpy.ops.file.make_paths_relative()
     bpy.ops.wm.save_as_mainfile(filepath=str(output),relative_remap=True)

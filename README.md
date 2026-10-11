@@ -82,6 +82,7 @@ and preparation without opening a game window.
 - [English script with Russian translation](docs/video/SCRIPT.md)
 - [Conversational narration and closing treatment](docs/video/VOICE_STYLE.md)
 - [Focused interaction walkthrough and key hints](docs/video/INTERACTION_EDIT.md)
+- [Full overview coverage audit](docs/video/COVERAGE_AUDIT.md)
 
 ## License
 

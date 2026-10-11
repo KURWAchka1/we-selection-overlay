@@ -167,7 +167,7 @@ def main():
     chapter_lines = []
     for chapter in script["chapters"]:
         cue = next(c for c in timeline if c["chapter"] == chapter["id"])
-        sec = int(cue["start"])
+        sec = round(cue["start"] * script["fps"]) // script["fps"]
         chapter_lines.append(f"{sec // 60:02}:{sec % 60:02} {chapter['title']}")
     (out / "chapters.txt").write_text("\n".join(chapter_lines), encoding="utf-8")
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()

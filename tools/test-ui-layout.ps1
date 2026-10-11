@@ -8,6 +8,7 @@ param(
     [switch]$CreditedLocation,
     [switch]$Closing,
     [switch]$EditingPickups,
+    [switch]$OverviewPickups,
     [switch]$DesktopWorker
 )
 $ErrorActionPreference = 'Stop'
@@ -16,11 +17,12 @@ if ($LocationPreview -and !$Showcase) { throw '-LocationPreview requires -Showca
 if ($CreditedLocation -and !$Showcase) { throw '-CreditedLocation requires -Showcase' }
 if ($Closing -and !($Showcase -and $Beauty -and $CreditedLocation)) { throw '-Closing requires -Showcase -Beauty -CreditedLocation' }
 if ($EditingPickups -and (!($Showcase -and $CreditedLocation) -or $Beauty -or $Closing)) { throw '-EditingPickups requires a separate -Showcase -CreditedLocation pass' }
+if ($OverviewPickups -and (!($Showcase -and $CreditedLocation) -or $Beauty -or $Closing -or $EditingPickups)) { throw '-OverviewPickups requires a separate -Showcase -CreditedLocation pass' }
 if ($LocationPreview -and $CreditedLocation) { throw 'Choose scout or full capture, not both' }
 . (Join-Path $PSScriptRoot 'test-desktop.ps1')
 if (!$DesktopWorker) {
     & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
-    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Performance=[bool]$Performance; Showcase=[bool]$Showcase; Beauty=[bool]$Beauty; LocationPreview=[bool]$LocationPreview; CreditedLocation=[bool]$CreditedLocation; Closing=[bool]$Closing; EditingPickups=[bool]$EditingPickups; DesktopWorker=$true}
+    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Performance=[bool]$Performance; Showcase=[bool]$Showcase; Beauty=[bool]$Beauty; LocationPreview=[bool]$LocationPreview; CreditedLocation=[bool]$CreditedLocation; Closing=[bool]$Closing; EditingPickups=[bool]$EditingPickups; OverviewPickups=[bool]$OverviewPickups; DesktopWorker=$true}
     return
 }
 Assert-WesoTestDesktop
@@ -32,12 +34,14 @@ $previousBeauty = $env:WESO_VIDEO_BEAUTY
 $previousLocation = $env:WESO_VIDEO_LOCATION
 $previousClosing = $env:WESO_VIDEO_CLOSING
 $previousEditing = $env:WESO_VIDEO_EDITING_PICKUPS
+$previousOverview = $env:WESO_VIDEO_OVERVIEW_PICKUPS
 Push-Location (Join-Path (Split-Path -Parent $PSScriptRoot) 'WEaddon_fabric_26.2')
 try {
     $env:JAVA_HOME = $Java25
     $env:WESO_VIDEO_BEAUTY = [string][int][bool]$Beauty
     $env:WESO_VIDEO_CLOSING = [string][int][bool]$Closing
     $env:WESO_VIDEO_EDITING_PICKUPS = [string][int][bool]$EditingPickups
+    $env:WESO_VIDEO_OVERVIEW_PICKUPS = [string][int][bool]$OverviewPickups
     $env:WESO_VIDEO_LOCATION = if ($CreditedLocation) { 'full' } elseif ($LocationPreview) { 'scout' } else { 'none' }
     $arguments = if ($Showcase) {
         @('-I', '../tools/video/showcase.init.gradle', 'testVideoShowcase', '--offline', '--no-daemon', '--max-workers=2', '--console=plain')
@@ -59,4 +63,5 @@ try {
     $env:WESO_VIDEO_LOCATION = $previousLocation
     $env:WESO_VIDEO_CLOSING = $previousClosing
     $env:WESO_VIDEO_EDITING_PICKUPS = $previousEditing
+    $env:WESO_VIDEO_OVERVIEW_PICKUPS = $previousOverview
 }

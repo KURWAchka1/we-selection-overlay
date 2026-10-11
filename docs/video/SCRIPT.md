@@ -37,58 +37,86 @@ That's WorldEdit Selection Overlay. Let's look at the rest.
 
 ## See and measure your selection
 
-Shot: Native outline and corners, ruler, grid toggle, all five CUI shapes, ruler camera, rendering settings and deselect.
+Shot: Normal WorldEdit point commands create the selection. Outline, ruler and grid toggle; give polygon, ellipsoid, cylinder and convex their own readable views. Ruler camera, render settings and deselect.
 
 **selection-01**
 
-With a large selection, it's easy to lose track of a corner.
+Start with your normal WorldEdit selection.
 
-В большом выделении легко\
-потерять из виду один из углов.
+Начните с обычного\
+выделения WorldEdit.
 
 **selection-02**
 
-Here, the outline shows exactly what's selected, with the corners marked.
+Set the second corner, and the outline appears around the whole region.
 
-Здесь сразу видны\
-и границы выделения, и его углы.
+Задайте второй угол:\
+контур покажет всю выбранную область.
 
 **selection-03**
+
+Now you can check every corner before touching the build.
+
+Теперь можно проверить каждый угол,\
+прежде чем менять постройку.
+
+**selection-04**
 
 The ruler gives you the dimensions right where you're working.
 
 Размеры тоже перед глазами:\
 их показывает линейка.
 
-**selection-04**
+**selection-05**
 
 If the grid gets in the way, hide it and keep the outline and ruler.
 
 Если сетка мешает, уберите её.\
 Контур и линейку можно оставить.
 
-**selection-05**
-
-That works with polygons, ellipsoids, cylinders, and convex selections too.
-
-Есть и другие формы: многоугольники,\
-эллипсоиды, цилиндры и многогранники.
-
 **selection-06**
+
+It isn't just boxes. Here's a polygon around an irregular footprint.
+
+Не только прямоугольники:\
+вот многоугольная область.
+
+**selection-07**
+
+An ellipsoid makes the curved volume clear.
+
+У эллипсоида хорошо видны\
+изогнутые границы объёма.
+
+**selection-08**
+
+A cylinder shows its circular sides and full height.
+
+У цилиндра видны круглые стенки\
+и вся высота выделения.
+
+**selection-09**
+
+And a convex selection connects the points into its actual shape.
+
+Выпуклый многогранник соединяет\
+точки в настоящую форму выделения.
+
+**selection-10**
 
 Ruler labels can follow your view, or stay in a fixed position.
 
 Подписи линейки могут следовать\
 за камерой или оставаться на месте.
 
-**selection-07**
+**selection-11**
 
 Prefer a smoother shape? Switch styles, or add diagonals to a cuboid.
 
 Выберите плавную или блочную форму,\
 а у кубоида можно добавить диагонали.
 
-**selection-08**
+**selection-12**
 
 And when you're done with a selection, N clears it.
 
@@ -97,7 +125,7 @@ And when you're done with a selection, N clears it.
 
 ## Inspect and isolate materials
 
-Shot: B inspector, counts and filter, two selected materials, vanilla isolation, bucket icon and overlay-off view, reset. Captions use the empty header.
+Shot: B inspector, block counts, specific roof-brick search, solid filter, two selected materials, vanilla isolation, bucket icon and overlay-off view, reset. Captions use the empty header.
 
 **inspect-01**
 
@@ -115,54 +143,61 @@ You get a count for each block type, including the empty space.
 
 **inspect-03**
 
-Search by name, change the sort order, or filter by solids and fluids.
+Looking for the roof material? Search for bricks.
 
-Ищите по названию, сортируйте список\
-или отберите блоки и жидкости.
+Ищете материал крыши?\
+Найдите кирпичи по названию.
 
 **inspect-04**
+
+Or change the sort order and filter by solids or fluids.
+
+Можно изменить сортировку\
+и отобрать твёрдые блоки или жидкости.
+
+**inspect-05**
 
 The loaded counts show how much of the area the client has checked.
 
 По счётчикам видно, какую часть\
 области клиент уже проверил.
 
-**inspect-05**
+**inspect-06**
 
 To look inside the build, tick the materials you want to see.
 
 Чтобы заглянуть внутрь постройки,\
 отметьте нужные материалы.
 
-**inspect-06**
+**inspect-07**
 
 Now the other blocks in the selection are hidden. Take a look inside.
 
 Остальные блоки в выделении скрылись.\
 Теперь можно рассмотреть всё внутри.
 
-**inspect-07**
+**inspect-08**
 
 Choose several materials together. They stay pinned at the top of the list.
 
 Можно выбрать несколько материалов.\
 Они останутся вверху списка.
 
-**inspect-08**
+**inspect-09**
 
 Their textures stay bright, even in the shaded parts of the build.
 
 Текстуры хорошо видны\
 даже в затенённых частях постройки.
 
-**inspect-09**
+**inspect-10**
 
 Fluids have bucket icons. You can inspect with the usual overlay hidden, too.
 
 Жидкости отмечены вёдрами. Изоляция\
 работает и с выключенным оверлеем.
 
-**inspect-10**
+**inspect-11**
 
 Nothing's been removed. Reset the checkboxes to see the whole house again.
 
@@ -171,7 +206,7 @@ Nothing's been removed. Reset the checkboxes to see the whole house again.
 
 ## Live command preview
 
-Shot: Native chat replacement, WorldEdit numeric parser, percentage mix, removal, walls and outline, Escape restoration. Show useful examples rather than reciting command support.
+Shot: Actual material typing, oriented stair states, numeric ID, percentage mix, removal, separate walls/outline and native garden flora. F8 toggle, real Enter execution, changed quartz house and WorldEdit undo. Distinguish execution from visual drafts.
 
 **commands-01**
 
@@ -182,66 +217,101 @@ Let's try a few commands on this house.
 
 **commands-02**
 
-Here's the wall color again. Edit the command to compare another material.
+Change the material while you're typing; the preview updates with it.
 
-Снова меняем стены. Поправьте команду,\
-чтобы сравнить другой материал.
+Меняйте материал прямо при вводе:\
+предпросмотр изменится вместе с ним.
 
 **commands-03**
 
-You can use block states, or the numeric IDs you already use in WorldEdit.
+Block states let you check which way stairs will face.
 
-Можно указывать состояния блоков\
-и привычные числовые ID WorldEdit.
+Состояния блоков позволяют проверить\
+даже направление ступеней.
 
 **commands-04**
+
+Numeric IDs work through WorldEdit's parser too.
+
+Числовые ID тоже работают\
+через парсер WorldEdit.
+
+**commands-05**
 
 For a mixed wall, add percentages to the pattern.
 
 Хотите смешать материалы?\
 Укажите их доли в процентах.
 
-**commands-05**
+**commands-06**
 
 Here's a seventy-thirty mix. You can see how the materials work together.
 
 Здесь смесь 70 на 30. Уже видно,\
 как материалы сочетаются.
 
-**commands-06**
+**commands-07**
 
 The exact random positions can change when you run it.
 
 При выполнении случайные позиции\
 блоков могут отличаться.
 
-**commands-07**
+**commands-08**
 
 Thinking of clearing an area? The removal markers show what would go.
 
 Собираетесь очистить область?\
 Маркеры покажут, что будет убрано.
 
-**commands-08**
-
-Or check a wall or outline before building it.
-
-Так же можно заранее посмотреть\
-на стены или каркас.
-
 **commands-09**
 
-F8 switches previews on and off. Escape brings back the original view.
+Check the walls before building them.
 
-F8 включает и выключает превью.\
-Esc возвращает исходный вид.
+Посмотрите на будущие стены,\
+прежде чем их строить.
 
 **commands-10**
+
+Or preview a shell around the region.
+
+Или проверьте оболочку\
+по границам области.
+
+**commands-11**
+
+For a garden, try flora and inspect the planting before you commit.
+
+В саду попробуйте flora:\
+оцените озеленение до выполнения.
+
+**commands-12**
+
+F8 switches the preview off and back on for a quick comparison.
+
+F8 выключает и возвращает превью:\
+так удобно сравнить результат.
+
+**commands-13**
 
 When you're happy with it, Enter runs the command as usual.
 
 Результат устраивает?\
 Enter выполнит команду как обычно.
+
+**commands-14**
+
+Now those wall blocks really are quartz.
+
+Теперь стены действительно\
+состоят из кварца.
+
+**commands-15**
+
+WorldEdit's undo still works. Let's keep the original house for the rest.
+
+Обычный undo WorldEdit работает.\
+Вернём исходный дом для продолжения.
 
 ## Resize and move the bounds
 
@@ -347,46 +417,60 @@ Esc отменит черновик.
 
 ## Preview the copied build
 
-Shot: Enable Clipboard Preview; copied townhouse, draft rotate/flip, Escape restore; region command priority then return. No discussion of rejected or absent features.
+Shot: Enable the initially disabled Clipboard Preview. Original copied townhouse, separate held rotate and flip drafts, Escape restore, separate region-command priority and clipboard return.
 
 **clipboard-01**
 
-Copying a build? Turn on Clipboard Preview in settings.
+Clipboard Preview starts off. Turn it on in settings when you need it.
 
-Копируете постройку?\
-Включите Clipboard Preview.
+Превью буфера по умолчанию выключено.\
+Включите его в настройках.
 
 **clipboard-02**
 
-You'll see the copy at its placement position before you commit to it.
+After WorldEdit's copy command, check the build at its placement position.
 
-Копия появится в позиции вставки.\
-Можно заранее оценить размещение.
+После copy WorldEdit можно оценить\
+постройку в позиции вставки.
 
 **clipboard-03**
 
-Try rotate or flip in chat, and check which way the build will face.
+Type rotate in chat to check a different orientation.
 
-Введите rotate или flip:\
-посмотрите, куда будет обращён дом.
+Введите rotate в чате,\
+чтобы проверить другой поворот.
 
 **clipboard-04**
+
+Or try flip to see the reflected version.
+
+Или попробуйте flip,\
+чтобы увидеть зеркальную копию.
+
+**clipboard-05**
 
 Escape restores the orientation, leaving the real clipboard alone.
 
 Esc вернёт исходную ориентацию.\
 Настоящий буфер пока не изменён.
 
-**clipboard-05**
+**clipboard-06**
 
-Try a command on the selection, then go back to the copied preview.
+A command on your selection temporarily takes over the preview.
 
-Можно проверить команду для области,\
-а затем вернуться к превью копии.
+Команда для выделенной области\
+временно заменит превью копии.
+
+**clipboard-07**
+
+Close that draft, and the copied build comes back.
+
+Закройте черновик:\
+скопированная постройка вернётся.
 
 ## Make it readable your way
 
-Shot: O pencil, native 3D palette, color/opacity/width, ruler/axes, preset confirmation, reset, common width, Ctrl Z/Y and all three menu themes.
+Shot: O pencil, native 3D palette, readable color/opacity/width and ruler/axes shots. Separate preset choice from confirmation and result. Reset, common width, Ctrl Z/Y and three menu themes.
 
 **palette-01**
 
@@ -425,26 +509,33 @@ Start with a preset if you'd rather choose a ready-made combination.
 
 **palette-06**
 
+Check the confirmation, then apply it to see the whole palette change.
+
+Подтвердите применение:\
+вся палитра изменится вместе.
+
+**palette-07**
+
 Reset an element on its own, or use the menu to reset a whole group.
 
 Сбросьте отдельный элемент\
 или целую группу настроек через меню.
 
-**palette-07**
+**palette-08**
 
 When the line widths match, the top slider adjusts them together.
 
 Если толщины одинаковы,\
 верхний ползунок изменит их все сразу.
 
-**palette-08**
+**palette-09**
 
 Changed your mind? Control Z undoes the edit. Control Y brings it back.
 
 Передумали? Ctrl+Z отменит правку,\
 а Ctrl+Y вернёт её.
 
-**palette-09**
+**palette-10**
 
 And there's a choice of Glass, Studio, or Classic for the menus.
 

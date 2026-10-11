@@ -6,6 +6,7 @@ before recording. Never run the fixture on the owner's normal desktop.
 Read `docs/video/VOICE_STYLE.md` before changing spoken copy or translated captions.
 Read `docs/video/INTERACTION_EDIT.md` for the focused movement walkthrough,
 timed key hints, native compass detail and unobscured closing lockup.
+Read `docs/video/COVERAGE_AUDIT.md` for the full-mod outcome/footage audit.
 
 ## Local voice and captions
 
@@ -103,12 +104,12 @@ the reset menu under `capture-celestia-pickups/`. Pass its successful log as
 `--pickups-log`, and the separate beauty log as `--beauty-log` to `edit.py`.
 
 Record the continuous closing separately, with enough frames for its complete
-voice-derived chapter, including the silent closing-title tail. This pass records 22:
+voice-derived chapter, including the silent closing-title tail. This pass records 22 seconds:
 
 ```powershell
 $env:WESO_VIDEO_FRAMES = '660'
 .\tools\test-ui-layout.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Showcase -Beauty -CreditedLocation -Closing
-python tools/video/edit.py --capture-log build/desktop-tests/WesoTest-CORE.log --beauty-log build/desktop-tests/WesoTest-BEAUTY.log --pickups-log build/desktop-tests/WesoTest-PICKUPS.log --closing-log build/desktop-tests/WesoTest-CLOSING.log
+python tools/video/edit.py --capture-log build/desktop-tests/WesoTest-CORE.log --beauty-log build/desktop-tests/WesoTest-BEAUTY.log --pickups-log build/desktop-tests/WesoTest-PICKUPS.log --closing-log build/desktop-tests/WesoTest-CLOSING.log --editing-log build/desktop-tests/WesoTest-EDITING.log --overview-log build/desktop-tests/WesoTest-OVERVIEW.log
 ```
 
 Closing footage goes to `capture-celestia-closing/`, leaving all earlier sources
@@ -123,6 +124,15 @@ under `capture-celestia-editing/`. Add its successful `--editing-log` to the ful
 edit command. WorldEdit bounds and unchanged world blocks are asserted. The
 full cut rejects unverified sources. `graphics.py` shares timing/layout with the
 editable project; key hints are short editorial overlays, not changes to the mod.
+
+For the separate coverage pass, use the same 120-frame setting and
+`-Showcase -CreditedLocation -OverviewPickups`. Pass its successful log as
+`--overview-log` to the full edit. Sources are kept separately under
+`capture-celestia-overview/`: normal point commands, roof-material search,
+visible command typing, states, flora, F8 and explicit WorldEdit execution/undo.
+Only this disposable pass executes the wall replacement; the fixture verifies
+that WorldEdit's normal undo restores every source-house block. The editor
+marks these execution sources separately, never presenting them as a draft.
 
 The edit produces an English AAC master with EN/RU subtitle streams, an RU-burned
 review, chapter metadata, a source-hashed manifest and an actual contact sheet.

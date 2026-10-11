@@ -1,5 +1,10 @@
 {
   "source_directory": "capture-celestia",
+  "overview_sources": [
+    "68-selection-first-point", "69-selection-complete", "70-inspector-search",
+    "71-command-typing", "72-state-preview", "73-flora-preview",
+    "74-preview-toggle", "75-command-execute", "76-command-applied", "77-command-undone"
+  ],
   "editing_sources": [
     "54-quick-corner",
     "59-move-menu",
@@ -37,32 +42,40 @@
       "03-replace-cancelled"
     ],
     "selection-01": [
-      "01-house-original"
+      "68-selection-first-point"
     ],
     "selection-02": [
-      "01-house-original"
+      "69-selection-complete"
     ],
     "selection-03": [
-      "05-grid-ruler"
+      "01-house-original"
     ],
     "selection-04": [
-      "06-boundary-ruler"
+      "05-grid-ruler"
     ],
     "selection-05": [
-      "08-shape-polygon",
-      "08-shape-ellipsoid",
-      "08-shape-cylinder",
-      "08-shape-convex"
+      "06-boundary-ruler"
     ],
     "selection-06": [
-      "07-ruler-camera"
+      "08-shape-polygon"
     ],
     "selection-07": [
-      "09-render-settings"
+      "08-shape-ellipsoid"
     ],
     "selection-08": [
-      "10-deselected",
-      "01-house-original"
+      "08-shape-cylinder"
+    ],
+    "selection-09": [
+      "08-shape-convex"
+    ],
+    "selection-10": [
+      "07-ruler-camera"
+    ],
+    "selection-11": [
+      "09-render-settings"
+    ],
+    "selection-12": [
+      "10-deselected"
     ],
     "inspect-01": [
       "11-inspector"
@@ -71,41 +84,44 @@
       "11-inspector"
     ],
     "inspect-03": [
-      "12-inspector-filter"
+      "70-inspector-search"
     ],
     "inspect-04": [
-      "11-inspector"
+      "12-inspector-filter"
     ],
     "inspect-05": [
-      "13-inspector-selected"
+      "11-inspector"
     ],
     "inspect-06": [
-      "14-isolated-materials"
-    ],
-    "inspect-07": [
       "13-inspector-selected"
     ],
-    "inspect-08": [
+    "inspect-07": [
       "14-isolated-materials"
     ],
+    "inspect-08": [
+      "13-inspector-selected"
+    ],
     "inspect-09": [
+      "14-isolated-materials"
+    ],
+    "inspect-10": [
       "17-fluid-inspector",
       "15-isolation-overlay-off"
     ],
-    "inspect-10": [
+    "inspect-11": [
       "16-isolation-reset"
     ],
     "commands-01": [
       "02-replace-preview"
     ],
     "commands-02": [
-      "02-replace-preview"
+      "71-command-typing"
     ],
     "commands-03": [
-      "19-numeric-id"
+      "72-state-preview"
     ],
     "commands-04": [
-      "20-random-mixture"
+      "19-numeric-id"
     ],
     "commands-05": [
       "20-random-mixture"
@@ -114,17 +130,31 @@
       "20-random-mixture"
     ],
     "commands-07": [
-      "21-removal"
+      "20-random-mixture"
     ],
     "commands-08": [
-      "22-walls",
-      "23-outline"
+      "21-removal"
     ],
     "commands-09": [
-      "03-replace-cancelled"
+      "22-walls"
     ],
     "commands-10": [
-      "01-house-original"
+      "23-outline"
+    ],
+    "commands-11": [
+      "73-flora-preview"
+    ],
+    "commands-12": [
+      "74-preview-toggle"
+    ],
+    "commands-13": [
+      "75-command-execute"
+    ],
+    "commands-14": [
+      "76-command-applied"
+    ],
+    "commands-15": [
+      "77-command-undone"
     ],
     "edit-01": [
       "24-edit-settings"
@@ -176,14 +206,18 @@
       "33-clipboard-original"
     ],
     "clipboard-03": [
-      "34-clipboard-rotate",
-      "35-clipboard-flip"
+      "34-clipboard-rotate"
     ],
     "clipboard-04": [
-      "36-clipboard-restored"
+      "35-clipboard-flip"
     ],
     "clipboard-05": [
-      "37-preview-priority",
+      "36-clipboard-restored"
+    ],
+    "clipboard-06": [
+      "37-preview-priority"
+    ],
+    "clipboard-07": [
       "38-clipboard-returned"
     ],
     "palette-01": [
@@ -202,22 +236,24 @@
       "47-editing-palette"
     ],
     "palette-05": [
-      "44-presets",
+      "44-presets"
+    ],
+    "palette-06": [
       "50-preset-confirm",
       "51-preset-applied"
     ],
-    "palette-06": [
+    "palette-07": [
       "52-reset-menu"
     ],
-    "palette-07": [
+    "palette-08": [
       "48-element-thickness",
       "49-global-thickness"
     ],
-    "palette-08": [
+    "palette-09": [
       "42-palette-undo",
       "43-palette-redo"
     ],
-    "palette-09": [
+    "palette-10": [
       "44a-appearance",
       "44b-studio",
       "44c-classic"
@@ -250,6 +286,10 @@
     "hook-04": "WorldEdit Selection Overlay"
   },
   "key_hints": {
+    "selection-12": {"keys": ["N"], "label": "Clear selection", "start": 0.1, "duration": 2.4},
+    "inspect-01": {"keys": ["B"], "label": "Inspect selection", "start": 0.2, "duration": 2.6},
+    "commands-12": {"keys": ["F8"], "label": "Compare the preview", "start": 0.2, "duration": 2.8},
+    "commands-13": {"keys": ["Enter"], "label": "Run WorldEdit", "start": 0.2, "duration": 2.8},
     "edit-02": {"keys": ["LMB"], "label": "Drag a corner", "start": 0.6, "duration": 2.8},
     "edit-03": {"keys": ["G"], "label": "Hold to choose a mode", "start": 0.1, "duration": 2.6},
     "edit-04": {"keys": ["G", "LMB"], "label": "Tap, then drag a face", "start": 0.2, "duration": 3.0},

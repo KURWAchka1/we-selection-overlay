@@ -34,15 +34,16 @@ Local command/clipboard/editing features require compatible singleplayer
 WorldEdit; server CUI alone supplies selection data, not clipboard contents.
 On NeoForge's 26.1 branch, local WorldEdit requires 26.1.2 or newer.
 Fabric also needs compatible Fabric API. Recommended GUI scale: 2x.
+The keys shown are defaults; they can be rebound in Minecraft's controls.
 
 00:00 Before you press Enter
 00:19 See and measure your selection
-00:52 Inspect and isolate materials
-01:36 Live command preview
-02:16 Resize and move the bounds
-03:13 Preview the copied build
-03:34 Make it readable your way
-04:12 Try it on your next build
+01:05 Inspect and isolate materials
+01:51 Live command preview
+02:48 Resize and move the bounds
+03:46 Preview the copied build
+04:16 Make it readable your way
+05:08 Try it on your next build
 
 Filming location: Celestia Town by Fireless007 / leolerenard.
 Download the creator's map: https://www.curseforge.com/minecraft/worlds/celestia-town
@@ -65,6 +66,8 @@ Controlled native frame capture is not a performance benchmark.
 - Confirm the source-hashed full retake is used; the first full review is superseded.
 - Check the focused Move sequence, native compass close-up, short key hints and
   closing title against `INTERACTION_EDIT.md`; do not publish an earlier conform.
+- Check `COVERAGE_AUDIT.md`: separate shape and transform views, command typing,
+  flora, preset confirmation, and clearly identified real execution/WorldEdit undo.
 - Confirm the displayed account/channel matches the authorized handle.
 - Review the full picture, audio and Russian captions before upload/publication.
 - Check HD processing, caption language assignments, thumbnail and description

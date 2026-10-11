@@ -72,7 +72,7 @@ class PipelineChecks(unittest.TestCase):
         plan=json.loads((ROOT/'docs/video/edit-plan.json').read_text(encoding='utf-8'))
         self.assertEqual(plan['cues']['edit-02'],['54-quick-corner'])
         self.assertEqual(plan['compass_insets'],['edit-08','edit-09','edit-10','edit-11'])
-        self.assertEqual(len(plan['key_hints']),9)
+        self.assertEqual(len([cue for cue in plan['key_hints'] if cue.startswith('edit-')]),9)
         self.assertTrue(set(plan['key_hints']).issubset(plan['cues']))
         for cue in json.loads((ROOT/'build/video/1.8.0/timeline.json').read_text(encoding='utf-8'))['cues']:
             spec=graphic_spec(plan,cue)
@@ -101,6 +101,25 @@ class PipelineChecks(unittest.TestCase):
             result=subprocess.run(command,capture_output=True)
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertEqual(decoded_frames(movie,30),30)
+
+    def test_full_overview_has_readable_independent_evidence(self):
+        script=json.loads((ROOT/'docs/video/script.json').read_text(encoding='utf-8'))
+        plan=json.loads((ROOT/'docs/video/edit-plan.json').read_text(encoding='utf-8'))
+        for index,shape in enumerate(('polygon','ellipsoid','cylinder','convex'),6):
+            self.assertEqual(plan['cues'][f'selection-{index:02}'],[f'08-shape-{shape}'])
+            self.assertGreaterEqual(script['minimum_slots'][f'selection-{index:02}'],3.5)
+        for cue,shot in (('selection-01','68-selection-first-point'),('selection-02','69-selection-complete'),
+                         ('commands-02','71-command-typing'),('commands-03','72-state-preview'),
+                         ('commands-11','73-flora-preview'),('commands-13','75-command-execute'),
+                         ('commands-14','76-command-applied'),('commands-15','77-command-undone')):
+            self.assertEqual(plan['cues'][cue],[shot])
+            self.assertIn(shot,plan['overview_sources'])
+        self.assertEqual(plan['cues']['clipboard-03'],['34-clipboard-rotate'])
+        self.assertEqual(plan['cues']['clipboard-04'],['35-clipboard-flip'])
+        self.assertEqual(plan['cues']['palette-05'],['44-presets'])
+        self.assertEqual(plan['cues']['palette-06'],['50-preset-confirm','51-preset-applied'])
+        commands=next(c for c in script['chapters'] if c['id']=='commands')
+        self.assertIn("WorldEdit's undo",commands['cues'][-1][0])
 
     def test_graphic_bounds_leave_house_and_native_hud_clear(self):
         from graphics import graphic_spec, asset
@@ -180,6 +199,13 @@ class PipelineChecks(unittest.TestCase):
             self.assertLessEqual(cue["end"] - cue["start"], 7)
             last = cue["slot_end"]
         self.assertAlmostEqual(last, timeline["duration"], places=6)
+        script = json.loads((ROOT / "docs/video/script.json").read_text(encoding="utf-8"))
+        chapters = []
+        for chapter in script['chapters']:
+            cue = next(c for c in timeline['cues'] if c['chapter'] == chapter['id'])
+            seconds = round(cue['start'] * timeline['fps']) // timeline['fps']
+            chapters.append(f"{seconds // 60:02}:{seconds % 60:02} {chapter['title']}")
+        self.assertEqual((path.parent / 'chapters.txt').read_text(encoding='utf-8').splitlines(), chapters)
         plan = json.loads((ROOT / "docs/video/edit-plan.json").read_text(encoding="utf-8"))
         fade = plan['continuous_chapters']['install']['fade_out']
         self.assertGreaterEqual(last - fade, timeline['cues'][-1]['end'])

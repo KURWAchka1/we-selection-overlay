@@ -45,6 +45,7 @@ public final class VideoShowcase implements FabricClientGameTest {
     private final boolean pickups = Boolean.getBoolean("weso.video.pickups");
     private final boolean closing = Boolean.getBoolean("weso.video.closing");
     private final boolean editingPickups = Boolean.getBoolean("weso.video.editingPickups");
+    private final boolean overviewPickups = Boolean.getBoolean("weso.video.overviewPickups");
     private final String locationMode = System.getProperty("weso.video.location", "none");
     private final boolean location = !locationMode.equals("none");
 
@@ -361,6 +362,13 @@ public final class VideoShowcase implements FabricClientGameTest {
                 visibleChunks.size()+", distance=12");
         configureOverlay(); houseSelection(server);
         String before = houseFingerprint(world);
+        if (overviewPickups) {
+            if (beauty || pickups || closing || editingPickups) throw new AssertionError("Overview evidence requires its own vanilla pass");
+            captureOverviewPickups(server);
+            if (!before.equals(houseFingerprint(world))) throw new AssertionError("WorldEdit undo did not restore the filmed house");
+            System.out.println("VIDEO WORLD VERIFY PASS: visual drafts unchanged; explicit command execution restored with WorldEdit undo");
+            return;
+        }
         if (editingPickups) {
             if (beauty || pickups || closing) throw new AssertionError("Editing evidence requires its own vanilla pass");
             captureEditingPickups(server);
@@ -528,6 +536,116 @@ public final class VideoShowcase implements FabricClientGameTest {
         context.runOnClient(client -> nativeCall(client.mouseHandler,"onButton",client.getWindow().handle(),new MouseButtonInfo(0,0),0));
         shot("31-move-held"); key(256,1); key(256,0); context.waitTicks(12); shot("32-edit-cancelled");
         context.runOnClient(client -> call(editing,"configure",false,1,8));
+    }
+
+    private void captureOverviewPickups(net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext server) {
+        captureFloraPreview(server);
+        houseSelection(server); houseCamera(server);
+        key(78,1); key(78,0); context.waitTicks(12);
+        draft("//pos1 431,70,-214");
+        shot("68-selection-first-point",frame -> { if (frame == frames/3) enterChat(); });
+        draft("//pos2 445,87,-200");
+        shot("69-selection-complete",frame -> { if (frame == frames/4) enterChat(); });
+        server.runOnServer(nativeServer -> {
+            var actor = FabricAdapter.get().fromNativePlayer(nativeServer.getPlayerList().getPlayers().getFirst());
+            try {
+                var region=WorldEdit.getInstance().getSessionManager().get(actor).getSelection(actor.getWorld());
+                if (!region.getMinimumPoint().equals(BlockVector3.at(431,70,-214)) ||
+                        !region.getMaximumPoint().equals(BlockVector3.at(445,87,-200)))
+                    throw new AssertionError("Normal point commands did not make the filmed selection");
+            } catch (com.sk89q.worldedit.IncompleteRegionException ex) { throw new AssertionError(ex); }
+        });
+        open(66,"SelectionBlocksScreen"); context.waitTicks(30);
+        context.runOnClient(client -> ((EditBox) field(client.gui.screen(),"searchField")).setValue("brick"));
+        context.waitTicks(10);
+        context.runOnClient(client -> {
+            if (((List<?>) field(client.gui.screen(),"visibleRows")).isEmpty())
+                throw new AssertionError("Roof-material search has no matching rows");
+        });
+        shot("70-inspector-search");
+        context.runOnClient(client -> client.gui.setScreen(null));
+        String prefix="//replace smooth_sandstone ";
+        draft(prefix);
+        shot("71-command-typing",frame -> {
+            int start=frames/8, stride=Math.max(1,frames/24);
+            if (frame>=start && (frame-start)%stride==0) {
+                int count=Math.min("cyan_terracotta".length(),(frame-start)/stride+1);
+                context.runOnClient(client -> ((EditBox) field(client.gui.screen(),"input"))
+                        .setValue(prefix+"cyan_terracotta".substring(0,count)));
+            }
+        });
+        ready(); escape();
+        draft("//replace smooth_sandstone oak_stairs[facing=east,half=bottom]");
+        ready(); context.waitTicks(12); shot("72-state-preview"); escape();
+
+        houseSelection(server); houseCamera(server);
+        var changedCell=server.computeOnServer(nativeServer -> {
+            var level=nativeServer.getPlayerList().getPlayers().getFirst().level();
+            for (int x=431;x<=445;x++) for (int y=70;y<=87;y++) for (int z=-214;z<=-200;z++) {
+                var pos=new net.minecraft.core.BlockPos(x,y,z);
+                if (level.getBlockState(pos).is(net.minecraft.world.level.block.Blocks.SMOOTH_SANDSTONE)) return pos;
+            }
+            throw new AssertionError("No source sandstone to verify command execution");
+        });
+        draft("//replace smooth_sandstone cyan_terracotta"); ready();
+        shot("74-preview-toggle",frame -> {
+            if (frame==frames/4 || frame==frames*3/5) { key(297,1); key(297,0); }
+        });
+        ready(); escape();
+        draft("//replace smooth_sandstone quartz_block"); ready();
+        shot("75-command-execute",frame -> { if (frame==frames/3) enterChat(); });
+        context.waitFor(client -> client.level.getBlockState(changedCell)
+                .is(net.minecraft.world.level.block.Blocks.QUARTZ_BLOCK));
+        context.waitTicks(20); shot("76-command-applied");
+        draft("//undo");
+        shot("77-command-undone",frame -> { if (frame==frames/4) enterChat(); });
+        context.waitTicks(20);
+        System.out.println("VIDEO OVERVIEW VERIFY PASS: normal selection, typed material, nonempty flora, F8, real Enter and WorldEdit undo");
+    }
+
+    private void captureFloraPreview(net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext server) {
+        // Use the highest native surface, not decorative grass hidden under buildings.
+        var garden=server.computeOnServer(nativeServer -> {
+            var level=nativeServer.getPlayerList().getPlayers().getFirst().level();
+            var ground=new java.util.HashMap<BlockVector2,Integer>();
+            for (int x=380;x<=490;x++) for (int z=-260;z<=-140;z++) {
+                int y=level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE,x,z)-1;
+                if (level.getBlockState(new net.minecraft.core.BlockPos(x,y,z))
+                        .is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK)) ground.put(BlockVector2.at(x,z),y);
+            }
+            BlockVector3 best=null; int bestCount=0;
+            for (int x=383;x<=487;x+=2) for (int z=-257;z<=-143;z+=2) {
+                int count=0, low=Integer.MAX_VALUE, high=Integer.MIN_VALUE;
+                for (int dx=-3;dx<=3;dx++) for (int dz=-3;dz<=3;dz++) {
+                    Integer y=ground.get(BlockVector2.at(x+dx,z+dz));
+                    if (y!=null) { count++; low=Math.min(low,y); high=Math.max(high,y); }
+                }
+                if (count>bestCount && high-low<=2) { best=BlockVector3.at(x,low,z); bestCount=count; }
+            }
+            if (best==null || bestCount<4) throw new AssertionError("No readable native grass patch");
+            System.out.println("VIDEO GARDEN: "+best+", exposed grass columns="+bestCount);
+            return best;
+        });
+        server.runOnServer(nativeServer -> {
+            var actor=FabricAdapter.get().fromNativePlayer(nativeServer.getPlayerList().getPlayers().getFirst());
+            var session=WorldEdit.getInstance().getSessionManager().get(actor);
+            session.setRegionSelector(actor.getWorld(),new CuboidRegionSelector(actor.getWorld(),
+                    garden.add(-3,0,-3),garden.add(3,5,3)));
+            session.dispatchCUISelection(actor);
+        });
+        server.runCommand("tp @p "+(garden.x()-9)+" "+(garden.y()+9.38)+" "+(garden.z()+9)+" -135 30");
+        context.waitTicks(24); draft("//flora 60"); context.waitTicks(8); ready();
+        context.runOnClient(client -> {
+            Object snapshot=call(field(overlay,"commandPreviewController"),"snapshot");
+            long affected=((Number) call(call(snapshot,"statistics"),"affected")).longValue();
+            if (affected==0) throw new AssertionError("Flora demonstration has no visible changes: "+snapshot);
+            System.out.println("VIDEO FLORA VERIFY PASS: "+affected+" draft changes on the native garden");
+        });
+        context.waitTicks(12); shot("73-flora-preview"); escape();
+    }
+
+    private void enterChat() {
+        context.runOnClient(client -> client.gui.screen().keyPressed(new KeyEvent(257,0,0)));
     }
 
     private void captureEditingPickups(net.fabricmc.fabric.api.client.gametest.v1.context.TestServerContext server) {
