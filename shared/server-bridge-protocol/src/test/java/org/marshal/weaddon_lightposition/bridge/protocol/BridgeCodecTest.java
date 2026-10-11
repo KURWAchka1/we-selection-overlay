@@ -86,4 +86,57 @@ class BridgeCodecTest {
             catch (IllegalArgumentException expected) { }
         }
     }
+
+    @Test void structuredFuzzReachesEveryOpcodeAndNeverEscapesDomainErrors() {
+        Random random = new Random(622419);
+        int accepted = 0;
+        int[] lengths = {30, 49, 30, 64};
+        for (int opcode = 1; opcode <= 4; opcode++) {
+            for (int i = 0; i < 25_000; i++) {
+                byte[] frame = new byte[i % 2 == 0 ? lengths[opcode - 1] : random.nextInt(257)];
+                random.nextBytes(frame);
+                if (frame.length >= 6) {
+                    System.arraycopy(HexFormat.of().parseHex("5745534f01"), 0, frame, 0, 5);
+                    frame[5] = (byte) opcode;
+                }
+                BridgeCodec.Direction direction = opcode == 1 || opcode == 3
+                        ? BridgeCodec.Direction.TO_SERVER : BridgeCodec.Direction.TO_CLIENT;
+                if (assertCanonicalOrRejected(frame, direction)) accepted++;
+            }
+        }
+        assertTrue(accepted > 10_000, "Fuzzer did not reach valid payload decoding");
+    }
+
+    @Test void everySingleBitMutationHasACanonicalResultOrDomainRejection() {
+        List<BridgeMessage> messages = List.of(new Hello(nonce, 1, 0, 1),
+                new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 0, 1, 256),
+                new SelectionRequest(epoch, 123),
+                new SelectionReply(epoch, 123, new SelectionState(SelectionStatus.READY,
+                        new Bounds(-17, -64, -1, 33, 319, 16), -64, 319, 7)),
+                new SelectionReply(epoch, 123, SelectionState.unavailable(SelectionStatus.DENIED)));
+        for (BridgeMessage message : messages) {
+            byte[] original = BridgeCodec.encode(message);
+            BridgeCodec.Direction direction = message instanceof Hello || message instanceof SelectionRequest
+                    ? BridgeCodec.Direction.TO_SERVER : BridgeCodec.Direction.TO_CLIENT;
+            for (int bit = 0; bit < original.length * 8; bit++) {
+                byte[] changed = original.clone();
+                changed[bit / 8] ^= (byte) (1 << (bit % 8));
+                assertCanonicalOrRejected(changed, direction);
+            }
+            assertArrayEquals(original, BridgeCodec.encode(message), "Decoder mutated the source message");
+        }
+    }
+
+    private boolean assertCanonicalOrRejected(byte[] frame, BridgeCodec.Direction direction) {
+        byte[] original = frame.clone();
+        BridgeMessage decoded;
+        try { decoded = BridgeCodec.decode(frame, direction); }
+        catch (IllegalArgumentException expected) {
+            assertArrayEquals(original, frame, "Rejection mutated the input");
+            return false;
+        }
+        assertArrayEquals(original, frame, "Decoder mutated the input");
+        assertArrayEquals(original, BridgeCodec.encode(decoded), "Accepted noncanonical frame");
+        return true;
+    }
 }

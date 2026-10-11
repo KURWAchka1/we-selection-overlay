@@ -29,7 +29,26 @@ foreach ($name in @('test-command-matrix.ps1', 'test-ui-matrix.ps1', 'test-ui-la
         $actual = & $binding -Java21 unused -Java25 unused -Only @('fabric-1.21.11', 'neoforge-26.2') -ModVersion 1.8.0-bridge-dev -DesktopWorker
         if ($actual -ne '1.8.0-bridge-dev') { throw 'Worker parameter forwarding failed' }
         $checks += 2
+        if ($name -eq 'test-command-matrix.ps1') {
+            Assert-InvalidBinding $binding @{Java21='unused'; Java25='unused'; NativeBridgeScenario='unknown'}
+            $actual = & $binding -Java21 unused -Java25 unused -Only fabric-1.21.11 -NativeBridgeScenario allowed -NativeBridgeControl unused -ModVersion 1.8.0-bridge-dev
+            if ($actual -ne '1.8.0-bridge-dev') { throw 'Native bridge scenario binding failed' }
+            $checks += 2
+        }
     }
+}
+$tokens = $null; $errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(
+        (Join-Path $PSScriptRoot 'test-native-paper-bridge.ps1'), [ref]$tokens, [ref]$errors)
+if ($errors.Count -ne 0) { throw 'Invalid native bridge wrapper syntax' }
+$binding = [scriptblock]::Create($ast.ParamBlock.Extent.Text + "`nreturn `$ModVersion")
+foreach ($version in @('1.8.0', '1.8.0-bridge-dev', '1.8.1+qa')) {
+    if ((& $binding -Java21 unused -ModVersion $version -AcceptEula -DesktopWorker) -ne $version) { throw 'Native bridge binding failed' }
+    $checks++
+}
+foreach ($version in @('../1.8.0', 'C:\bad', '1.8.0/test', '1.8.0;bad', '')) {
+    Assert-InvalidBinding $binding @{Java21='unused'; ModVersion=$version}
+    $checks++
 }
 $tokens = $null; $errors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(

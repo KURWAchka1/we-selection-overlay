@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string]$Java25,
     [ValidateSet('fabric-1.21.11', 'fabric-26.1', 'fabric-26.2', 'neoforge-1.21.11', 'neoforge-26.1', 'neoforge-26.2')][string[]]$Only = @(),
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$')][string]$ModVersion = '1.8.0',
+    [ValidateSet('allowed', 'denied', 'absent')][string]$NativeBridgeScenario,
+    [string]$NativeBridgeControl,
     [switch]$DesktopWorker
 )
 
@@ -10,13 +12,39 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'test-desktop.ps1')
 if (!$DesktopWorker) {
     & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
-    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Only=$Only; ModVersion=$ModVersion; DesktopWorker=$true}
+    $parameters = @{Java21=$Java21; Java25=$Java25; Only=$Only; ModVersion=$ModVersion; DesktopWorker=$true}
+    if ($NativeBridgeScenario) { $parameters.NativeBridgeScenario=$NativeBridgeScenario; $parameters.NativeBridgeControl=$NativeBridgeControl }
+    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters $parameters
     return
 }
 Assert-WesoTestDesktop
 $root = Split-Path -Parent $PSScriptRoot
 $logs = Join-Path $root 'build/command-validation'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
+if ($NativeBridgeScenario) {
+    if ($Only.Count -ne 1 -or $Only[0] -notin @('fabric-1.21.11', 'neoforge-1.21.11')) { throw 'Native Paper proof requires exactly one 1.21.11 client' }
+    $control = [IO.Path]::GetFullPath($NativeBridgeControl)
+    $allowed = [IO.Path]::GetFullPath((Join-Path $root 'build/bridge-native-proof')) + [IO.Path]::DirectorySeparatorChar
+    if (!$control.StartsWith($allowed, [StringComparison]::OrdinalIgnoreCase) -or !(Test-Path -LiteralPath $control -PathType Leaf)) { throw 'Missing isolated native bridge control file' }
+    $loader = if ($Only[0].StartsWith('fabric-')) { 'fabric' } else { 'neoforge' }
+    Assert-WesoTestArtifact -Loader $loader -ModVersion $ModVersion
+    $module = if ($loader -eq 'fabric') { 'WEaddon_fabric_1.21.11' } else { 'WEaddon_neoforge_universal_1.21.11-26.2' }
+    $task = if ($loader -eq 'fabric') { 'testNativePaperBridge' } else { 'runNativePaperBridge' }
+    $previousJava = $env:JAVA_HOME
+    $env:JAVA_HOME = $Java21
+    Push-Location (Join-Path $root $module)
+    try {
+        Assert-WesoTestDesktop
+        $log = Join-Path $logs "$($Only[0])-bridge-$NativeBridgeScenario.log"
+        & .\gradlew.bat -I '../tools/native-paper-bridge.init.gradle' $task "-Pmod_version=$ModVersion" "-Pbridge_scenario=$NativeBridgeScenario" "-Pbridge_control=$control" --offline --no-daemon --max-workers=2 --console=plain 2>&1 | Tee-Object -FilePath $log
+        if ($LASTEXITCODE -ne 0) { throw 'Native Paper client failed' }
+        $result = [IO.File]::ReadAllText($log)
+        foreach ($marker in @('CURSOR ISOLATION GUARD PASS:', 'NATIVE PAPER CUI PASS:', "NATIVE PAPER BRIDGE PASS: $NativeBridgeScenario")) {
+            if (!$result.Contains($marker)) { throw "Incomplete native Paper proof: missing $marker" }
+        }
+    } finally { Pop-Location; $env:JAVA_HOME = $previousJava }
+    return
+}
 & node (Join-Path $PSScriptRoot 'prepare-command-tests.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Failed to prepare command fixtures' }
 $targets = @(

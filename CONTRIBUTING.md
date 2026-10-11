@@ -9,6 +9,7 @@ WorldEdit Selection Overlay supports six Minecraft/loader runtimes packaged into
 - Keep loader- and Minecraft-specific APIs inside their respective runtime projects. The two packagers contain only bootstrapping and artifact checks.
 - Do not add a hard WorldEdit dependency to client startup. Local WorldEdit integration is optional; remote servers may only provide CUI selection data.
 - Do not commit downloaded dependencies, generated classes, game runs, logs, screenshots, or release JARs.
+- Client JAR changes require a new verified release version; never overwrite a published artifact/tag. See the [fix-release policy](docs/release/FIX_RELEASE_POLICY.md). Experimental bridge candidates are not client fix releases.
 
 ## Verify
 

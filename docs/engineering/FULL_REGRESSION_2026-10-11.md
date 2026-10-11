@@ -117,8 +117,10 @@ these runs must not be advertised as an idle/busy-server performance baseline.
 
 ## Outstanding Coverage
 
-Native Fabric/NeoForge -> dedicated Paper joins remain a distinct required
-bridge gate; headless TCP proof and local native gameplay do not establish it.
+Native Fabric/NeoForge -> Paper 1.21.11 joins subsequently passed the separate
+[native Paper matrix](NATIVE_PAPER_REGRESSION_2026-10-11.md), including a further
+NeoForge standalone-CUI fix. The hashes above identify this earlier local cycle;
+the later native report identifies its changed NeoForge candidate.
 Remote editing/clipboard/simulation providers and 26.x/mod-server hosts are
 not implemented by this refinement cycle.
 
@@ -127,7 +129,7 @@ physical focus/cursor restoration and busy-server profiles need their own
 compatibility/workload runs. Do not call those passed based on the base-loader
 fixtures. No rejected air-isolation or partial-transparency feature is reintroduced.
 
-Next targeted passes: real native Paper joins; fluid/block-entity boundary
+Next targeted passes: additional server hosts; fluid/block-entity boundary
 fixtures and third-party renderer combinations; all-shape/ruler camera views;
 controlled idle/active/multi-player profiles. Existing baseline assertions and
 these explicit gaps are kept separate instead of treating a green build as

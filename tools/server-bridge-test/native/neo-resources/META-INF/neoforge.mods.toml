@@ -1,0 +1,7 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="GPL-3.0-or-later"
+[[mods]]
+modId="weso_native_bridge_test"
+version="1.0.0"
+displayName="Native Paper bridge tests (not distributed)"

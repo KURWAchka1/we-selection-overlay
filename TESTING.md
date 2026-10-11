@@ -642,7 +642,13 @@ reproduction command, actual screenshots, measured performance, and limits.
 
 ## Remaining coverage
 
-Sodium, Iris/shaders, LabyMod, remote-server CUI, changed/custom resource packs,
+Development bridge candidates separately passed actual Fabric/NeoForge 1.21.11
+connections to Paper 1.21.11 with WorldEdit installed only on the server:
+[native transport evidence](docs/engineering/NATIVE_PAPER_REGRESSION_2026-10-11.md).
+That matrix covers allowed, denied and absent companion scenarios; it is not
+evidence for every remote-server version, renderer modpack or remote feature.
+
+Sodium, Iris/shaders, LabyMod, additional remote-server CUI tuples, changed/custom resource packs,
 and narration/IME need separate compatibility review. Clipboard rotation/reflection,
 coexistence and normal command submission are covered as specified above; this
 is a block-model preview, not clipboard entity/biome/NBT rendering or support for

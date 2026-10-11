@@ -11,6 +11,11 @@ clock/lifecycle and aggregate-admission checks. Its later companion hash and
 native gameplay/UI evidence are recorded there, not substituted for the
 original observations below.
 
+The subsequent [native Paper regression](NATIVE_PAPER_REGRESSION_2026-10-11.md)
+passes six actual Fabric/NeoForge 1.21.11 connections, including denied and absent
+companions. It also records the standalone NeoForge CUI fix, stronger protocol
+fuzzing, exact later candidate hashes and remaining host/performance gates.
+
 ## Implemented Boundary
 
 Pure Java 21 messages, bounded codec, client state machine and owning-thread
@@ -104,9 +109,9 @@ establishes the independent initialization path used by the fixture.
 
 ## Remaining Gates
 
-Native Fabric/NeoForge dedicated joins and missing-companion fallback must still
-be tested with guarded real Minecraft clients. Codec/compile success is not that
-proof. Only Paper 1.21.11 has a host adapter; 26.x hosts, dedicated mod-server
+Native Fabric/NeoForge 1.21.11 dedicated joins and missing-companion fallback
+passed the subsequent guarded matrix linked above. That is not proof for other
+server versions or modpacks. Only Paper 1.21.11 has a host adapter; 26.x hosts, dedicated mod-server
 hosts, FAWE, Folia, proxies and translators remain unimplemented/unverified.
 No advertised compatibility matrix is widened by this work.
 

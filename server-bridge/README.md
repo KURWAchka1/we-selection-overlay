@@ -86,6 +86,19 @@ worlds remain under ignored `build/bridge-paper-proof/`. Do not deploy the
 test-fixture JAR to an ordinary server. For development client packaging run
 `tools/test-bridge-packaging.ps1` with the same two JDK arguments as above.
 
+Native Fabric and NeoForge 1.21.11 clients subsequently passed six real Paper
+connections, including denied permission and absent companion. Reproduce after
+preparing the pinned wire dependencies and building the development clients:
+
+```powershell
+.\tools\test-native-paper-bridge.ps1 -Java21 'C:\path\to\jdk-21' -ModVersion 1.8.0-bridge-dev -AcceptEula
+```
+
+This uses the guarded private-desktop/cursor-agent harness, no local WorldEdit,
+and a separate disposable loopback server under `build/bridge-native-proof/`.
+See [native results and limits](../docs/engineering/NATIVE_PAPER_REGRESSION_2026-10-11.md).
+It does not establish 26.x server hosts or performance under a busy-server load.
+
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge
 clients discover the channel only when advertised. No player gets the new
