@@ -30,6 +30,8 @@ supported block states, legacy numeric IDs and percentage mixtures.
 Random mixtures are samples, not an exact prediction of the next roll.
 Previews use loaded chunks; hollowing needs its complete source area loaded.
 
+![Command preview: inspect a material change before Enter. Schematic illustration.](https://media.forgecdn.net/attachments/2038/575/01-command-preview-png.png)
+
 ## See Inside Your Build
 
 Press **B** to search materials, compare counts and check loaded/unloaded cells.
@@ -38,6 +40,8 @@ Filters include `#air`, `#fluid` and `#solid`.
 Tick one or several materials to hide everything else **only inside the
 selection**. Chosen materials stay bright and appear first in the list.
 Reset the checkboxes to restore the view. Hidden blocks still exist and collide.
+
+![Material isolation: selected materials stay visible inside the selection. Schematic illustration.](https://media.forgecdn.net/attachments/2038/595/02-material-isolation-png.png)
 
 ## Adjust the Selection
 
@@ -80,3 +84,6 @@ Default keys: **O** settings, **B** inspector, **N** deselect, **F8** command
 preview, **G** editing. All keybinds are configurable. Recommended GUI scale: **2x**.
 
 Showcase location: [Celestia Town by Fireless007 / leolerenard](https://www.curseforge.com/minecraft/worlds/celestia-town).
+
+License: **GPL-3.0-or-later**. [Source code and build instructions](https://github.com/KURWAchka1/we-selection-overlay/tree/1.8.0).
+Contact: [ngocchaub81@gmail.com](mailto:ngocchaub81@gmail.com).

@@ -1,9 +1,9 @@
 # 1.8.0 Publication Packet
 
-Status: **prepared, not published**. The owner authorized CurseForge and Modrinth
-publication, but subsequently required that all project-owned source remain in
-the private GitHub repository, accessible only to the owner. Do not upload a
-source archive, expose that repository, or imply a public release has happened.
+Status: **binary publication in progress**. Descriptions and two schematic gallery
+images were published on CurseForge and Modrinth on 2026-10-11. They currently
+label 1.8.0 as an upcoming preview; the player JARs have not yet been uploaded.
+The owner has now authorized opening the source repository and retaining GPL.
 
 ## Binary Verification
 
@@ -24,18 +24,17 @@ WorldEdit optional/recommended. NeoForge: the same launch targets; explicitly
 state that local WorldEdit integration on 26.1 requires 26.1.2 or newer.
 Java 21 for 1.21.11, Java 25 for 26.x. Do not tag the whole 1.21 branch.
 
-## License Gate
+## License and Source Publication
 
 The current root/source notices and both binary metadata files say
 `GPL-3.0-or-later`; both public pages still say All Rights Reserved. Neither
 inconsistent label should be silently substituted for the other.
 
-The owner's latest preference is to reconsider the license, not publish sources.
-No source archive was created or uploaded. The project repository remains private.
-Publishing GPL binaries without an accessible corresponding-source arrangement
-is not our verified release path. Relicensing original unpublished code does
-not by itself resolve the WorldEdit API integration question or the embedded
-CUI dependency's distribution obligations.
+The owner initially wanted private sources, then explicitly authorized opening
+them after the GPL distribution issue was explained. Keep GPL-3.0-or-later;
+do not relabel the binaries All Rights Reserved. Public platform license labels
+must be updated to match. Preserve the complete corresponding source with the
+`1.8.0` tag and link [SOURCE_ACCESS.md](../../SOURCE_ACCESS.md) from the release.
 
 Primary sources checked on 2026-10-11:
 
@@ -50,9 +49,10 @@ Primary sources checked on 2026-10-11:
   Program. An upstream link alone needs review against the exact redistributed
   modifications.
 
-Proceed after a documented suitable permission/exception from EngineHub or a
-qualified license review establishes a private-source distribution route. Do
-not remove local integrations/features merely to force a release through this gate.
+Before changing repository visibility, review all Git history and confirm the
+public-exposure action with the owner. Gitleaks 8.30.1 scanned 34 commits on
+2026-10-11 with no findings. No tracked worlds, logs, accounts, private keys or
+video/audio were found. Keep private build/security reports out of Git.
 
 ## Presentation
 
@@ -64,9 +64,9 @@ The owner's latest direction replaces the old inline screenshot collection:
 embed the new YouTube review first, then use concise sections and no more than
 two optional schematic feature banners. The existing project icon stays intact.
 See `PAGE_STYLE_1.8.0.md` for the research, visual rules and mobile checks.
-New gallery cards use real uncaptioned native footage, not generated Minecraft visuals.
-Keep titles outside the captured image and use explicit Original/Preview labels
-for comparisons. Do not promise instant calculation, zero FPS loss, all commands,
+Two original schematic illustrations were uploaded, explicitly labeled as such;
+the command illustration is also labeled an upcoming 1.8.0 preview. Do not
+promise instant calculation, zero FPS loss, all commands,
 every server integration, or unreleased Minecraft compatibility.
 
 Keep the existing public project names, slugs, icon, contact and social links.
