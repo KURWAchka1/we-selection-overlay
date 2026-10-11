@@ -145,6 +145,52 @@ a Folia extent guard, but that does not establish cross-region snapshot/session
 safety for our bridge. Never add `folia-supported: true` just to permit loading.
 See [Folia sources](SOURCES.md#s12-folia-ownership).
 
+## Low-Overhead Server Contract
+
+**Required product constraint:** the optional bridge must minimize server cost,
+not merely move expensive client work to a server. Zero overhead is not a
+credible guarantee. These are implementation and release requirements, not
+measurements of an existing companion.
+
+- **Idle means no preview work.** Without an enabled, authorized subscription
+  or admitted request, do not scan regions/clipboards, hash their contents,
+  simulate commands or transfer block data. Use bounded lifecycle discovery;
+  do not add a heartbeat just to duplicate the game connection's liveness.
+- Prefer verified public change hooks and revision caches. Where a change hook
+  is unavailable, use cheap bounded metadata probes only for active consumers;
+  do not replace missing invalidation with full-buffer polling every tick.
+- Rendering, camera movement, drag drafting and cached clipboard-transform
+  previews stay client-side. Send final selection commits, not mouse samples.
+  Keep authoritative permission checks, required source capture and server-only
+  simulation on the server; client-side convenience must not weaken authority.
+- Coalesce superseded command drafts before expensive parsing/capture. Reuse
+  valid source sections and content revisions; unchanged input must not trigger
+  a full rescan. Transform-only changes send metadata, not clipboard contents.
+- Enforce one aggregate admission/scheduling policy for all players, including
+  owner-thread work, worker concurrency, retained bytes and send throughput.
+  Per-player fairness limits must never multiply the total server allowance.
+  Rate-limit and check cheap envelope/context bounds before costly parsing,
+  decompression or allocation. Bound scheduler and cancellation overhead too.
+- Off-thread work still consumes shared CPU, memory and GC capacity. Only
+  isolated, audited memory operations may use bounded workers; live world
+  capture obeys thread ownership and short cooperative slices. Never force
+  chunk loading/generation to satisfy a preview.
+- Normal gameplay and WorldEdit execution take priority. Under pressure, stop
+  admitting new preview jobs, coalesce pending drafts and defer/pause capture
+  and sending with an explicit busy/updating state. Backpressure must not
+  accumulate unbounded snapshots. Define measured recovery thresholds to avoid
+  repeatedly pausing/restarting the same job. No silent result truncation.
+- Disabling a feature, revoking permission or leaving the server cancels its
+  work and queued fragments and releases owned buffers. No residual scanning
+  for a closed preview. Shared caches also have bounded ownership/lifetimes.
+
+Measure transport, capture, simulation and publication separately, then their
+combined effect against the same server without the bridge. Select defaults
+from repeated baseline/load profiles, not an arbitrary per-player millisecond
+allowance or the claim that async work is free. Large cold inputs may take time;
+the existing loaded-section policy is not permission to exhaust server resources.
+See [server cost acceptance](SERVER_BRIDGE_VERIFICATION.md#server-cost-acceptance).
+
 ## Selection Transactions
 
 Read authoritative selector state on the server and retain its original identity

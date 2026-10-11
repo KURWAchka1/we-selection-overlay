@@ -141,6 +141,40 @@ Choose budgets from results; local preview's existing 2 ms target is not a
 proven safe per-player allowance for a busy dedicated server. Cold massive
 inputs and network latency cannot honestly be guaranteed instantaneous.
 
+### Server Cost Acceptance
+
+Compare repeated runs of the same world, player activity, server/JVM settings
+and hardware: bridge absent, installed with no subscribers, features disabled,
+one active user and concurrent active users alongside ordinary/vanilla players.
+Control warm-up, cache state and competing workloads; report the baseline spread
+and p95/p99 MSPT delta as well as absolute values. TPS alone can hide regressions.
+
+- Idle/disabled runs must show zero preview source-cell reads, clipboard-content
+  hashes, simulations and block-data transfers. Bounded lifecycle/control work
+  is recorded separately, not misrepresented as literally zero bridge overhead.
+- Instrument work admitted, source cells read, sections reused, slices per tick,
+  pending/active jobs, queue age, cancellations, retained bytes and bytes sent.
+  Attribute owner-thread and worker CPU/allocation costs separately.
+- Camera motion and selection dragging must not produce per-frame server work.
+  Repeated unchanged drafts reuse valid revisions; transform-only changes do
+  not recapture/retransmit clipboard contents.
+- Stress rapid typing, many clients, slow/stalled receivers, permission changes
+  and disable/disconnect mid-job. Aggregate CPU/concurrency/memory/traffic bounds
+  must hold, queues must stay bounded and cancelled work must stop promptly.
+- Create controlled server pressure: admission/capture/send back off without
+  blocking gameplay or the normal WorldEdit command path. Recovery must not
+  oscillate or repeatedly restart a whole preview; record pause/recovery latency.
+- Prove that no preview forces chunk loads/generation. After all consumers stop,
+  source work returns to zero and owned resources return to their bounded baseline.
+
+Choose numerical defaults and acceptable baseline regressions from these runs,
+record them before release, and rerun under those exact settings. Staying below
+50 ms per tick alone is not acceptance: a bridge can consume substantial spare
+capacity without lowering TPS. An unmet budget requires tuning/degraded preview
+service, not silently raising limits or claiming the server is unaffected.
+
+### Release Gate
+
 Release gates: all applicable unit/domain tests, dedicated-server round trips,
 both universal client packagers, six runtime builds and affected in-game checks.
 Use the non-disruptive native harness rules in [AGENTS.md](../../AGENTS.md).

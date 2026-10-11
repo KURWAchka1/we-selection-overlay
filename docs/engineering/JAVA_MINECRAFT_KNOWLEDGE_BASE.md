@@ -124,6 +124,18 @@ reflectively calling WorldEdit command internals on a server.
   preview must not create a live edit session just to later undo its changes.
   See [edit-session lifecycle](SOURCES.md#s03-worldedit-edit-sessions).
 
+## Server Performance Policy
+
+Low server overhead is a required product constraint, not a promise of zero cost.
+No enabled consumer means no preview source scans, content hashing, simulation
+or block transfers. Active work must be revision-driven where supported, bounded
+globally across players, cancellable and subordinate to normal gameplay.
+Rendering and interactive drafting remain on the client; async server work is
+not free CPU or memory. Do not force-load chunks for previews.
+Follow the [low-overhead contract](SERVER_BRIDGE_DESIGN.md#low-overhead-server-contract)
+and record [baseline/load evidence](SERVER_BRIDGE_VERIFICATION.md#server-cost-acceptance)
+before claiming a performance result or choosing release defaults.
+
 ## Network Facts That Affect This Project
 
 | Verified fact | Engineering decision |
