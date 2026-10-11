@@ -211,6 +211,31 @@ Neither the library nor its dependencies are bundled in client/companion JARs.
 and the pinned LocalSession initialization path establish the independent CUI
 round trip. Actual observations/hashes are in the foundation implementation record.
 
+## S29 Java Monotonic Time
+
+[System.nanoTime, Java 21](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/System.html#nanoTime()).
+Checked 2026-10-11. Elapsed time uses subtraction, not an absolute deadline;
+values have an arbitrary origin and may be negative. Deterministic bridge tests
+cover discovery/request deadlines and token refill across the signed-long wrap.
+These are arithmetic/lifecycle checks, not a latency benchmark.
+
+## S30 Paper Plugin Metadata API
+
+[Plugin, Paper 1.21.11](https://jd.papermc.io/paper/1.21.11/org/bukkit/plugin/Plugin.html#getPluginMeta()).
+Checked 2026-10-11. `getDescription()` is deprecated and may be inaccurate for
+different plugin implementations. The Paper-only companion reads the pinned
+WorldEdit version through `getPluginMeta()`; this does not broaden host support.
+
+## S31 Brigadier Command Discovery
+
+[Mojang CommandNode source](https://raw.githubusercontent.com/Mojang/brigadier/master/src/main/java/com/mojang/brigadier/tree/CommandNode.java)
+and [Fabric Yarn 1.21.11 client handler API](https://maven.fabricmc.net/docs/yarn-1.21.11+build.4/net/minecraft/client/network/ClientPlayNetworkHandler.html).
+Checked 2026-10-11. `getChild()` reads the existing children map; absence need
+not trigger a command request or autocomplete round trip. The pinned native
+26.x client JAR also exposes `ClientPacketListener.getCommands()`. Our inference:
+wait for an advertised `we` root before automatic `/we cui`; packet CUI remains
+independent. Native tests cover presence, absence and existing retry gates.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

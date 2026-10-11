@@ -55,6 +55,7 @@ public final class NeoIsolationTest {
 
     private void tick(ClientTickEvent.Post event) {
         Minecraft client = Minecraft.getInstance();
+        if (ticks == 0) client.options.framerateLimit().set(40);
         check(++ticks < 2400, "Test timed out at stage " + stage + " step " + step);
         if (client.gui.screen() instanceof net.minecraft.client.gui.screens.AccessibilityOnboardingScreen onboarding) {
             onboarding.onClose();
@@ -100,6 +101,9 @@ public final class NeoIsolationTest {
             wait = 40;
         } else if (stage == 3) {
             if (step == 8) {
+                check((int) field(overlay, "cuiCommandAttempts") == 0,
+                        "CUI command was sent without WorldEdit advertised by the server");
+                System.out.println("CUI ABSENCE VERIFY PASS: no automatic command without WorldEdit");
                 System.out.println("WESO NEO ISOLATION PASS: 8 toggles, surrounding meshes preserved, selected faces visible, all vertices fullbright with AO on/off");
                 stage = 5;
                 wait = 20;

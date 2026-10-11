@@ -1,7 +1,16 @@
-param([string[]]$Only = @())
+param(
+    [ValidateSet('fabric-1.21.11', 'fabric-26.1', 'fabric-26.2', 'neoforge-1.21.11', 'neoforge-26.1', 'neoforge-26.2')][string[]]$Only = @(),
+    [datetime]$NotBefore = [datetime]::MinValue
+)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
+function Assert-FreshCapture([string]$Path) {
+    if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Missing screenshot: $Path" }
+    if ((Get-Item -LiteralPath $Path).LastWriteTimeUtc -lt $NotBefore.ToUniversalTime()) {
+        throw "Stale screenshot from an earlier run: $Path"
+    }
+}
 $targets = @{
     'fabric-1.21.11' = 'WEaddon_fabric_1.21.11/run-command-test/screenshots/0000_command-set-ghost.png'
     'fabric-26.1' = 'WEaddon_lightposition/run-command-test/screenshots/0000_command-set-ghost.png'
@@ -13,6 +22,7 @@ $targets = @{
 foreach ($name in $targets.Keys | Sort-Object) {
     if ($Only.Count -gt 0 -and $name -notin $Only) { continue }
     $file = Join-Path $root $targets[$name]
+    Assert-FreshCapture $file
     $bitmap = [Drawing.Bitmap]::new($file)
     try {
         if ($bitmap.Width -ne 1280 -or $bitmap.Height -ne 720) { throw "Unexpected fixture viewport: $name" }
@@ -32,6 +42,7 @@ foreach ($name in $targets.Keys | Sort-Object) {
         $capture = Get-ChildItem -LiteralPath $directory -Filter "*clipboard-draft-$kind.png" |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if (!$capture) { throw "Missing clipboard $kind screenshot: $name" }
+        Assert-FreshCapture $capture.FullName
         $bitmap = [Drawing.Bitmap]::new($capture.FullName)
         try {
             $warm = 0

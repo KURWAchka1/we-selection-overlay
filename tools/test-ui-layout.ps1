@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$Java21,
     [Parameter(Mandatory = $true)][string]$Java25,
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$')][string]$ModVersion = '1.8.0',
     [switch]$Performance,
     [switch]$Showcase,
     [switch]$Beauty,
@@ -22,10 +23,11 @@ if ($LocationPreview -and $CreditedLocation) { throw 'Choose scout or full captu
 . (Join-Path $PSScriptRoot 'test-desktop.ps1')
 if (!$DesktopWorker) {
     & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
-    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Performance=[bool]$Performance; Showcase=[bool]$Showcase; Beauty=[bool]$Beauty; LocationPreview=[bool]$LocationPreview; CreditedLocation=[bool]$CreditedLocation; Closing=[bool]$Closing; EditingPickups=[bool]$EditingPickups; OverviewPickups=[bool]$OverviewPickups; DesktopWorker=$true}
+    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; ModVersion=$ModVersion; Performance=[bool]$Performance; Showcase=[bool]$Showcase; Beauty=[bool]$Beauty; LocationPreview=[bool]$LocationPreview; CreditedLocation=[bool]$CreditedLocation; Closing=[bool]$Closing; EditingPickups=[bool]$EditingPickups; OverviewPickups=[bool]$OverviewPickups; DesktopWorker=$true}
     return
 }
 Assert-WesoTestDesktop
+Assert-WesoTestArtifact -Loader fabric -ModVersion $ModVersion
 $logDirectory = Join-Path (Split-Path -Parent $PSScriptRoot) 'build/ui-validation'
 New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
 $log = Join-Path $logDirectory $(if ($Showcase) { 'showcase.log' } else { 'layout.log' })
@@ -49,12 +51,19 @@ try {
         @('-I', '../tools/ui-test.init.gradle', 'testUniversalUi', '--offline', '--no-daemon', '--max-workers=2', '--console=plain')
     }
     if (!$Performance) { $arguments += '-Pui_fast=true' }
+    $arguments += "-Pmod_version=$ModVersion"
+    $runStarted = [datetime]::UtcNow
     & .\gradlew.bat @arguments 2>&1 | Tee-Object -FilePath $log
     if ($LASTEXITCODE -ne 0) { throw 'Background UI layout test failed' }
     $result = [IO.File]::ReadAllText($log)
     $successMarker = if ($Showcase) { 'WESO VIDEO CAPTURE PASS:' } else { 'WESO UI PASS:' }
     foreach ($marker in @('CURSOR ISOLATION GUARD PASS:', $successMarker)) {
         if (!$result.Contains($marker)) { throw "Incomplete background UI layout test: missing '$marker'" }
+    }
+    if (!$Showcase) {
+        $captures = @(Get-ChildItem -LiteralPath 'run-ui-test/screenshots' -Filter '*.png' -File |
+                Where-Object { $_.LastWriteTimeUtc -ge $runStarted })
+        if ($captures.Count -lt 42) { throw "Incomplete current UI capture set: $($captures.Count)/42" }
     }
 } finally {
     Pop-Location

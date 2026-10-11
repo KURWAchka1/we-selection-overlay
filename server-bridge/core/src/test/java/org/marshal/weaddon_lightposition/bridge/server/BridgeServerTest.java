@@ -133,6 +133,46 @@ class BridgeServerTest {
         assertEquals(1, reads);
     }
 
+    @Test void denialDuringHostReadInvalidatesEpochEvenAfterPermissionReturns() {
+        AtomicReference<SelectionStatus> status = new AtomicReference<>(SelectionStatus.DENIED);
+        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { return true; }
+            public SelectionState readSelection(UUID id) { return SelectionState.unavailable(status.get()); }
+        }, BridgeServer.Limits.defaults(), time::get, () -> new UUID(8, epochIds.incrementAndGet()));
+        Welcome original = (Welcome) exchange(target, player, new Hello(nonce, 1, 0, 1));
+        SelectionReply denied = (SelectionReply) exchange(target, player, new SelectionRequest(original.epoch(), 1));
+        assertEquals(SelectionStatus.DENIED, denied.selection().status());
+        status.set(SelectionStatus.EMPTY);
+        assertNull(exchange(target, player, new SelectionRequest(original.epoch(), 2)));
+        assertEquals(1, target.metrics().selectionReads());
+        Welcome renewed = (Welcome) exchange(target, player, new Hello(nonce, 1, 0, 1));
+        assertNotEquals(original.epoch(), renewed.epoch());
+        SelectionReply empty = (SelectionReply) exchange(target, player, new SelectionRequest(renewed.epoch(), 1));
+        assertEquals(SelectionStatus.EMPTY, empty.selection().status());
+    }
+
+    @Test void manyPlayersAndMalformedTrafficRespectAggregateAndStorageBounds() {
+        BridgeServer target = server(BridgeServer.Limits.defaults());
+        byte[] invalid = new byte[30];
+        for (int id = 1; id <= 2048; id++) {
+            UUID connection = new UUID(9, id);
+            for (int packet = 0; packet < 16; packet++) assertNull(target.receive(connection, invalid));
+        }
+        assertEquals(1024, target.metrics().connections());
+        assertEquals(100, target.metrics().admitted());
+        assertEquals(100, target.metrics().malformed());
+        assertEquals(32_768 - 100, target.metrics().throttled());
+        assertEquals(0, reads);
+        target.close();
+        assertEquals(0, target.metrics().connections());
+        time.addAndGet(1_000_000_000L);
+        allowed.add(player);
+        assertNotNull(exchange(target, player, new Hello(nonce, 1, 0, 1)));
+        assertEquals(1, target.metrics().connections());
+        assertEquals(101, target.metrics().admitted());
+        assertEquals(0, target.metrics().selectionReads());
+    }
+
     @Test void offThreadCallsFailBeforeSessionOrStorageAccess() throws InterruptedException {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread worker = new Thread(() -> {

@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$Java21,
     [Parameter(Mandatory = $true)][string]$Java25,
+    [switch]$RerunTests,
     [switch]$Offline
 )
 $ErrorActionPreference = 'Stop'
@@ -25,6 +26,7 @@ try {
         Push-Location (Join-Path $root $target.Module)
         try {
             $gradleArgs = @($target.Tasks) + @('-Pmod_version=1.8.0-bridge-dev', '--no-daemon', '--max-workers=2', '--console=plain')
+            if ($RerunTests -and $target.Tasks -contains 'test') { $gradleArgs += '--rerun-tasks' }
             if ($Offline) { $gradleArgs += '--offline' }
             & '.\gradlew.bat' @gradleArgs 2>&1 | Tee-Object -FilePath (Join-Path $logs "package-$($target.Module).log")
             if ($LASTEXITCODE -ne 0) { throw "Bridge packaging failed: $($target.Module)" }

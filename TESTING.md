@@ -1,7 +1,16 @@
 # Verification
 
-Current source verification: 1.8.0, 2026-10-10. The test worlds, generated
+Published baseline verification: 1.8.0, 2026-10-10. The test worlds, generated
 fixtures, screenshots, and logs are local data and are not committed.
+
+The completed first development-candidate regression cycle is tracked in
+[FULL_REGRESSION_2026-10-11.md](docs/engineering/FULL_REGRESSION_2026-10-11.md).
+Guarded native wrappers accept `-ModVersion 1.8.0-bridge-dev`; the default
+remains published 1.8.0. Each run logs the exact JAR hash and fails if that
+requested artifact is absent, rather than substituting the default.
+Use that explicit development version for the current checks: the new
+no-WorldEdit CUI-command regression intentionally fails on the unpatched
+published baseline.
 
 ## Background native tests
 

@@ -123,8 +123,13 @@ public final class BridgeServer {
         if (request.requestId() == peer.lastRequest) return peer.lastReply;
         selectionReads++;
         SelectionState state = Objects.requireNonNull(host.readSelection(player));
+        SelectionReply reply = new SelectionReply(peer.epoch, request.requestId(), state);
+        if (state.status() == SelectionStatus.DENIED) {
+            invalidate(peer);
+            return reply;
+        }
         peer.lastRequest = request.requestId();
-        peer.lastReply = new SelectionReply(peer.epoch, request.requestId(), state);
+        peer.lastReply = reply;
         return peer.lastReply;
     }
 

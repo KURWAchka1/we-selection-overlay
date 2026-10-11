@@ -1400,7 +1400,9 @@ public final class WorldEditPointOverlayClient {
         if (cuiCommandAttempts >= CUI_COMMAND_MAX_ATTEMPTS) {
             return false;
         }
-        return client.player.age >= nextCuiCommandTick;
+        // Wait for the server's command tree; ordinary CUI hello packets remain independent.
+        return client.player.age >= nextCuiCommandTick
+                && client.getNetworkHandler().getCommandDispatcher().getRoot().getChild("we") != null;
     }
 
     private static boolean isSelectionPayload(String eventType) {

@@ -5,6 +5,12 @@ source additions and tests are preserved in the accompanying foundation commit.
 Companion version: **0.1.0-dev**. This is not a supported production release.
 Published client 1.8.0, its archived JARs and Git tag are unchanged.
 
+This initial foundation record is supplemented by the
+[full regression cycle](FULL_REGRESSION_2026-10-11.md), including new denial,
+clock/lifecycle and aggregate-admission checks. Its later companion hash and
+native gameplay/UI evidence are recorded there, not substituted for the
+original observations below.
+
 ## Implemented Boundary
 
 Pure Java 21 messages, bounded codec, client state machine and owning-thread

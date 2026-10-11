@@ -63,3 +63,17 @@ try {
 function Assert-WesoTestDesktop {
     [WesoTestDesktop]::AssertIsolated($env:WESO_TEST_DESKTOP)
 }
+
+function Assert-WesoTestArtifact {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet('fabric', 'neoforge')][string]$Loader,
+        [Parameter(Mandatory = $true)][ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$')][string]$ModVersion
+    )
+    $root = Split-Path -Parent $PSScriptRoot
+    $artifact = Join-Path $root "WEaddon_${Loader}_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-$ModVersion-$Loader-1.21.11-26.2.jar"
+    if (!(Test-Path -LiteralPath $artifact -PathType Leaf)) {
+        throw "Missing requested $Loader test artifact: $artifact. Build this version first; no release fallback is allowed."
+    }
+    $hash = (Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash
+    Write-Host "TEST ARTIFACT: $artifact SHA256=$hash"
+}

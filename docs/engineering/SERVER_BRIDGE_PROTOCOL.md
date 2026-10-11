@@ -60,6 +60,8 @@ The platform supplies the actual connection player to the server core. No field
 allows selecting another actor or world. Require the opt-in bridge permission
 and a relevant WorldEdit selection grant before negotiating/serving data.
 Permissions are rechecked even before duplicate-read caching is used.
+Either an authorization check or the host read returning DENIED invalidates the
+server epoch. Restored permission requires a new hello/context negotiation.
 
 Server epoch belongs to that player's negotiated context, never a JVM object.
 A changed hello nonce rotates it; disconnect/world change clears it. Request IDs

@@ -66,7 +66,7 @@ public final class SelectionEditingChecks {
         }
     }
     private void run() {
-        onClient(() -> { prepareLogicalFocus(); checkSystemCursorFree(); return null; });
+        onClient(() -> { prepareLogicalFocus(); checkSystemCursorFree(); verifyCuiCommandDiscovery(); return null; });
         List<?> historyBefore = onServer(this::history);
         List<?> blocksBefore = onServer(this::worldBlocks);
         onClient(() -> {
@@ -1216,6 +1216,32 @@ public final class SelectionEditingChecks {
         while (!onClient(test::getAsBoolean)) { if (System.nanoTime() > deadline) throw new AssertionError("Selection editing timeout: " + label + " reason=" + onClient(editing::reason)); pause(25); }
     }
     private void pause(long millis) { dispatch.pause(millis); }
+    private void verifyCuiCommandDiscovery() {
+        check(client.getConnection().getCommands().getRoot().getChild("we") != null,
+                "WorldEdit command missing from the native server's command tree");
+        int attempts = (int) field(overlay, "cuiCommandAttempts");
+        int nextTick = (int) field(overlay, "nextCuiCommandTick");
+        int received = (int) field(overlay, "receivedSelectionPackets");
+        try {
+            setField(overlay, "cuiCommandAttempts", 0);
+            setField(overlay, "nextCuiCommandTick", 0);
+            setField(overlay, "receivedSelectionPackets", 0);
+            check((boolean) call(overlay, "shouldRequestResync", client), "Advertised WorldEdit lost automatic sync");
+            setField(overlay, "nextCuiCommandTick", Integer.MAX_VALUE);
+            check(!(boolean) call(overlay, "shouldRequestResync", client), "CUI retry interval ignored");
+            setField(overlay, "nextCuiCommandTick", 0);
+            setField(overlay, "cuiCommandAttempts", Integer.MAX_VALUE);
+            check(!(boolean) call(overlay, "shouldRequestResync", client), "CUI retry bound ignored");
+            setField(overlay, "cuiCommandAttempts", 0);
+            setField(overlay, "receivedSelectionPackets", 1);
+            check(!(boolean) call(overlay, "shouldRequestResync", client), "CUI retry continued after selection");
+        } finally {
+            setField(overlay, "cuiCommandAttempts", attempts);
+            setField(overlay, "nextCuiCommandTick", nextTick);
+            setField(overlay, "receivedSelectionPackets", received);
+        }
+        System.out.println("CUI COMMAND DISCOVERY VERIFY PASS: advertised command, retry gates and selection stop");
+    }
     private void prepareLogicalFocus() {
         if (System.getenv("WESO_TEST_DESKTOP") == null) throw new AssertionError("Selection input tests require the private desktop runner");
         // Simulated input needs game focus, not OS focus on the user's desktop.

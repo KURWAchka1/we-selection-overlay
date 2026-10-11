@@ -87,6 +87,48 @@ class BridgeClientTest {
         assertNull(client.requestSelection(1));
     }
 
+    @Test void reconnectClearsPendingMetadataAndRejectsPreviousEpoch() {
+        ready();
+        client.requestSelection(0);
+        client.receive(BridgeCodec.encode(new SelectionReply(epoch, 1,
+                new SelectionState(SelectionStatus.READY, new Bounds(1, 2, 3, 4, 5, 6), -64, 319, 7))));
+        assertNotNull(client.selection());
+        client.requestSelection(1);
+        client.connect(2);
+        assertNull(client.selection());
+        assertFalse(client.pending());
+        assertEquals(0, client.capabilities());
+        client.poll(true, 2);
+        UUID renewed = new UUID(3, 4);
+        client.receive(BridgeCodec.encode(new Welcome(nonce, renewed, WelcomeStatus.READY, 1, 0, 1, 256)));
+        client.requestSelection(3);
+        client.receive(BridgeCodec.encode(new SelectionReply(epoch, 1, SelectionState.unavailable(SelectionStatus.EMPTY))));
+        assertTrue(client.pending());
+        assertNull(client.selection());
+        client.receive(BridgeCodec.encode(new SelectionReply(renewed, 1, SelectionState.unavailable(SelectionStatus.EMPTY))));
+        assertFalse(client.pending());
+        assertEquals(SelectionStatus.EMPTY, client.selection().status());
+    }
+
+    @Test void discoveryAndRequestTimeoutsWorkAcrossMonotonicClockSignWrap() {
+        long start = Long.MAX_VALUE - 1_000_000_000L;
+        client.connect(start);
+        assertNotNull(client.poll(true, start));
+        assertNull(client.poll(true, start + BridgeClient.TIMEOUT_NANOS - 1));
+        assertEquals(BridgeClient.State.NEGOTIATING, client.state());
+        assertNull(client.poll(true, start + BridgeClient.TIMEOUT_NANOS));
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state());
+        assertNull(client.poll(true, start + BridgeClient.TIMEOUT_NANOS + 1));
+        ready();
+        assertNotNull(client.requestSelection(start));
+        client.poll(true, start + BridgeClient.TIMEOUT_NANOS - 1);
+        assertTrue(client.pending());
+        client.poll(true, start + BridgeClient.TIMEOUT_NANOS);
+        assertFalse(client.pending());
+        assertEquals(SelectionStatus.FAILED, client.selection().status());
+        assertEquals(BridgeClient.State.READY, client.state());
+    }
+
     @Test void fullEncodedRoundTripThenIdleDoesNoSourceWork() {
         AtomicLong time = new AtomicLong();
         AtomicLong reads = new AtomicLong();

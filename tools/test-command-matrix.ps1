@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$Java21,
     [Parameter(Mandatory = $true)][string]$Java25,
-    [string[]]$Only = @(),
+    [ValidateSet('fabric-1.21.11', 'fabric-26.1', 'fabric-26.2', 'neoforge-1.21.11', 'neoforge-26.1', 'neoforge-26.2')][string[]]$Only = @(),
+    [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$')][string]$ModVersion = '1.8.0',
     [switch]$DesktopWorker
 )
 
@@ -9,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'test-desktop.ps1')
 if (!$DesktopWorker) {
     & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
-    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Only=$Only; DesktopWorker=$true}
+    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; Java25=$Java25; Only=$Only; ModVersion=$ModVersion; DesktopWorker=$true}
     return
 }
 Assert-WesoTestDesktop
@@ -31,6 +32,7 @@ try {
     foreach ($target in $targets) {
         if ($Only.Count -gt 0 -and $target.Name -notin $Only) { continue }
         $module = Join-Path $root $target.Module
+        Assert-WesoTestArtifact -Loader $(if ($target.Family) { 'neoforge' } else { 'fabric' }) -ModVersion $ModVersion
         $run = if ($target.Family) { "run-command-test-$($target.Family)" } else { 'run-command-test' }
         foreach ($name in @('client.properties', 'command-preview.properties', 'selection-editing.properties')) {
             $config = [IO.Path]::GetFullPath((Join-Path $module "$run/config/worldedit_selection_overlay/$name"))
@@ -51,16 +53,17 @@ try {
         Push-Location $module
         try {
             Assert-WesoTestDesktop
-            & .\gradlew.bat @($target.Args) --offline --no-daemon --max-workers=2 --console=plain 2>&1 |
+            $runStarted = [datetime]::UtcNow
+            & .\gradlew.bat @($target.Args) "-Pmod_version=$ModVersion" --offline --no-daemon --max-workers=2 --console=plain 2>&1 |
                 Tee-Object -FilePath (Join-Path $logs "$($target.Name).log")
             if ($LASTEXITCODE -ne 0) { throw "Command test failed: $($target.Name)" }
             $result = [IO.File]::ReadAllText((Join-Path $logs "$($target.Name).log"))
             $commandMarker = if ($target.Family) { 'WESO NEO COMMAND PASS:' } else { 'WESO COMMAND PASS:' }
-            foreach ($marker in @($commandMarker, 'CURSOR ISOLATION GUARD PASS:', 'BACKGROUND INPUT VERIFY PASS:', 'CLIPBOARD TRANSFORM VERIFY PASS:', 'SELECTION EDIT VERIFY PASS:', 'EDIT OUTLINE VERIFY PASS:', 'MOVE AXES VERIFY PASS:', 'CROSSHAIR VERIFY PASS:', 'PALETTE HISTORY VERIFY PASS:', 'EDITING PALETTE VERIFY PASS:')) {
+            foreach ($marker in @($commandMarker, 'CURSOR ISOLATION GUARD PASS:', 'BACKGROUND INPUT VERIFY PASS:', 'CUI COMMAND DISCOVERY VERIFY PASS:', 'CLIPBOARD TRANSFORM VERIFY PASS:', 'SELECTION EDIT VERIFY PASS:', 'EDIT OUTLINE VERIFY PASS:', 'MOVE AXES VERIFY PASS:', 'CROSSHAIR VERIFY PASS:', 'PALETTE HISTORY VERIFY PASS:', 'EDITING PALETTE VERIFY PASS:')) {
                 if (!$result.Contains($marker)) { throw "Incomplete $($target.Name) fixture: missing '$marker'" }
             }
             if ($result.Contains('Client gametests failed with an exception')) { throw "Client fixture failed: $($target.Name)" }
-            & (Join-Path $PSScriptRoot 'check-command-pixels.ps1') -Only $target.Name
+            & (Join-Path $PSScriptRoot 'check-command-pixels.ps1') -Only $target.Name -NotBefore $runStarted
             Write-Host "Verified commands, selection editing and palette history: $($target.Name)"
         } finally { Pop-Location }
     }

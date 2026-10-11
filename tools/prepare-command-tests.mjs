@@ -62,6 +62,7 @@ for (const loader of ['fabric', 'neo']) for (const family of ['1.21.11', '26.1',
     .replaceAll('net.minecraft.gizmos.GizmoCollector', 'net.minecraft.world.debug.gizmo.GizmoCollector').replaceAll('GizmoCollector.IGNORED', 'GizmoCollector.NOOP_CONFIGURABLE')
     .replaceAll('net.minecraft.gizmos.RectGizmo', 'net.minecraft.world.debug.gizmo.QuadGizmo').replaceAll('RectGizmo', 'QuadGizmo')
     .replaceAll('net.minecraft.client.Minecraft', 'net.minecraft.client.MinecraftClient').replace(/\bMinecraft\b/g, 'MinecraftClient')
+    .replaceAll('client.getConnection().getCommands()', 'client.getNetworkHandler().getCommandDispatcher()')
     .replaceAll('net.minecraft.client.KeyMapping', 'net.minecraft.client.option.KeyBinding').replaceAll('KeyMapping', 'KeyBinding')
     .replaceAll('net.minecraft.client.input.KeyEvent', 'net.minecraft.client.input.KeyInput').replaceAll('KeyEvent', 'KeyInput')
     .replaceAll('net.minecraft.client.input.MouseButtonEvent', 'net.minecraft.client.gui.Click')

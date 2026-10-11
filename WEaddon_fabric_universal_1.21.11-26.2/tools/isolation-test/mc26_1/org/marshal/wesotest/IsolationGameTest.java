@@ -29,7 +29,10 @@ public final class IsolationGameTest implements FabricClientGameTest {
 
     @Override
     public void runTest(ClientGameTestContext context) {
-        context.runOnClient(client -> client.options.renderDistance().set(5));
+        context.runOnClient(client -> {
+            client.options.renderDistance().set(5);
+            client.options.framerateLimit().set(40);
+        });
         try (var world = context.worldBuilder().create()) {
             world.getServer().runCommand("gamemode spectator @p");
             world.getServer().runCommand("fill -8 64 -8 40 64 32 stone");
@@ -94,6 +97,9 @@ public final class IsolationGameTest implements FabricClientGameTest {
                     context.takeScreenshot("isolation-" + (++stepIndex) + "-" + selected.size() + "-selected");
                 }
             }
+            context.runOnClient(client -> check((int) field(overlay, "cuiCommandAttempts") == 0,
+                    "CUI command was sent without WorldEdit advertised by the server"));
+            System.out.println("CUI ABSENCE VERIFY PASS: no automatic command without WorldEdit");
             System.out.println("WESO ISOLATION PASS: 8 toggles, local rebuilds, selected faces visible, all quad vertices fullbright (AO on/off, vanilla/Indigo)");
         }
     }
