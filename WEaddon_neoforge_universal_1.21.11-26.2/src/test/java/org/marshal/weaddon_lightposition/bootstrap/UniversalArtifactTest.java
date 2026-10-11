@@ -15,6 +15,43 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class UniversalArtifactTest {
     @Test
+    void privateCuiFallbackDeliversOnlyClientboundPacketsInEveryRuntime() throws Exception {
+        try (var jar = new JarFile(System.getProperty("universal.jar"))) {
+            for (String id : List.of("mc1_21_11", "mc26_1", "mc26_2")) {
+                String owner = "org/marshal/weaddon_lightposition/runtime/" + id + "/client/RuntimeCuiBridge";
+                var handlers = new java.util.ArrayList<org.objectweb.asm.Handle>();
+                var deliveries = new java.util.HashMap<String, Integer>();
+                var registrations = new java.util.concurrent.atomic.AtomicInteger();
+                var entry = jar.getEntry(owner + ".class");
+                assertNotNull(entry, id);
+                try (var input = jar.getInputStream(entry)) {
+                    new org.objectweb.asm.ClassReader(input).accept(new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                        @Override public org.objectweb.asm.MethodVisitor visitMethod(int access, String method, String descriptor, String signature, String[] exceptions) {
+                            return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                                @Override public void visitMethodInsn(int opcode, String target, String name, String descriptor, boolean isInterface) {
+                                    if (target.equals(owner) && name.equals("deliver")) deliveries.merge(method, 1, Integer::sum);
+                                    if (method.equals("registerFallback") && target.equals("net/neoforged/neoforge/network/registration/PayloadRegistrar")
+                                            && name.equals("playBidirectional")) registrations.incrementAndGet();
+                                }
+                                @Override public void visitInvokeDynamicInsn(String name, String descriptor, org.objectweb.asm.Handle bootstrap, Object... arguments) {
+                                    if (!method.equals("registerFallback")) return;
+                                    for (Object argument : arguments) if (argument instanceof org.objectweb.asm.Handle handle
+                                            && handle.getOwner().equals(owner)) handlers.add(handle);
+                                }
+                            };
+                        }
+                    }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+                }
+                // Pinned NeoForge overloads take serverHandler first, clientHandler second.
+                assertEquals(1, registrations.get(), id);
+                assertEquals(2, handlers.size(), id);
+                assertEquals(0, deliveries.getOrDefault(handlers.get(0).getName(), 0), id + ": serverbound must not deliver CUI");
+                assertEquals(1, deliveries.getOrDefault(handlers.get(1).getName(), 0), id + ": clientbound must deliver CUI");
+            }
+        }
+    }
+
+    @Test
     void optionalBridgeIsRelocatedAndContainsNoServerOrFixtureCode() throws Exception {
         try (var jar = new JarFile(System.getProperty("universal.jar"))) {
             for (String id : List.of("mc1_21_11", "mc26_1", "mc26_2")) {

@@ -69,8 +69,8 @@ public final class RuntimeCuiBridge {
     private static void registerFallback(RegisterPayloadHandlersEvent event) {
         event.registrar(CUIPacket.protocolVersion()).optional().playBidirectional(
                 CUIPacket.TYPE, CUIPacket.CODEC,
-                (payload, context) -> deliver(payload),
-                (payload, context) -> { });
+                (payload, context) -> { },
+                (payload, context) -> deliver(payload));
     }
 
     private static void deliver(CUIPacket payload) {

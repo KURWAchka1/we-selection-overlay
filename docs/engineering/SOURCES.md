@@ -236,6 +236,20 @@ not trigger a command request or autocomplete round trip. The pinned native
 wait for an advertised `we` root before automatic `/we cui`; packet CUI remains
 independent. Native tests cover presence, absence and existing retry gates.
 
+## S32 NeoForge Bidirectional Handler Order
+
+[Official PayloadRegistrar source, 1.21.11 branch](https://raw.githubusercontent.com/neoforged/NeoForge/1.21.11/src/main/java/net/neoforged/neoforge/network/registration/PayloadRegistrar.java).
+Checked 2026-10-11 against resolved official sources JARs **21.11.42**,
+**26.1.2.75** and **26.2.0.67**, not only the mutable branch. All three four-argument
+`playBidirectional` overloads take **serverHandler, clientHandler**, in that order.
+The shared private CUI fallback must deliver through the second handler.
+The EngineHub shared-handler path is independent and is retained unchanged.
+
+A real NeoForge 1.21.11 client without local WorldEdit negotiated the Paper bridge
+but received no CUI before this fix. That failed native run is regression evidence,
+not a failed bridge handshake. Packaged-bytecode checks cover handler order in all
+three runtimes; native Paper results are recorded separately.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.
