@@ -120,17 +120,42 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
             }
             case "stopwe" -> getServer().getPluginManager().disablePlugin(
                     Objects.requireNonNull(getServer().getPluginManager().getPlugin("WorldEdit")));
-            case "channels" -> {
-                var plugin = getServer().getPluginManager().getPlugin("WorldEditSelectionOverlayBridge");
-                String channel = "worldedit_selection_overlay:bridge";
-                if (plugin == null || plugin.isEnabled()
-                        || getServer().getMessenger().isIncomingChannelRegistered(plugin, channel)
-                        || getServer().getMessenger().isOutgoingChannelRegistered(plugin, channel))
-                    throw new IllegalStateException("Disabled bridge retained channel ownership");
-            }
+            case "bridgeoff" -> getServer().getPluginManager().disablePlugin(bridgePlugin());
+            case "bridgeon" -> getServer().getPluginManager().enablePlugin(bridgePlugin());
+            case "channels" -> verifyBridgeResources(false);
+            case "bridgeactive" -> verifyBridgeResources(true);
             default -> { return true; }
         }
         getLogger().info("WESO_FIXTURE_OK " + args[0] + " " + args[1]);
         return true;
+    }
+
+    private org.bukkit.plugin.Plugin bridgePlugin() {
+        return Objects.requireNonNull(getServer().getPluginManager().getPlugin("WorldEditSelectionOverlayBridge"));
+    }
+
+    private void verifyBridgeResources(boolean active) {
+        var plugin = bridgePlugin();
+        String channel = "worldedit_selection_overlay:bridge";
+        var messenger = getServer().getMessenger();
+        var expectedChannels = active ? java.util.Set.of(channel) : java.util.Set.<String>of();
+        int listeners = org.bukkit.event.HandlerList.getRegisteredListeners(plugin).size();
+        if (plugin.isEnabled() != active
+                || !messenger.getIncomingChannels(plugin).equals(expectedChannels)
+                || !messenger.getOutgoingChannels(plugin).equals(expectedChannels)
+                || messenger.getIncomingChannelRegistrations(plugin).size() != (active ? 1 : 0)
+                || listeners != (active ? 5 : 0)
+                || getServer().getScheduler().getPendingTasks().stream().anyMatch(task -> task.getOwner() == plugin)
+                || getServer().getScheduler().getActiveWorkers().stream().anyMatch(worker -> worker.getOwner() == plugin))
+            throw new IllegalStateException("Bridge resource ownership mismatch: active=" + active + ", listeners=" + listeners);
+        // Inspect our own field only in this opt-in test fixture, never in production.
+        try {
+            var field = plugin.getClass().getDeclaredField("bridge");
+            field.setAccessible(true);
+            if ((field.get(plugin) != null) != active)
+                throw new IllegalStateException("Bridge retained/missed core ownership");
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Fixture no longer matches companion field", ex);
+        }
     }
 }

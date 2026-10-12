@@ -45,8 +45,10 @@ From the repository root, with JDK 21 and 25 installed:
 .\tools\test-server-bridge.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25'
 ```
 
-Use `-Offline` only after dependencies are cached. This runs unit/domain tests
-on both JVMs, builds the Paper JAR and checks the actual native payload codecs
+Use `-Offline` only after dependencies are cached. Node.js is required for the
+16 harness self-tests (owned-process shutdown, frozen-world safety and wire
+helpers); they run without Minecraft windows or third-party Node packages.
+The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
 the cursor, accept an EULA or prove a dedicated-server login.
 Logs: `build/bridge-validation/`. Unit HTML/XML reports are in each module's
@@ -113,6 +115,11 @@ also verifies actual same-process reconnect and wire channel removal/restoration
 on both native loaders. An observed channel loss clears pending work and data;
 the next advertisement renews once. This is not permission polling or proof
 of silent plugin-disable/backend-switch recovery.
+The [server lifecycle and harness audit](../docs/engineering/BRIDGE_SERVER_LIFECYCLE_2026-10-12.md)
+subsequently verifies three real companion disable/enable cycles, resource
+cleanup and rejection of re-enable with disabled WorldEdit. It also confirms
+that Paper-side channel removal does not withdraw the remote advertisement on
+the pinned host; do not claim automatic native hot-reload recovery.
 
 For repeated, bounded server-cost experiments (pinned wire dependencies required):
 

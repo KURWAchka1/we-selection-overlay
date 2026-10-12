@@ -8,6 +8,7 @@ import { resolve, relative, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'node:net';
 import { channel, frame, hello, request, decode } from './wire-codec.mjs';
+import { observeOwnedServer } from './owned-server.mjs';
 
 const [javaHome, serverDirectory, dependencyDirectory] = process.argv.slice(2);
 assert(javaHome && serverDirectory && dependencyDirectory, 'Expected JDK home, isolated server directory, dependency directory');
@@ -39,8 +40,9 @@ const java = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-X
   '-Dweso.bridge.fixture=true', '-jar', 'server.jar', '--nogui'], {
   cwd: serverDir, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']
 });
-java.on('exit', () => { exited = true; });
-java.on('error', error => { lines.push(`LAUNCH_ERROR ${error.message}`); exited = true; });
+const server = observeOwnedServer(java);
+java.on('close', () => { exited = true; });
+java.on('error', error => { lines.push(`LAUNCH_ERROR ${error.message}`); });
 function capture(source, bytes) {
   output.write(bytes);
   partial[source] += bytes.toString();
@@ -82,14 +84,18 @@ async function connect(name, advertise = true) {
   const client = minecraft.createClient({ host: '127.0.0.1', port: 25579, username: name,
     auth: 'offline', version: '1.21.11', profilesFolder: false,
     clientSettings: { viewDistance: 2 }, disableChatSigning: true });
-  const peer = { client, frames: [], cui: [], advertised: false, errors: [], ended: false };
+  const peer = { client, frames: [], cui: [], advertised: false, serverChannels: new Set(), errors: [], ended: false };
   clients.push(peer);
   client.on('error', error => peer.errors.push(error.message));
   client.on('end', () => { peer.ended = true; });
   client.on('custom_payload', packet => {
-    if (packet.channel === 'minecraft:register') {
+    if (packet.channel === 'minecraft:register' || packet.channel === 'minecraft:unregister') {
       const channels = Array.isArray(packet.data) ? packet.data : packet.data.toString().split('\0');
-      peer.advertised ||= channels.includes(channel);
+      for (const name of channels) {
+        if (packet.channel === 'minecraft:register') peer.serverChannels.add(name);
+        else peer.serverChannels.delete(name);
+      }
+      peer.advertised ||= peer.serverChannels.has(channel);
     }
     if (packet.channel === channel) peer.frames.push(Buffer.from(packet.data));
     if (packet.channel === 'worldedit:cui') peer.cui.push(packet.data.toString());
@@ -211,6 +217,34 @@ try {
   assert.equal((await reconnected.exchange(request(newConnection.epoch, 1))).value.status, 0);
   record('same offline identity reconnects in this server process without retaining old epoch');
 
+  let currentEpoch = newConnection.epoch;
+  const lifecycle = [];
+  for (let cycle = 1; cycle <= 3; cycle++) {
+    await consoleAction('bridgeactive', 'WesoAllowed');
+    await consoleAction('bridgeoff', 'WesoAllowed');
+    await consoleAction('channels', 'WesoAllowed');
+    await silent(reconnected, request(currentEpoch, 2));
+    const remoteStillAdvertised = reconnected.serverChannels.has(channel);
+    await consoleAction('bridgeon', 'WesoAllowed');
+    await consoleAction('bridgeactive', 'WesoAllowed');
+    const fresh = await metrics();
+    assert.equal(fresh.connections, 0); assert.equal(fresh.reads, 0); assert.equal(fresh.replies, 0);
+    await silent(reconnected, request(currentEpoch, 2));
+    assert.equal((await metrics()).reads, 0, 'Restart accepted a previous core epoch');
+    const welcome = await negotiate(reconnected);
+    assert.notDeepEqual(welcome.epoch, currentEpoch);
+    const read = await reconnected.exchange(request(welcome.epoch, 1));
+    assert.deepEqual(read.value.bounds, one.value.bounds);
+    assert.deepEqual((await reconnected.exchange(request(welcome.epoch, 1))).bytes, read.bytes);
+    const beforeQuiet = await metrics();
+    assert.equal(beforeQuiet.reads, 1); assert.equal(beforeQuiet.replies, 3, 'Duplicate callback/reply after re-enable');
+    await delay(1000);
+    assert.deepEqual(await metrics(), beforeQuiet, 'Idle restarted companion performed unsolicited work');
+    lifecycle.push({ cycle, remoteStillAdvertised, metrics: beforeQuiet });
+    currentEpoch = welcome.epoch;
+  }
+  record('three same-process plugin disable/enable cycles release resources, reject old epochs and do not duplicate work');
+
   for (const peer of clients) if (peer !== first && peer !== reconnected) {
     assert(!peer.ended, peer.errors.join(', ')); peer.client.end('verification complete');
   }
@@ -219,8 +253,12 @@ try {
   assert.equal((await metrics()).connections, 1);
   await consoleAction('stopwe', 'WesoAllowed');
   await consoleAction('channels', 'WesoAllowed');
-  await silent(reconnected, request(newConnection.epoch, 2));
+  await silent(reconnected, request(currentEpoch, 2));
   record('WorldEdit disable also disables companion and unregisters both channel directions');
+  await consoleAction('bridgeon', 'WesoAllowed');
+  await consoleAction('channels', 'WesoAllowed');
+  await silent(reconnected, hello(randomBytes(16)));
+  record('re-enable with disabled WorldEdit fails closed without channel/listener/task ownership');
   reconnected.client.end('verification complete');
   await waitFor(() => clients.every(p => p.ended), 'client disconnect');
   await delay(200);
@@ -229,24 +267,15 @@ try {
     .map(f => [f, createHash('sha256').update(readFileSync(join(serverDir, 'plugins', f))).digest('hex')]));
   successReport = { checkedAt: new Date().toISOString(),
     minecraft: '1.21.11', minecraftProtocol: '1.68.0', server: lines.find(s => /This server is running Paper/.test(s)),
-    hashes, checks, metricsBeforeLifecycle: idle,
+    hashes, checks, lifecycle, metricsBeforeLifecycle: idle,
     nativeClients: 'not launched; separate native tests required' };
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
 } finally {
   for (const peer of clients) if (!peer.ended) peer.client.end('fixture shutdown');
-  if (!exited) {
-    java.stdin.write('stop\n');
-    const deadline = Date.now() + 20000;
-    while (!exited && Date.now() < deadline) await delay(50);
-    if (!exited) {
-      java.kill();
-      const killDeadline = Date.now() + 10000;
-      while (!exited && Date.now() < killDeadline) await delay(50);
-    }
-  }
-  await new Promise(r => output.end(r));
+  try { await server.stop({ graceMillis: 20000 }); }
+  finally { await new Promise(r => output.end(r)); }
 }
 assert(exited, `Owned Paper PID ${java.pid} did not stop`);
 if (successReport && !process.exitCode) {

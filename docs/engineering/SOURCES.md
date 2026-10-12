@@ -355,6 +355,32 @@ not the same accounting as fixture MXBean deltas and does not attribute a slow
 tick without temporal correlation. Reader compatibility was checked against
 all four frozen-baseline and 14 existing pilot windows, without rerunning servers.
 
+## S40 Plugin Lifecycle And Test Process Completion
+
+Checked **2026-10-12**. [PluginManager](https://jd.papermc.io/paper/1.21.11/org/bukkit/plugin/PluginManager.html)
+distinguishes a loaded plugin (`getPlugin`) from an enabled plugin; [Plugin.isEnabled](https://jd.papermc.io/paper/1.21.11/org/bukkit/plugin/Plugin.html#isEnabled())
+provides the runtime check. The inspected [Paper instance manager](https://github.com/PaperMC/Paper/blob/ver/1.21.11/paper-server/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java)
+does not revalidate dependencies in `enablePlugin`. A real fixture reproduced
+our companion accepting re-enable while WorldEdit was disabled; the startup
+guard now checks enabled state before any registrations/session access.
+
+[HandlerList](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/HandlerList.html),
+[Messenger registrations](https://jd.papermc.io/paper/1.21.11/org/bukkit/plugin/messaging/Messenger.html)
+and [BukkitScheduler](https://jd.papermc.io/paper/1.21.11/org/bukkit/scheduler/BukkitScheduler.html)
+expose the ownership checks used by the test-only fixture. Zero registered
+handlers/tasks is not a heap-retention or native hot-reload proof. Repeated
+disable/enable is fault testing, not a recommendation to use `/reload`.
+
+[Node child-process documentation](https://nodejs.org/api/child_process.html#event-close)
+states that `close` follows process termination and stdio closure; `exit` alone
+does not establish drained output, and a successful `kill` call does not prove
+termination. The current docs resolved to Node 26; behavior was independently
+tested on local **Node 24.21.0**, including real child processes. The attempted
+24.x web documentation URL was inaccessible. Our shared test helper waits for
+`close`, rejects spawn/stdin errors, premature/nonzero/signal exits and forced
+termination, and is idempotent. It never kills by process name or touches an
+unowned process.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

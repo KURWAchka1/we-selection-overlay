@@ -9,6 +9,7 @@ import { join, relative, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { channel, hello, request, decode } from './wire-codec.mjs';
 import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
+import { observeOwnedServer } from './owned-server.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode = 'load'] = process.argv.slice(2);
 assert(['load', 'baseline'].includes(mode));
@@ -62,14 +63,15 @@ async function run(installed, round, prepare = false) {
   writeFileSync(join(config, 'config.yml'), 'limits:\n  max-connections: 1024\n  global-requests-per-second: 100\n  global-burst: 100\n  player-requests-per-second: 4\n  player-burst: 8\n');
   const output = createWriteStream(join(serverDir, `${runName}.log`));
   const lines = [], peers = [], pending = { out: '', err: '' };
-  let exited = false, exitCode, phase = 'none', timer, disconnecting = false;
+  let exited = false, phase = 'none', timer, disconnecting = false;
   const jfrName = `${runName}.jfr`;
   rmSync(join(serverDir, jfrName), { force: true });
   const java = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-XX:ActiveProcessorCount=2',
     `-XX:StartFlightRecording=filename=${jfrName},settings=profile,dumponexit=true,maxsize=32m`,
     '-Dweso.bridge.fixture=true', `-Dweso.bridge.measureTicks=${samples}`, '-jar', 'server.jar', '--nogui'],
   { cwd: serverDir, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-  const exit = new Promise(resolve => java.once('close', code => { exited = true; exitCode = code; resolve(); }));
+  const server = observeOwnedServer(java);
+  java.on('close', () => { exited = true; });
   java.on('error', error => { lines.push(`LAUNCH_ERROR ${error.message}`); });
   function capture(source, bytes) {
     output.write(bytes); pending[source] += bytes.toString();
@@ -215,13 +217,8 @@ async function run(installed, round, prepare = false) {
   } finally {
     if (timer) clearInterval(timer);
     for (const peer of peers) if (!peer.ended) peer.client.end('fixture shutdown');
-    if (!exited) java.stdin.write('stop\n');
-    await Promise.race([exit, delay(25000)]);
-    if (!exited) java.kill();
-    await Promise.race([exit, delay(10000)]);
-    await new Promise(resolve => output.end(resolve));
-    assert(exited, `Owned Paper PID ${java.pid} did not stop`);
-    assert.equal(exitCode, 0, 'Paper shutdown failed');
+    try { await server.stop(); }
+    finally { await new Promise(resolve => output.end(resolve)); }
   }
   const summary = spawnSync(join(javaHome, 'bin/jfr.exe'), ['summary', join(serverDir, jfrName)], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
   assert.equal(summary.status, 0, summary.stderr);

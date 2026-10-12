@@ -16,6 +16,11 @@ passes native same-process reconnect and explicitly signalled wire channel
 removal/re-advertisement. Silent dependency loss, between-tick advertisement
 flaps and backend switches still need separate verification; these tests do not
 establish production performance acceptance.
+The [server lifecycle/harness audit](BRIDGE_SERVER_LIFECYCLE_2026-10-12.md)
+adds three real companion disable/enable cycles and a reproduced/fixed guard
+against startup with disabled WorldEdit. All three stops left the remote channel
+advertised; automatic native silent-stop recovery remains a release blocker.
+The shared process runner rejects failed/forced shutdowns before proof publication.
 Other host/version joins and remote features are not marked passed.
 Published release JARs and the 1.8.0 tag remain unchanged.
 

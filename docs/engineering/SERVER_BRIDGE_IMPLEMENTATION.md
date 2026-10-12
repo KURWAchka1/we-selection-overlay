@@ -38,6 +38,12 @@ does not replace the busy-server release gate or explain the earlier long tick.
 
 ## Implemented Boundary
 
+The [server lifecycle and harness audit](BRIDGE_SERVER_LIFECYCLE_2026-10-12.md)
+adds an enabled-WorldEdit startup guard after a real failing fixture, 14 wire
+check groups including three plugin cycles, and 16 automated Node harness tests.
+It changes only the experimental companion and test tools, not client JARs or
+the wire schema. Silent-stop recovery remains explicitly unimplemented.
+
 Pure Java 21 messages, bounded codec, client state machine and owning-thread
 server service; optional native transports in all six runtimes; Paper 1.21.11
 host using official WorldEdit 7.4.2 public session APIs. Only hello/capabilities

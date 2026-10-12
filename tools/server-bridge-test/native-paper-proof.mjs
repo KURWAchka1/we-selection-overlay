@@ -6,6 +6,7 @@ import { createConnection } from 'node:net';
 import { setPriority, constants } from 'node:os';
 import { resolve, relative, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { observeOwnedServer } from './owned-server.mjs';
 
 const [javaHome, serverDirectory, modVersion, powershell] = process.argv.slice(2);
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(serverDirectory);
@@ -65,25 +66,14 @@ async function startServer(companion) {
   else if (existsSync(destination)) unlinkSync(destination);
   const child = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-XX:ActiveProcessorCount=2', '-Dweso.bridge.fixture=true', '-jar', 'server.jar', '--nogui'], { cwd: serverDir, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   server = capture(child, join(serverDir, companion ? 'native-server.log' : 'absent-server.log'));
+  server.lifecycle = observeOwnedServer(child);
   if (child.pid) setPriority(child.pid, constants.priority.PRIORITY_BELOW_NORMAL);
   await waitFor(() => server.lines.some(s => /Done \(/.test(s)), 'Paper startup');
   assert(!server.lines.some(s => /Error occurred while enabling/.test(s)), server.lines.slice(-25).join('\n'));
   assert.equal(server.lines.some(s => s.includes('Experimental read-only bridge enabled')), companion);
 }
 async function stopServer() {
-  if (!server) return;
-  if (server.exited) { assert.equal(server.code, 0, 'Paper exited unsuccessfully'); return; }
-  server.child.stdin.write('stop\n');
-  const end = Date.now() + 20000;
-  while (!server.exited && Date.now() < end) await delay(50);
-  if (!server.exited) {
-    server.child.kill();
-    const killed = Date.now() + 10000;
-    while (!server.exited && Date.now() < killed) await delay(50);
-    assert(server.exited, 'Owned Paper process did not terminate');
-    throw new Error('Paper required forced termination; this run cannot pass');
-  }
-  assert.equal(server.code, 0, 'Paper shutdown failed');
+  if (server) await server.lifecycle.stop({ graceMillis: 20000 });
 }
 async function consoleAction(action, name) {
   const start = server.lines.length;
