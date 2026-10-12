@@ -12,6 +12,13 @@ public final class FabricNativeBridgeTest implements ClientModInitializer {
             private boolean opened;
             private MinecraftClient client() { return MinecraftClient.getInstance(); }
             @Override public boolean joined() { return client().world != null && client().player != null; }
+            @Override public Object player() { return client().player; }
+            @Override public Object world() { return client().world; }
+            @Override public Object connection() { return client().getNetworkHandler(); }
+            @Override public boolean respawnIfDead() {
+                if (!client().player.isDead()) return false;
+                client().player.requestRespawn(); client().setScreen(null); return true;
+            }
             @Override public void configure() {
                 client().options.getMaxFps().setValue(40);
                 client().options.pauseOnLostFocus = false;

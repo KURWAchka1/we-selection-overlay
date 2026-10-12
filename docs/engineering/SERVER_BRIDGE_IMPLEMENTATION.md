@@ -20,7 +20,14 @@ The later [lifecycle and 16-player load pilot](BRIDGE_LOAD_AND_LIFECYCLE_2026-10
 adds reproduced old-epoch cleanup fixes, real respawn/reconnect/dependency-disable
 checks, 33 pure tests per JVM and repeated metadata workloads with JFR. It records
 baseline spread and an unattributed long tick; it does not close production
-performance or automatic native lifecycle-recovery gates.
+performance or automatic native lifecycle-recovery gates by itself.
+
+The [2026-10-12 native lifecycle regression](NATIVE_BRIDGE_LIFECYCLE_2026-10-12.md)
+then reproduces and fixes same-world respawn recovery, verifies both native
+loaders through respawn/Nether/Overworld transitions without reconnecting, and
+repeats granted/denied/absent-companion checks. It records 34 pure tests per JVM,
+six codec probes and six runtime builds; other lifecycle/performance gates remain
+explicitly open. These are development candidates, not a public client update.
 
 ## Implemented Boundary
 

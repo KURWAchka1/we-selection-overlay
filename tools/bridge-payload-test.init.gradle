@@ -6,6 +6,7 @@ allprojects {
         sourceSets {
             bridgePayloadTest {
                 java.srcDir(fixtureDir)
+                java.include('NativeCodecProbe.java')
                 compileClasspath += sourceSets.main.output + configurations.compileClasspath
                 runtimeClasspath = output + sourceSets.main.output + configurations.compileClasspath
             }

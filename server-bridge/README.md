@@ -104,6 +104,10 @@ same-process reconnect, bridge channel unregister/register and WorldEdit disable
 It verifies that stale epochs cannot read metadata, unrelated channel changes
 do not reset the bridge, and dependency shutdown unregisters both directions.
 These headless lifecycle checks are not a native-client respawn/recovery claim.
+The separate [native lifecycle regression](../docs/engineering/NATIVE_BRIDGE_LIFECYCLE_2026-10-12.md)
+verifies real same-world respawn and Nether/Overworld recovery on Fabric/NeoForge
+1.21.11. Client context includes the local-player instance as well as the network
+handler/world; renewal sends a fresh hello, not an unsolicited selection read.
 
 For repeated, bounded server-cost experiments (pinned wire dependencies required):
 

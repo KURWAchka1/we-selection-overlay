@@ -88,6 +88,14 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
             }
             case "seed" -> seed(player.getName());
             case "kill" -> player.setHealth(0);
+            case "nether", "overworld" -> {
+                var environment = args[0].equals("nether") ? org.bukkit.World.Environment.NETHER : org.bukkit.World.Environment.NORMAL;
+                var destination = getServer().getWorlds().stream().filter(world -> world.getEnvironment() == environment)
+                        .findFirst().orElseThrow();
+                if (!player.teleport(new org.bukkit.Location(destination, 0.5, 100, 0.5)))
+                    throw new IllegalStateException("Fixture dimension transition cancelled");
+                seed(player.getName());
+            }
             case "stopwe" -> getServer().getPluginManager().disablePlugin(
                     Objects.requireNonNull(getServer().getPluginManager().getPlugin("WorldEdit")));
             case "channels" -> {

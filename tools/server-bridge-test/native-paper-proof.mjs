@@ -108,10 +108,12 @@ async function runClient(loader, scenario) {
     for (; index < client.lines.length; index++) {
       const line = client.lines[index];
       assert(!line.includes('NATIVE PAPER BRIDGE FAIL:'), line);
-      const phase = line.match(/NATIVE PAPER WAIT: (initial|quiet|empty|seed|revoke|grant|disconnect)\s*$/)?.[1];
+      const phase = line.match(/NATIVE PAPER WAIT: (initial|quiet|respawn|nether|overworld|empty|seed|revoke|grant|disconnect)\s*$/)?.[1];
       if (!phase) continue;
       if (phase === 'initial' || phase === 'quiet') {
         if (baseline) assert.equal((await metrics()).reads, baseline.reads, 'Hello/idle scanned selection');
+      } else if (phase === 'respawn') {
+        await consoleAction('kill', name);
       } else if (phase === 'disconnect') {
         server.child.stdin.write(`kick ${name} Verification complete\n`);
       } else await consoleAction(phase, name);
@@ -121,13 +123,15 @@ async function runClient(loader, scenario) {
   }
   assert.equal(client.code, 0, client.lines.slice(-30).join('\n'));
   for (const marker of ['CURSOR ISOLATION GUARD PASS:', 'NATIVE PAPER CUI PASS:', `NATIVE PAPER BRIDGE PASS: ${scenario}`]) assert(client.lines.some(s => s.includes(marker)), `Missing ${marker}`);
+  if (scenario === 'allowed') for (const context of ['same-world respawn', 'Nether transition', 'Overworld return'])
+    assert(client.lines.some(s => s.includes(`NATIVE PAPER CONTEXT PASS: ${context}`)), `Missing context recovery: ${context}`);
   assert(!client.lines.some(s => s.includes('NATIVE PAPER BRIDGE FAIL:')));
   assert.equal(hash(artifactPaths[loader]), clientHashes[loader], 'Client artifact changed during the run');
   await delay(250);
   const final = baseline ? await metrics() : null;
   if (final) {
     assert.equal(final.connections, 0, 'Disconnect leaked peers');
-    assert.equal(final.reads - baseline.reads, scenario === 'allowed' ? 3 : 0, 'Unexpected background/denied metadata reads');
+    assert.equal(final.reads - baseline.reads, scenario === 'allowed' ? 6 : 0, 'Unexpected background/denied metadata reads');
   }
   evidence.push({ loader, scenario, baseline, final });
   checks.push(`${loader} native 1.21.11 -> Paper: ${scenario}, CUI and disconnect cleanup`);

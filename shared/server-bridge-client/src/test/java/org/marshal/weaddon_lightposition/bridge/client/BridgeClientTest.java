@@ -110,6 +110,41 @@ class BridgeClientTest {
         assertEquals(SelectionStatus.EMPTY, client.selection().status());
     }
 
+    @Test void renewedContextRejectsDelayedWelcomeAndReplyWithoutBackgroundReads() {
+        var counter = new AtomicLong();
+        var local = new BridgeClient(() -> new UUID(2, counter.incrementAndGet()));
+        var reads = new AtomicLong();
+        var epochs = new AtomicLong();
+        var server = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { return true; }
+            public SelectionState readSelection(UUID id) {
+                reads.incrementAndGet();
+                return SelectionState.unavailable(SelectionStatus.EMPTY);
+            }
+        }, BridgeServer.Limits.defaults(), System::nanoTime, () -> new UUID(3, epochs.incrementAndGet()));
+        local.connect(0);
+        byte[] oldWelcome = server.receive(player, local.poll(true, 0));
+        local.receive(oldWelcome);
+        byte[] oldReply = server.receive(player, local.requestSelection(1));
+        server.resetContext(player);
+        local.connect(2);
+        assertFalse(local.pending()); assertNull(local.selection()); assertEquals(0, local.capabilities());
+        byte[] hello = local.poll(true, 2);
+        local.receive(oldWelcome); local.receive(oldReply);
+        assertEquals(BridgeClient.State.NEGOTIATING, local.state());
+        local.receive(server.receive(player, hello));
+        assertEquals(BridgeClient.State.READY, local.state());
+        assertEquals(1, reads.get(), "Renewal must not read selection");
+        byte[] request = local.requestSelection(3);
+        local.receive(oldReply);
+        assertTrue(local.pending()); assertNull(local.selection());
+        local.receive(server.receive(player, request));
+        assertFalse(local.pending()); assertEquals(SelectionStatus.EMPTY, local.selection().status());
+        for (int i = 0; i < 100_000; i++) assertNull(local.poll(true, i + 4));
+        assertEquals(2, reads.get());
+        assertEquals(4, server.metrics().admitted());
+    }
+
     @Test void discoveryAndRequestTimeoutsWorkAcrossMonotonicClockSignWrap() {
         long start = Long.MAX_VALUE - 1_000_000_000L;
         client.connect(start);

@@ -289,6 +289,24 @@ provide streaming event access. Our analysis uses them instead of materializing
 all recursive classloader/stack metadata as a giant JSON document, keeps a
 bounded set of time windows and excludes the test fixture from bridge attribution.
 
+## S36 Native Player Context And Respawn
+
+Checked **2026-10-12**. [MinecraftClient 1.21.11](https://maven.fabricmc.net/docs/yarn-1.21.11+build.4/net/minecraft/client/MinecraftClient.html)
+exposes nullable local player/world fields; [ClientPlayerEntity](https://maven.fabricmc.net/docs/yarn-1.21.11+build.4/net/minecraft/client/network/ClientPlayerEntity.html#requestRespawn())
+exposes the normal respawn request used only by the test fixture. The resolved
+official NeoForge **21.11.42 sources JAR**, entry
+`net/neoforged/neoforge/client/event/ClientPlayerNetworkEvent.java`, documents
+`Clone` as replacement of the old local-player instance on respawn. Mutable
+GitHub branch URLs for this source returned 404; the resolved artifact, not an
+invented branch/tag URL, was inspected. The production adapter observes player
+identity on its existing owning-thread tick; it does not instantiate an event.
+
+The [Paper Entity API 1.21.11](https://jd.papermc.io/paper/1.21.11/org/bukkit/entity/Entity.html#teleport(org.bukkit.Location))
+documents normal player teleportation and its success result. Our isolated
+fixture checks success, then reseeds that player's selector in the destination
+world. Native tests, not API documentation alone, establish same-world respawn
+and dimension-recovery behavior; see the [lifecycle report](NATIVE_BRIDGE_LIFECYCLE_2026-10-12.md).
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

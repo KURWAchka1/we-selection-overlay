@@ -14,6 +14,13 @@ public final class NeoNativeBridgeTest {
             private boolean opened;
             private Minecraft client() { return Minecraft.getInstance(); }
             @Override public boolean joined() { return client().level != null && client().player != null; }
+            @Override public Object player() { return client().player; }
+            @Override public Object world() { return client().level; }
+            @Override public Object connection() { return client().getConnection(); }
+            @Override public boolean respawnIfDead() {
+                if (!client().player.isDeadOrDying()) return false;
+                client().player.respawn(); client().setScreen(null); return true;
+            }
             @Override public void configure() {
                 client().options.framerateLimit().set(40);
                 client().options.pauseOnLostFocus = false;

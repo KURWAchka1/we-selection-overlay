@@ -72,6 +72,11 @@ are positive, increasing i64 values within the epoch. The server only caches the
 last reply: the same ID returns its original result; older IDs are dropped.
 The client has at most one pending read and accepts only its matching ID/epoch.
 A timed-out read is not retried, and its late result cannot complete a newer one.
+Native clients bind that state to connection, world **and local-player instance**.
+Replacing the player on a same-world respawn renews discovery with a fresh nonce,
+without automatically reading selection metadata. Incoming frames and explicit
+requests also check those identities; old-context results cannot cross a reset.
+Native verification is recorded in the [lifecycle regression](NATIVE_BRIDGE_LIFECYCLE_2026-10-12.md).
 
 Handlers are owned by their platform game thread. Cheap frame/admission checks
 precede application decoding and session access. Invalid or throttled traffic is

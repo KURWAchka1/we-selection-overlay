@@ -9,6 +9,10 @@ public final class NativeBridgeChecks {
         boolean joined();
         void configure();
         Object overlay();
+        Object player();
+        Object world();
+        Object connection();
+        boolean respawnIfDead();
         void stop();
     }
     private final Adapter adapter;
@@ -20,6 +24,9 @@ public final class NativeBridgeChecks {
     private Object overlay;
     private boolean finished;
     private boolean reportedJoin;
+    private Object previousPlayer, previousWorld, previousConnection, previousEpoch;
+    private long contextStarted;
+    private boolean respawnRequested;
 
     public NativeBridgeChecks(Adapter adapter) {
         this.adapter = adapter;
@@ -59,7 +66,27 @@ public final class NativeBridgeChecks {
                 else stage = 2;
             } else if (stage == 2 && call(null, "selection") != null) {
                 verifySelection("READY");
-                waitFor("empty", 3);
+                rememberContext(); waitFor("respawn", 12);
+            } else if (stage == 12 && acknowledged("respawn")) {
+                if (!respawnRequested) respawnRequested = adapter.respawnIfDead();
+                if (adapter.player() != previousPlayer) {
+                    check(adapter.world() == previousWorld, "Respawn unexpectedly changed world");
+                    stage = 13;
+                }
+            } else if (stage == 13 && recoveredContext("same-world respawn")) {
+                call(null, "requestSelection"); stage = 14;
+            } else if (stage == 14 && call(null, "selection") != null) {
+                verifySelection("READY"); rememberContext(); waitFor("nether", 15);
+            } else if (stage == 15 && acknowledged("nether") && adapter.world() != previousWorld
+                    && recoveredContext("Nether transition")) {
+                call(null, "requestSelection"); stage = 16;
+            } else if (stage == 16 && call(null, "selection") != null) {
+                verifySelection("READY", 0, 255); rememberContext(); waitFor("overworld", 17);
+            } else if (stage == 17 && acknowledged("overworld") && adapter.world() != previousWorld
+                    && recoveredContext("Overworld return")) {
+                call(null, "requestSelection"); stage = 18;
+            } else if (stage == 18 && call(null, "selection") != null) {
+                verifySelection("READY"); waitFor("empty", 3);
             } else if (stage == 3 && acknowledged("empty")) { call(null, "requestSelection"); stage = 4; }
             else if (stage == 4 && call(null, "selection") != null) { verifySelection("EMPTY"); waitFor("seed", 5); }
             else if (stage == 5 && acknowledged("seed")) { call(null, "requestSelection"); stage = 6; }
@@ -86,13 +113,38 @@ public final class NativeBridgeChecks {
     }
 
     private void verifySelection(String expected) throws Exception {
+        verifySelection(expected, -64, 319);
+    }
+
+    private void verifySelection(String expected, int minY, int maxY) throws Exception {
         Object selection = call(null, "selection");
         check(invoke(selection, "status").toString().equals(expected), "Selection status mismatch: " + selection);
         Object bounds = invoke(selection, "bounds");
         if (!expected.equals("READY")) { check(bounds == null && (int) invoke(selection, "permissions") == 0, "Unavailable state leaked metadata"); return; }
         verifyBounds(bounds);
-        check((int) invoke(selection, "minY") == -64 && (int) invoke(selection, "maxY") == 319 && (int) invoke(selection, "permissions") == 7, "Height/permissions mismatch");
+        check((int) invoke(selection, "minY") == minY && (int) invoke(selection, "maxY") == maxY && (int) invoke(selection, "permissions") == 7, "Height/permissions mismatch");
         System.out.println("NATIVE PAPER METADATA PASS: " + expected);
+    }
+
+    private void rememberContext() throws Exception {
+        previousPlayer = adapter.player(); previousWorld = adapter.world();
+        previousConnection = adapter.connection();
+        previousEpoch = epoch(); contextStarted = System.nanoTime();
+    }
+
+    private Object epoch() throws Exception {
+        Object state = field(null, bridge, "CLIENT");
+        return field(state, state.getClass(), "epoch");
+    }
+
+    private boolean recoveredContext(String label) throws Exception {
+        check(System.nanoTime() - contextStarted < 20_000_000_000L, "Context did not recover: " + label);
+        if (!status().equals("READY") || previousEpoch.equals(epoch())) return false;
+        check(adapter.connection() == previousConnection, "Context recovery reconnected instead of recovering: " + label);
+        check(call(null, "selection") == null, "Context retained old selection: " + label);
+        check(!(boolean) invoke(field(null, bridge, "CLIENT"), "pending"), "Context retained pending request");
+        System.out.println("NATIVE PAPER CONTEXT PASS: " + label);
+        return true;
     }
 
     private void verifyBounds(Object bounds) throws Exception {

@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory;
 public final class NativeServerBridge {
     private static final BridgeClient CLIENT = new BridgeClient();
     private static final boolean PROBE = Boolean.getBoolean("weso.bridge.probe");
-    private static Object connection, level;
+    private static Object connection, level, player;
     private static boolean probeRequested, probeReported;
 
     private NativeServerBridge() { }
@@ -31,20 +31,20 @@ public final class NativeServerBridge {
 
     public static void requestSelection() {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.getNetworkHandler() != connection || client.world != level || !canSend(client)) return;
+        if (!sameContext(client) || !canSend(client)) return;
         send(CLIENT.requestSelection(System.nanoTime()));
     }
 
     private static void tick(MinecraftClient client) {
         Object current = client.getNetworkHandler();
-        if (current == null || client.world == null || client.getServer() != null) {
+        if (current == null || client.world == null || client.player == null || client.getServer() != null) {
             if (connection != null) reset();
             return;
         }
         long now = System.nanoTime();
-        if (current != connection || client.world != level) {
+        if (!sameContext(client)) {
             reset();
-            connection = current; level = client.world;
+            connection = current; level = client.world; player = client.player;
             CLIENT.connect(now);
         }
         send(CLIENT.poll(canSend(client), now));
@@ -59,7 +59,11 @@ public final class NativeServerBridge {
     }
 
     private static void receive(MinecraftClient client, BridgePayload payload) {
-        if (client.getNetworkHandler() == connection && client.world == level) CLIENT.receive(payload.bytes());
+        if (sameContext(client)) CLIENT.receive(payload.bytes());
+    }
+
+    private static boolean sameContext(MinecraftClient client) {
+        return connection != null && client.getNetworkHandler() == connection && client.world == level && client.player == player;
     }
 
     private static boolean canSend(MinecraftClient client) {
@@ -71,7 +75,7 @@ public final class NativeServerBridge {
     }
 
     private static void reset() {
-        CLIENT.disconnect(); connection = null; level = null;
+        CLIENT.disconnect(); connection = null; level = null; player = null;
         probeRequested = false; probeReported = false;
     }
 }

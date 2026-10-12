@@ -1,14 +1,18 @@
 # Server Bridge Verification Gates
 
 Status: **release gates, with partial foundation evidence**.
-Date: 2026-10-11. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
+Updated: 2026-10-12. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
 contains Java 21/25 tests, six native-codec checks and a real Paper wire proof.
 Headless protocol clients are not Fabric/NeoForge gameplay clients. A subsequent
 [six-client native Paper 1.21.11 matrix](NATIVE_PAPER_REGRESSION_2026-10-11.md)
 passed allowed/denied/absent scenarios. A later
 [16-player lifecycle/load pilot](BRIDGE_LOAD_AND_LIFECYCLE_2026-10-11.md)
 records repeated stationary metadata workloads and JFR, not busy-server release
-acceptance. Other host/version joins and remote features are not marked passed.
+acceptance. The [native lifecycle regression](NATIVE_BRIDGE_LIFECYCLE_2026-10-12.md)
+passes real same-world respawn and Nether/Overworld recovery on both 1.21.11
+loaders after reproducing a stale-client-context defect. It does not close
+native same-process reconnect, channel re-advertisement or backend-switch gates.
+Other host/version joins and remote features are not marked passed.
 Published release JARs and the 1.8.0 tag remain unchanged.
 
 ## Evidence Record
