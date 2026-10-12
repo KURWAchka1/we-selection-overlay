@@ -59,7 +59,7 @@ public final class NativeServerBridge {
     }
 
     private static void receive(Minecraft client, BridgePayload payload) {
-        if (sameContext(client)) CLIENT.receive(payload.bytes());
+        if (sameContext(client) && canSend(client)) CLIENT.receive(payload.bytes());
     }
 
     private static boolean sameContext(Minecraft client) {

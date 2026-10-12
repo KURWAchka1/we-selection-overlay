@@ -3,13 +3,14 @@ param(
     [ValidateRange(2, 32)][int]$Players = 16,
     [ValidateRange(100, 2400)][int]$Samples = 600,
     [ValidateRange(1, 4)][int]$Repetitions = 2,
+    [switch]$ControlledBaseline,
     [switch]$AcceptEula
 )
 $ErrorActionPreference = 'Stop'
 if (!$AcceptEula) { throw 'Owner acceptance of https://www.minecraft.net/eula is required' }
 $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root 'build/bridge-paper-proof'
-$server = Join-Path $root 'build/bridge-load-proof'
+$server = Join-Path $root $(if ($ControlledBaseline) { 'build/bridge-baseline-proof' } else { 'build/bridge-load-proof' })
 foreach ($file in @((Join-Path $Java21 'bin/java.exe'), (Join-Path $source 'server.jar'),
         (Join-Path $source 'plugins/worldedit.jar'), (Join-Path $root 'build/bridge-wire-deps/package.json'))) {
     if (!(Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing verified fixture dependency: $file" }
@@ -34,6 +35,7 @@ try {
     (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'server-bridge-test/server.properties')) -replace '^max-players=4$', 'max-players=32' |
         Set-Content -LiteralPath (Join-Path $server 'server.properties') -Encoding ASCII
     'eula=true' | Set-Content -LiteralPath (Join-Path $server 'eula.txt') -Encoding ASCII
-    & node (Join-Path $PSScriptRoot 'server-bridge-test/paper-load-proof.mjs') $Java21 $server $Players $Samples $Repetitions
-    if ($LASTEXITCODE -ne 0) { throw 'Paper load proof failed; inspect build/bridge-load-proof/' }
+    $mode = if ($ControlledBaseline) { 'baseline' } else { 'load' }
+    & node (Join-Path $PSScriptRoot 'server-bridge-test/paper-load-proof.mjs') $Java21 $server $Players $Samples $Repetitions $mode
+    if ($LASTEXITCODE -ne 0) { throw "Paper load proof failed; inspect $server" }
 } finally { Pop-Location; $env:JAVA_HOME = $previousJava }

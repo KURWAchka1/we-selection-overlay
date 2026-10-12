@@ -19,6 +19,13 @@ public final class FabricNativeBridgeTest implements ClientModInitializer {
                 if (!client().player.isDead()) return false;
                 client().player.requestRespawn(); client().setScreen(null); return true;
             }
+            @Override public void reconnect() {
+                net.minecraft.client.gui.screen.multiplayer.ConnectScreen.connect(
+                        new net.minecraft.client.gui.screen.TitleScreen(), client(),
+                        net.minecraft.client.network.ServerAddress.parse("127.0.0.1:25579"),
+                        new net.minecraft.client.network.ServerInfo("Weso loopback fixture", "127.0.0.1:25579",
+                                net.minecraft.client.network.ServerInfo.ServerType.OTHER), false, null);
+            }
             @Override public void configure() {
                 client().options.getMaxFps().setValue(40);
                 client().options.pauseOnLostFocus = false;

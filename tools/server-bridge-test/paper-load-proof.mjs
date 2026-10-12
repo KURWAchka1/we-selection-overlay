@@ -8,10 +8,15 @@ import { constants, cpus, setPriority } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { channel, hello, request, decode } from './wire-codec.mjs';
+import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 
-const [javaHome, directory, playerArgument, sampleArgument, repeatArgument] = process.argv.slice(2);
+const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode = 'load'] = process.argv.slice(2);
+assert(['load', 'baseline'].includes(mode));
+const baselineOnly = mode === 'baseline';
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory);
-assert.equal(relative(root, serverDir), join('build', 'bridge-load-proof'), 'Never operate a user server');
+assert.equal(relative(root, serverDir), join('build', baselineOnly ? 'bridge-baseline-proof' : 'bridge-load-proof'), 'Never operate a user server');
+const frozen = baselineOnly ? new FrozenFixtureWorld(serverDir) : null;
+let worldDigest;
 const players = Number(playerArgument), samples = Number(sampleArgument), repetitions = Number(repeatArgument);
 assert(Number.isInteger(players) && players >= 2 && players <= 32);
 assert(Number.isInteger(samples) && samples >= 100 && samples <= 2400);
@@ -44,9 +49,10 @@ async function freePort() {
 function delta(after, before) {
   return Object.fromEntries(Object.keys(after).map(k => [k, after[k] - before[k]]));
 }
-async function run(installed, round) {
+async function run(installed, round, prepare = false) {
   await freePort();
-  const runName = `${round}-${installed ? 'installed' : 'absent'}`;
+  if (frozen && !prepare) worldDigest = frozen.restore();
+  const runName = prepare ? 'prepare' : `${round}-${installed ? 'installed' : 'absent'}`;
   const plugin = join(serverDir, 'plugins', companionName);
   if (installed) copyFileSync(join(serverDir, 'companion.jar'), plugin);
   else rmSync(plugin, { force: true });
@@ -113,6 +119,7 @@ async function run(installed, round) {
     assert.equal(data.samples, samples); assert.equal(data.players, players);
     assert.equal(data.tickMillis.length, samples); assert(data.wallMillis > 0);
     assert.equal(data.generatedChunks, 0, 'Measurement unexpectedly generated chunks');
+    if (baselineOnly) assert.equal(data.chunkLoads, 0, 'Controlled silent baseline loaded chunks');
     if (installed) {
       assert(data.bridge.admitted <= 100 + Math.ceil(100 * (data.wallMillis / 1000 + .5)));
       assert.equal(data.bridge.malformed, 0);
@@ -124,11 +131,13 @@ async function run(installed, round) {
         if (label === 'many') assert(data.received.every(n => n > 0), 'An active player received no reply');
         if (label === 'flood') assert(data.bridge.throttled > 0, 'Flood did not exercise admission');
       }
+      if (baselineOnly) assert.equal(data.bridge.admitted, 0, 'Silent baseline admitted application work');
     }
     const runDirectory = join(serverDir, 'measurements', runName);
     mkdirSync(runDirectory, { recursive: true });
     writeFileSync(join(runDirectory, `${label}.json`), JSON.stringify(data, null, 2));
-    results.push({ run: runName, ...data, tickMillis: undefined });
+    results.push({ run: runName, worldDigest, ...data, tickMillis: undefined });
+    if (baselineOnly) checks.push(`${runName}: identical frozen world, zero chunk loads/generation and silent bridge work`);
     console.log(`PASS ${runName}/${label}: p95=${data.p95.toFixed(3)}ms p99=${data.p99.toFixed(3)}ms reads=${data.bridge?.reads ?? 0}`);
   }
   try {
@@ -162,9 +171,14 @@ async function run(installed, round) {
       await waitFor(() => lines.some(s => s.includes(`WESO_FIXTURE_JOIN ${name}`)), name);
       client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(channel) });
     }
+    if (baselineOnly) {
+      const start = lines.length;
+      java.stdin.write('wesofixture control baseline\n');
+      await waitFor(() => lines.slice(start).some(s => s.includes('WESO_FIXTURE_OK control baseline')), 'controlled baseline rules');
+    }
     await delay(15000);
-    await measure('silent');
-    if (installed) {
+    if (!prepare) await measure('silent');
+    if (installed && !baselineOnly) {
       for (const peer of peers) {
         peer.lastReplyId = 0n;
         peer.client.write('custom_payload', { channel, data: hello(randomBytes(16)) });
@@ -212,19 +226,21 @@ async function run(installed, round) {
   const summary = spawnSync(join(javaHome, 'bin/jfr.exe'), ['summary', join(serverDir, jfrName)], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
   assert.equal(summary.status, 0, summary.stderr);
   writeFileSync(join(serverDir, `${runName}-jfr-summary.txt`), summary.stdout);
+  if (prepare) worldDigest = frozen.capture();
 }
 
 try {
+  if (frozen && !frozen.exists()) await run(false, 0, true);
   for (let round = 1; round <= repetitions; round++) {
     // Reverse order on the repeat to expose gross warm-up/order bias.
     for (const installed of (round % 2 ? [false, true] : [true, false])) await run(installed, round);
   }
   await freePort();
   writeFileSync(join(serverDir, 'load-proof.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
-    minecraft: '1.21.11', players, samples, repetitions, javaHome, node: process.version,
+    minecraft: '1.21.11', mode, worldDigest, players, samples, repetitions, javaHome, node: process.version,
     processorModel: cpus()[0]?.model, logicalProcessors: cpus().length,
     serverHash: hash(join(serverDir, 'server.jar')), worldEditHash: hash(join(serverDir, 'plugins/worldedit.jar')),
     companionHash, checks, results,
-    limitations: 'Stationary headless protocol clients on flat loopback fixture; not native GPU clients, busy production gameplay or streaming/simulation cost.' }, null, 2));
+    limitations: baselineOnly ? 'Controlled silent baseline from identical frozen world bytes, with random ticks, mob spawning, daylight/weather cycles disabled. Shared laptop, short warmup and stationary headless clients; not busy gameplay or production performance acceptance.' : 'Stationary headless protocol clients on flat loopback fixture; not native GPU clients, busy production gameplay or streaming/simulation cost.' }, null, 2));
   console.log('PAPER BRIDGE LOAD PROOF PASS; all owned processes stopped');
 } catch (error) { console.error(error); process.exitCode = 1; }

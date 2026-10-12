@@ -78,6 +78,16 @@ without automatically reading selection metadata. Incoming frames and explicit
 requests also check those identities; old-context results cannot cross a reset.
 Native verification is recorded in the [lifecycle regression](NATIVE_BRIDGE_LIFECYCLE_2026-10-12.md).
 
+On an observed native channel-availability falling edge, the client discards
+metadata, grants, epoch and pending request. A later rising edge starts one fresh
+nonce negotiation, including a channel first advertised after discovery timeout.
+Constant channel availability never retries a denied or timed-out handshake.
+Receiving frames also requires the native channel to remain available.
+These checks add no permission polling, metadata subscription or heartbeat.
+They cannot detect a silent server-side plugin shutdown with no wire signal, or
+an unregister/register pair entirely between availability observations; those
+remain separate lifecycle gates. See the [channel/reconnect evidence](BRIDGE_CHANNEL_AND_BASELINE_2026-10-12.md).
+
 Handlers are owned by their platform game thread. Cheap frame/admission checks
 precede application decoding and session access. Invalid or throttled traffic is
 dropped without per-packet logging; quotas apply globally as well as per player.

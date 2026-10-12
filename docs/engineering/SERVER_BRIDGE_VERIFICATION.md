@@ -10,8 +10,12 @@ passed allowed/denied/absent scenarios. A later
 records repeated stationary metadata workloads and JFR, not busy-server release
 acceptance. The [native lifecycle regression](NATIVE_BRIDGE_LIFECYCLE_2026-10-12.md)
 passes real same-world respawn and Nether/Overworld recovery on both 1.21.11
-loaders after reproducing a stale-client-context defect. It does not close
-native same-process reconnect, channel re-advertisement or backend-switch gates.
+loaders after reproducing a stale-client-context defect. A subsequent
+[channel/reconnect regression and controlled baseline](BRIDGE_CHANNEL_AND_BASELINE_2026-10-12.md)
+passes native same-process reconnect and explicitly signalled wire channel
+removal/re-advertisement. Silent dependency loss, between-tick advertisement
+flaps and backend switches still need separate verification; these tests do not
+establish production performance acceptance.
 Other host/version joins and remote features are not marked passed.
 Published release JARs and the 1.8.0 tag remain unchanged.
 

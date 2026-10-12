@@ -27,6 +27,8 @@ assert.equal(hash(join(serverDir, 'plugins/worldedit.jar')), '0ee152b1be5dfb5150
 const artifactPaths = Object.fromEntries(['fabric', 'neoforge'].map(loader => [loader,
   join(root, `WEaddon_${loader}_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${modVersion}-${loader}-1.21.11-26.2.jar`)]));
 const clientHashes = Object.fromEntries(Object.entries(artifactPaths).map(([loader, path]) => [loader, hash(path)]));
+const companionHash = hash(join(serverDir, 'companion.jar'));
+const fixtureHash = hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar'));
 const proofPath = join(serverDir, 'native-proof.json');
 if (existsSync(proofPath)) unlinkSync(proofPath);
 
@@ -56,6 +58,8 @@ function capture(child, path) {
   return state;
 }
 async function startServer(companion) {
+  assert.equal(hash(join(serverDir, 'companion.jar')), companionHash);
+  assert.equal(hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar')), fixtureHash);
   const destination = join(serverDir, 'plugins/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar');
   if (companion) copyFileSync(join(serverDir, 'companion.jar'), destination);
   else if (existsSync(destination)) unlinkSync(destination);
@@ -67,7 +71,8 @@ async function startServer(companion) {
   assert.equal(server.lines.some(s => s.includes('Experimental read-only bridge enabled')), companion);
 }
 async function stopServer() {
-  if (!server || server.exited) return;
+  if (!server) return;
+  if (server.exited) { assert.equal(server.code, 0, 'Paper exited unsuccessfully'); return; }
   server.child.stdin.write('stop\n');
   const end = Date.now() + 20000;
   while (!server.exited && Date.now() < end) await delay(50);
@@ -76,7 +81,9 @@ async function stopServer() {
     const killed = Date.now() + 10000;
     while (!server.exited && Date.now() < killed) await delay(50);
     assert(server.exited, 'Owned Paper process did not terminate');
+    throw new Error('Paper required forced termination; this run cannot pass');
   }
+  assert.equal(server.code, 0, 'Paper shutdown failed');
 }
 async function consoleAction(action, name) {
   const start = server.lines.length;
@@ -101,6 +108,7 @@ async function runClient(loader, scenario) {
   const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-File', join(root, 'tools/test-command-matrix.ps1'), '-Java21', javaHome, '-Java25', javaHome, '-Only', `${loader}-1.21.11`, '-ModVersion', modVersion, '-NativeBridgeScenario', scenario, '-NativeBridgeControl', control, '-DesktopWorker'], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   client = capture(child, join(serverDir, `${loader}-${scenario}.log`));
   let index = 0;
+  let channelReads;
   const end = Date.now() + 300000;
   while (!client.exited) {
     assert(Date.now() < end && !cancelled, 'Native client timeout/cancellation');
@@ -108,13 +116,23 @@ async function runClient(loader, scenario) {
     for (; index < client.lines.length; index++) {
       const line = client.lines[index];
       assert(!line.includes('NATIVE PAPER BRIDGE FAIL:'), line);
-      const phase = line.match(/NATIVE PAPER WAIT: (initial|quiet|respawn|nether|overworld|empty|seed|revoke|grant|disconnect)\s*$/)?.[1];
+      const phase = line.match(/NATIVE PAPER WAIT: (initial|quiet|respawn|nether|overworld|channeloff|channelon|empty|seed|revoke|grant|reconnect|rejoin|rejoined|disconnect)\s*$/)?.[1];
       if (!phase) continue;
       if (phase === 'initial' || phase === 'quiet') {
         if (baseline) assert.equal((await metrics()).reads, baseline.reads, 'Hello/idle scanned selection');
       } else if (phase === 'respawn') {
         await consoleAction('kill', name);
-      } else if (phase === 'disconnect') {
+      } else if (phase === 'channeloff') {
+        channelReads = (await metrics()).reads;
+        await consoleAction(phase, name);
+      } else if (phase === 'channelon') {
+        assert.equal((await metrics()).reads, channelReads, 'Unavailable channel performed reads');
+        await consoleAction(phase, name);
+      } else if (phase === 'rejoin') {
+        assert.equal((await metrics()).connections, 0, 'First disconnect leaked peers');
+      } else if (phase === 'rejoined') {
+        assert.equal((await metrics()).reads - baseline.reads, 7, 'Reconnect performed unsolicited read');
+      } else if (phase === 'disconnect' || phase === 'reconnect') {
         server.child.stdin.write(`kick ${name} Verification complete\n`);
       } else await consoleAction(phase, name);
       writeFileSync(control, phase);
@@ -123,7 +141,7 @@ async function runClient(loader, scenario) {
   }
   assert.equal(client.code, 0, client.lines.slice(-30).join('\n'));
   for (const marker of ['CURSOR ISOLATION GUARD PASS:', 'NATIVE PAPER CUI PASS:', `NATIVE PAPER BRIDGE PASS: ${scenario}`]) assert(client.lines.some(s => s.includes(marker)), `Missing ${marker}`);
-  if (scenario === 'allowed') for (const context of ['same-world respawn', 'Nether transition', 'Overworld return'])
+  if (scenario === 'allowed') for (const context of ['same-world respawn', 'Nether transition', 'Overworld return', 'channel re-advertisement', 'same-process reconnect'])
     assert(client.lines.some(s => s.includes(`NATIVE PAPER CONTEXT PASS: ${context}`)), `Missing context recovery: ${context}`);
   assert(!client.lines.some(s => s.includes('NATIVE PAPER BRIDGE FAIL:')));
   assert.equal(hash(artifactPaths[loader]), clientHashes[loader], 'Client artifact changed during the run');
@@ -131,7 +149,7 @@ async function runClient(loader, scenario) {
   const final = baseline ? await metrics() : null;
   if (final) {
     assert.equal(final.connections, 0, 'Disconnect leaked peers');
-    assert.equal(final.reads - baseline.reads, scenario === 'allowed' ? 6 : 0, 'Unexpected background/denied metadata reads');
+    assert.equal(final.reads - baseline.reads, scenario === 'allowed' ? 8 : 0, 'Unexpected background/denied metadata reads');
   }
   evidence.push({ loader, scenario, baseline, final });
   checks.push(`${loader} native 1.21.11 -> Paper: ${scenario}, CUI and disconnect cleanup`);
@@ -151,7 +169,7 @@ try {
   await startServer(false);
   for (const loader of ['fabric', 'neoforge']) await runClient(loader, 'absent');
   await stopServer();
-  writeFileSync(proofPath, JSON.stringify({ checkedAt: new Date().toISOString(), minecraft: '1.21.11', paper: server.lines.find(s => /This server is running Paper/.test(s)), paperHash, modVersion, clientWorldEdit: 'not installed; server-side WorldEdit 7.4.2 only', hashes: clientHashes, checks, evidence }, null, 2));
+  writeFileSync(proofPath, JSON.stringify({ checkedAt: new Date().toISOString(), minecraft: '1.21.11', paper: server.lines.find(s => /This server is running Paper/.test(s)), paperHash, modVersion, companionHash, fixtureHash, clientWorldEdit: 'not installed; server-side WorldEdit 7.4.2 only', hashes: clientHashes, checks, evidence }, null, 2));
   console.log('NATIVE PAPER MATRIX PASS: six real Minecraft runs');
 } catch (ex) { console.error(ex); process.exitCode = 1; }
 finally {

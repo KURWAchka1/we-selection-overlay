@@ -4,8 +4,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '../..');
-const directory = join(root, 'build/bridge-load-proof');
+const mode = process.argv[2] ?? 'load';
+assert(['load', 'baseline'].includes(mode));
+const directory = join(root, 'build', mode === 'baseline' ? 'bridge-baseline-proof' : 'bridge-load-proof');
 const proof = JSON.parse(readFileSync(join(directory, 'load-proof.json'), 'utf8'));
+assert.equal(proof.mode ?? 'load', mode);
 const runs = [...new Set(proof.results.map(result => result.run))];
 const profiles = [];
 for (const run of runs) {
@@ -29,8 +32,8 @@ const rows = proof.results.map(row => ({ run: row.run, phase: row.label,
   reads: row.bridge?.reads ?? 0, throttled: row.bridge?.throttled ?? 0, replyBytes: row.bridge?.bytes ?? 0,
   chunkLoads: row.chunkLoads, generatedChunks: row.generatedChunks,
   gcCount: row.gcCount, gcMillis: row.gcMillis }));
-const report = { checkedAt: proof.checkedAt, rows, profiles,
-  warning: 'Short local repeated stationary metadata workloads. Sampled allocation weights are estimates, not exact call costs. No production SLA or native-client lifecycle claim.' };
+const report = { checkedAt: proof.checkedAt, mode, worldDigest: proof.worldDigest, rows, profiles,
+  warning: 'Local stationary headless workloads on a shared laptop. Sampled allocation weights are estimates, not exact call costs. Frozen baseline worlds reduce confounds but do not establish production performance acceptance or native-client lifecycle behavior.' };
 writeFileSync(join(directory, 'load-analysis.json'), JSON.stringify(report, null, 2));
 console.table(rows);
 console.table(profiles.map(({ run, label, executionSamples, ownerSamples, bridgeSamples, bridgeAllocationSamples }) =>

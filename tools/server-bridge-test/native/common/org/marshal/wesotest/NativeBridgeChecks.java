@@ -13,6 +13,7 @@ public final class NativeBridgeChecks {
         Object world();
         Object connection();
         boolean respawnIfDead();
+        void reconnect();
         void stop();
     }
     private final Adapter adapter;
@@ -48,7 +49,7 @@ public final class NativeBridgeChecks {
                 adapter.stop();
                 return;
             }
-            if (!adapter.joined()) return;
+            if (!adapter.joined() && stage != 23 && stage != 24 && stage != 25) return;
             if (!reportedJoin) { reportedJoin = true; System.out.println("NATIVE PAPER JOIN: " + scenario + " status=" + status()); }
             if (overlay == null) { overlay = adapter.overlay(); if (overlay == null) return; }
             if (stage == 0) {
@@ -86,6 +87,21 @@ public final class NativeBridgeChecks {
                     && recoveredContext("Overworld return")) {
                 call(null, "requestSelection"); stage = 18;
             } else if (stage == 18 && call(null, "selection") != null) {
+                verifySelection("READY"); rememberContext(); waitFor("channeloff", 19);
+            } else if (stage == 19 && acknowledged("channeloff")) {
+                contextStarted = System.nanoTime(); stage = 20;
+            } else if (stage == 20) {
+                check(System.nanoTime() - contextStarted < 5_000_000_000L, "Channel loss retained state: " + status());
+                if (!status().equals("UNAVAILABLE")) return;
+                verifyCleared();
+                check(adapter.connection() == previousConnection && adapter.world() == previousWorld
+                        && adapter.player() == previousPlayer, "Channel loss changed gameplay context");
+                call(null, "requestSelection"); quietTicks = 30; stage = 27;
+            } else if (stage == 27 && --quietTicks <= 0) {
+                verifyCleared(); waitFor("channelon", 21); contextStarted = System.nanoTime();
+            } else if (stage == 21 && acknowledged("channelon") && recoveredContext("channel re-advertisement")) {
+                call(null, "requestSelection"); stage = 22;
+            } else if (stage == 22 && call(null, "selection") != null) {
                 verifySelection("READY"); waitFor("empty", 3);
             } else if (stage == 3 && acknowledged("empty")) { call(null, "requestSelection"); stage = 4; }
             else if (stage == 4 && call(null, "selection") != null) { verifySelection("EMPTY"); waitFor("seed", 5); }
@@ -102,7 +118,27 @@ public final class NativeBridgeChecks {
                 if (!scenario.equals("allowed")) check(call(null, "selection") == null, "Unavailable bridge disclosed selection");
                 else verifySelection("DENIED");
                 check(invoke(field(overlay, overlay.getClass(), "selectionManager"), "primaryRegionForAnalysis") != null, "Bridge denial broke CUI");
-                waitFor("disconnect", 9);
+                if (scenario.equals("allowed")) {
+                    rememberContext(); waitFor("reconnect", 23);
+                } else waitFor("disconnect", 9);
+            } else if (stage == 23 && !adapter.joined() && status().equals("DISCONNECTED")) {
+                verifyCleared(); waitFor("rejoin", 24);
+            } else if (stage == 24 && acknowledged("rejoin")) {
+                adapter.reconnect(); contextStarted = System.nanoTime(); stage = 25;
+            } else if (stage == 25) {
+                check(System.nanoTime() - contextStarted < 30_000_000_000L, "Same-process reconnect did not recover");
+                if (!adapter.joined() || !status().equals("READY")) return;
+                check(adapter.connection() != previousConnection && !previousEpoch.equals(epoch()), "Reconnect reused old context");
+                check(call(null, "selection") == null, "Reconnect read metadata without a consumer");
+                Object region = invoke(field(overlay, overlay.getClass(), "selectionManager"), "primaryRegionForAnalysis");
+                if (region == null) return;
+                verifyBounds(invoke(region, "boundsForAnalysis"));
+                System.out.println("NATIVE PAPER CONTEXT PASS: same-process reconnect");
+                waitFor("rejoined", 28);
+            } else if (stage == 28 && acknowledged("rejoined")) {
+                call(null, "requestSelection"); stage = 26;
+            } else if (stage == 26 && call(null, "selection") != null) {
+                verifySelection("READY"); waitFor("disconnect", 9);
             }
         } catch (Throwable ex) {
             finished = true;
@@ -114,6 +150,13 @@ public final class NativeBridgeChecks {
 
     private void verifySelection(String expected) throws Exception {
         verifySelection(expected, -64, 319);
+    }
+
+    private void verifyCleared() throws Exception {
+        Object state = field(null, bridge, "CLIENT");
+        check(call(null, "selection") == null && epoch() == null, "Unavailable context retained metadata/epoch");
+        check(!(boolean) invoke(state, "pending") && (int) invoke(state, "capabilities") == 0,
+                "Unavailable context retained work/capabilities");
     }
 
     private void verifySelection(String expected, int minY, int maxY) throws Exception {

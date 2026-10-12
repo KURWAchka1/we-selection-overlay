@@ -186,4 +186,55 @@ class BridgeClientTest {
         assertEquals(1, server.metrics().selectionReads());
         assertEquals(2, server.metrics().replies());
     }
+
+    @Test void channelLossClearsMetadataAndPendingWorkAndReadvertisementRenewsOnce() {
+        var serial = new AtomicLong();
+        var local = new BridgeClient(() -> new UUID(2, serial.incrementAndGet()));
+        for (boolean pending : new boolean[]{false, true}) {
+            local.connect(0);
+            Hello oldHello = (Hello) BridgeCodec.decode(local.poll(true, 0), BridgeCodec.Direction.TO_SERVER);
+            byte[] oldWelcome = BridgeCodec.encode(new Welcome(oldHello.nonce(), epoch, WelcomeStatus.READY, 1, 0, 1, 256));
+            local.receive(oldWelcome);
+            local.requestSelection(1);
+            byte[] oldReply = BridgeCodec.encode(new SelectionReply(epoch, 1,
+                    new SelectionState(SelectionStatus.READY, new Bounds(1, 2, 3, 4, 5, 6), -64, 319, 7)));
+            if (!pending) local.receive(oldReply);
+            assertNull(local.poll(false, 2));
+            assertEquals(BridgeClient.State.UNAVAILABLE, local.state());
+            assertNull(local.selection()); assertFalse(local.pending()); assertEquals(0, local.capabilities());
+            for (int i = 3; i < 10_000; i++) {
+                local.receive(oldWelcome); local.receive(oldReply);
+                assertNull(local.poll(false, i)); assertNull(local.requestSelection(i));
+            }
+            Hello renewed = (Hello) BridgeCodec.decode(local.poll(true, 10_000), BridgeCodec.Direction.TO_SERVER);
+            assertNotEquals(oldHello.nonce(), renewed.nonce());
+            local.receive(oldWelcome); local.receive(oldReply);
+            assertEquals(BridgeClient.State.NEGOTIATING, local.state());
+            local.receive(BridgeCodec.encode(new Welcome(renewed.nonce(), new UUID(4, serial.get()),
+                    WelcomeStatus.READY, 1, 0, 1, 256)));
+            for (int i = 10_001; i < 100_000; i++) assertNull(local.poll(true, i));
+            assertEquals(BridgeClient.State.READY, local.state());
+            assertNull(local.selection()); assertFalse(local.pending());
+        }
+    }
+
+    @Test void lateAdvertisementRecoversAbsenceButContinuousAdvertisementNeverRetriesDenialOrTimeout() {
+        client.connect(0);
+        assertNull(client.poll(false, BridgeClient.TIMEOUT_NANOS));
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state());
+        assertNotNull(client.poll(true, BridgeClient.TIMEOUT_NANOS + 1));
+        client.receive(BridgeCodec.encode(new Welcome(nonce, NO_EPOCH, WelcomeStatus.DENIED, 1, 0, 0, 256)));
+        for (int i = 0; i < 10_000; i++) assertNull(client.poll(true, BridgeClient.TIMEOUT_NANOS * 2 + i));
+        assertEquals(BridgeClient.State.DENIED, client.state());
+        client.poll(false, BridgeClient.TIMEOUT_NANOS * 3);
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state());
+        assertNotNull(client.poll(true, BridgeClient.TIMEOUT_NANOS * 3 + 1));
+        assertNull(client.poll(true, BridgeClient.TIMEOUT_NANOS * 4 + 1));
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state());
+        for (int i = 0; i < 10_000; i++) assertNull(client.poll(true, BridgeClient.TIMEOUT_NANOS * 5 + i));
+        assertNull(client.requestSelection(BridgeClient.TIMEOUT_NANOS * 6));
+        client.disconnect();
+        assertNull(client.poll(false, 0)); assertNull(client.poll(true, 1));
+        assertEquals(BridgeClient.State.DISCONNECTED, client.state());
+    }
 }

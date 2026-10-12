@@ -19,6 +19,7 @@ public final class BridgeClient {
     private long started, requestId, pendingId, pendingSince;
     private int capabilities;
     private SelectionState selection;
+    private boolean channelWasAvailable;
 
     public BridgeClient() { this(UUID::randomUUID); }
     public BridgeClient(Supplier<UUID> nonces) { this.nonces = Objects.requireNonNull(nonces); }
@@ -34,10 +35,19 @@ public final class BridgeClient {
         state = State.DISCONNECTED;
         nonce = null; epoch = null; selection = null;
         requestId = 0; pendingId = 0; capabilities = 0;
+        channelWasAvailable = false;
     }
 
-    /** At most one hello per context, no retries/heartbeats. */
+    /** One hello per context/advertisement edge, no retries/heartbeats. */
     public byte[] poll(boolean channelAvailable, long now) {
+        if (state == State.DISCONNECTED) return null;
+        if (channelWasAvailable && !channelAvailable) {
+            disconnect();
+            state = State.UNAVAILABLE;
+        } else if (!channelWasAvailable && channelAvailable && state == State.UNAVAILABLE) {
+            connect(now);
+        }
+        channelWasAvailable = channelAvailable;
         if (state == State.DISCOVERING || state == State.NEGOTIATING) {
             if (now - started >= TIMEOUT_NANOS) { state = State.UNAVAILABLE; return null; }
             if (state == State.DISCOVERING && channelAvailable) {

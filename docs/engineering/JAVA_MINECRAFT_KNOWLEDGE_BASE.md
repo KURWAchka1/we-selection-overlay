@@ -24,6 +24,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Implementation evidence](SERVER_BRIDGE_IMPLEMENTATION.md) | Executed tests, exact scope and remaining gates |
 | [Lifecycle/load pilot](BRIDGE_LOAD_AND_LIFECYCLE_2026-10-11.md) | Reproduced cleanup fixes, 16-player workload/JFR evidence and measurement limits |
 | [Native lifecycle regression](NATIVE_BRIDGE_LIFECYCLE_2026-10-12.md) | Same-world respawn regression, connection/world/player identity guard and current verification status |
+| [Channel/reconnect and controlled baseline](BRIDGE_CHANNEL_AND_BASELINE_2026-10-12.md) | Reproduced native channel-loss defect, one-shot renewal, real reconnect and frozen-world comparison |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

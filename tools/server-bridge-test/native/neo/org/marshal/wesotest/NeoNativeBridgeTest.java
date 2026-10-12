@@ -21,6 +21,13 @@ public final class NeoNativeBridgeTest {
                 if (!client().player.isDeadOrDying()) return false;
                 client().player.respawn(); client().setScreen(null); return true;
             }
+            @Override public void reconnect() {
+                net.minecraft.client.gui.screens.ConnectScreen.startConnecting(
+                        new net.minecraft.client.gui.screens.TitleScreen(), client(),
+                        net.minecraft.client.multiplayer.resolver.ServerAddress.parseString("127.0.0.1:25579"),
+                        new net.minecraft.client.multiplayer.ServerData("Weso loopback fixture", "127.0.0.1:25579",
+                                net.minecraft.client.multiplayer.ServerData.Type.OTHER), false, null);
+            }
             @Override public void configure() {
                 client().options.framerateLimit().set(40);
                 client().options.pauseOnLostFocus = false;

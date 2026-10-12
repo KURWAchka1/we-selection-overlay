@@ -29,6 +29,13 @@ repeats granted/denied/absent-companion checks. It records 34 pure tests per JVM
 six codec probes and six runtime builds; other lifecycle/performance gates remain
 explicitly open. These are development candidates, not a public client update.
 
+The [channel/reconnect and controlled-baseline cycle](BRIDGE_CHANNEL_AND_BASELINE_2026-10-12.md)
+subsequently reproduces a native channel-loss defect and fixes the shared client
+state machine. Both native loaders pass wire channel removal/re-advertisement
+and same-process reconnect. Pure coverage grows to 36 tests per JVM, alongside
+six codecs and 132 universal-packager tests. Its separate frozen-world baseline
+does not replace the busy-server release gate or explain the earlier long tick.
+
 ## Implemented Boundary
 
 Pure Java 21 messages, bounded codec, client state machine and owning-thread

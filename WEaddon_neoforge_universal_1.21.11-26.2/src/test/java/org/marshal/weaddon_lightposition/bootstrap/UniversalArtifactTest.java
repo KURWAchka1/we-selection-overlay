@@ -20,6 +20,7 @@ class UniversalArtifactTest {
             for (String id : List.of("mc1_21_11", "mc26_1", "mc26_2")) {
                 String owner = "org/marshal/weaddon_lightposition/runtime/" + id + "/client/bridge/NativeServerBridge";
                 var guards = new java.util.HashMap<String, Integer>();
+                var channelGuards = new java.util.HashMap<String, Integer>();
                 var identities = new java.util.HashSet<String>();
                 var playerWrites = new java.util.concurrent.atomic.AtomicInteger();
                 try (var input = jar.getInputStream(jar.getEntry(owner + ".class"))) {
@@ -28,6 +29,7 @@ class UniversalArtifactTest {
                             return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
                                 @Override public void visitMethodInsn(int opcode, String callee, String name, String descriptor, boolean isInterface) {
                                     if (callee.equals(owner) && name.equals("sameContext")) guards.merge(method, 1, Integer::sum);
+                                    if (callee.equals(owner) && name.equals("canSend")) channelGuards.merge(method, 1, Integer::sum);
                                 }
                                 @Override public void visitFieldInsn(int opcode, String callee, String name, String descriptor) {
                                     if (!callee.equals(owner)) return;
@@ -39,6 +41,7 @@ class UniversalArtifactTest {
                     }, org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
                 }
                 for (String method : List.of("tick", "receive", "requestSelection")) assertEquals(1, guards.getOrDefault(method, 0), id + ": " + method);
+                for (String method : List.of("tick", "receive", "requestSelection")) assertEquals(1, channelGuards.getOrDefault(method, 0), id + ": channel guard " + method);
                 assertTrue(identities.containsAll(List.of("connection", "level", "player")), id);
                 assertEquals(2, playerWrites.get(), id + ": capture and release player identity");
             }

@@ -76,6 +76,27 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
             measurements.start(args[1]);
             return true;
         }
+        if (args[0].equals("control") && args[1].equals("baseline")) {
+            for (var world : getServer().getWorlds()) {
+                if (!world.setGameRule(org.bukkit.GameRules.SPAWN_MOBS, false)
+                        || !world.setGameRule(org.bukkit.GameRules.ADVANCE_TIME, false)
+                        || !world.setGameRule(org.bukkit.GameRules.ADVANCE_WEATHER, false)
+                        || !world.setGameRule(org.bukkit.GameRules.RANDOM_TICK_SPEED, 0))
+                    throw new IllegalStateException("Baseline gamerule rejected");
+                world.setDifficulty(org.bukkit.Difficulty.PEACEFUL);
+                world.setTime(6000); world.setStorm(false); world.setThundering(false);
+                for (var entity : world.getEntities()) if (!(entity instanceof org.bukkit.entity.Player)) entity.remove();
+            }
+            for (var testPlayer : getServer().getOnlinePlayers()) {
+                if (!testPlayer.getName().matches("WesoLoad[0-9]{2}"))
+                    throw new IllegalStateException("Baseline requires load-fixture identities only");
+                testPlayer.setAllowFlight(true); testPlayer.setFlying(true); testPlayer.setGravity(false);
+                if (!testPlayer.teleport(new org.bukkit.Location(testPlayer.getWorld(), 0.5, 80, 0.5)))
+                    throw new IllegalStateException("Baseline teleport cancelled");
+            }
+            getLogger().info("WESO_FIXTURE_OK control baseline");
+            return true;
+        }
         var player = getServer().getPlayerExact(args[1]);
         if (player == null || !grants.containsKey(player.getUniqueId())) return true;
         switch (args[0]) {
@@ -88,6 +109,7 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
             }
             case "seed" -> seed(player.getName());
             case "kill" -> player.setHealth(0);
+            case "channeloff", "channelon" -> ChannelFaults.advertise(player, args[0].equals("channelon"));
             case "nether", "overworld" -> {
                 var environment = args[0].equals("nether") ? org.bukkit.World.Environment.NETHER : org.bukkit.World.Environment.NORMAL;
                 var destination = getServer().getWorlds().stream().filter(world -> world.getEnvironment() == environment)

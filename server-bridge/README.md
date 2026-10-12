@@ -108,6 +108,11 @@ The separate [native lifecycle regression](../docs/engineering/NATIVE_BRIDGE_LIF
 verifies real same-world respawn and Nether/Overworld recovery on Fabric/NeoForge
 1.21.11. Client context includes the local-player instance as well as the network
 handler/world; renewal sends a fresh hello, not an unsolicited selection read.
+The later [channel/reconnect cycle](../docs/engineering/BRIDGE_CHANNEL_AND_BASELINE_2026-10-12.md)
+also verifies actual same-process reconnect and wire channel removal/restoration
+on both native loaders. An observed channel loss clears pending work and data;
+the next advertisement renews once. This is not permission polling or proof
+of silent plugin-disable/backend-switch recovery.
 
 For repeated, bounded server-cost experiments (pinned wire dependencies required):
 
@@ -124,6 +129,22 @@ requester progress, admission bounds, zero idle reads/transfers, chunk generatio
 and disconnect cleanup. No native window or system input is involved. It is
 a read-only metadata workload, not clipboard/simulation or production-gameplay
 benchmarking. The test-only fixture must never be deployed to ordinary servers.
+
+For the narrower silent-installed-cost comparison, use a separate controlled
+fixture and restore the same frozen saved worlds before every server start:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Players 16 -Samples 1200 -Repetitions 2 -ControlledBaseline -AcceptEula
+node tools/server-bridge-test/analyze-load-proof.mjs baseline
+```
+
+This writes only under `build/bridge-baseline-proof/`, preserves the earlier
+load pilot and checks every restored world's file hashes. The console-only
+fixture disables random ticks, natural mob spawning and time/weather cycles,
+removes loaded non-player entities and holds synthetic players stationary before
+warmup. Four reversed-order windows have no application hello/read workload.
+Snapshot path/link/corruption guards have their own Node tests. These controls
+reduce confounds; shared-laptop/JIT noise and busy-server acceptance remain open.
 
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge

@@ -11,7 +11,8 @@ class JfrLoadSummary {
         final Instant start, end;
         long executionSamples, ownerSamples, bridgeSamples, allocationSamples, bridgeAllocationSamples;
         long sampledAllocationWeight, bridgeAllocationWeight, gcCount, gcNanos;
-        long maxGcNanos, maxVmOperationNanos, maxOwnerMonitorNanos, maxOwnerParkNanos;
+        long maxGcNanos, gcPauseNanos, maxGcPauseNanos;
+        long maxVmOperationNanos, maxOwnerMonitorNanos, maxOwnerParkNanos;
         Window(String start, String end) {
             this.start = Instant.parse(start);
             this.end = Instant.parse(end);
@@ -38,6 +39,10 @@ class JfrLoadSummary {
                         window.gcCount++;
                         window.gcNanos += event.getDuration().toNanos();
                         window.maxGcNanos = Math.max(window.maxGcNanos, event.getDuration().toNanos());
+                        // Collection duration includes concurrent work; pauses are separate JFR fields.
+                        window.gcPauseNanos += event.getDuration("sumOfPauses").toNanos();
+                        window.maxGcPauseNanos = Math.max(window.maxGcPauseNanos,
+                                event.getDuration("longestPause").toNanos());
                         continue;
                     }
                     if (type.equals("jdk.ExecuteVMOperation")) {
@@ -81,10 +86,12 @@ class JfrLoadSummary {
             System.out.printf(Locale.ROOT, "{\"window\":%d,\"executionSamples\":%d,\"ownerSamples\":%d,"
                     + "\"bridgeSamples\":%d,\"allocationSamples\":%d,\"bridgeAllocationSamples\":%d,"
                     + "\"sampledAllocationWeight\":%d,\"bridgeAllocationWeight\":%d,\"gcCount\":%d,\"gcMillis\":%.6f,"
-                    + "\"maxGcMillis\":%.6f,\"maxVmOperationMillis\":%.6f,\"maxOwnerMonitorMillis\":%.6f,\"maxOwnerParkMillis\":%.6f}%n",
+                    + "\"maxGcMillis\":%.6f,\"gcPauseMillis\":%.6f,\"maxGcPauseMillis\":%.6f,"
+                    + "\"maxVmOperationMillis\":%.6f,\"maxOwnerMonitorMillis\":%.6f,\"maxOwnerParkMillis\":%.6f}%n",
                     i, w.executionSamples, w.ownerSamples, w.bridgeSamples, w.allocationSamples, w.bridgeAllocationSamples,
                     w.sampledAllocationWeight, w.bridgeAllocationWeight, w.gcCount, w.gcNanos / 1_000_000.0,
-                    w.maxGcNanos / 1_000_000.0, w.maxVmOperationNanos / 1_000_000.0,
+                    w.maxGcNanos / 1_000_000.0, w.gcPauseNanos / 1_000_000.0, w.maxGcPauseNanos / 1_000_000.0,
+                    w.maxVmOperationNanos / 1_000_000.0,
                     w.maxOwnerMonitorNanos / 1_000_000.0, w.maxOwnerParkNanos / 1_000_000.0);
         }
     }

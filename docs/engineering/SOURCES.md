@@ -307,6 +307,54 @@ fixture checks success, then reseeds that player's selector in the destination
 world. Native tests, not API documentation alone, establish same-world respawn
 and dimension-recovery behavior; see the [lifecycle report](NATIVE_BRIDGE_LIFECYCLE_2026-10-12.md).
 
+## S37 Channel Advertisements And Native Reconnect
+
+Checked **2026-10-12**. The resolved Fabric Networking API
+**5.1.5+ae1e07683e sources JAR** documents `ClientPlayNetworking.canSend` as
+whether the remote server declared that it can receive the channel. The exact
+Fabric API 0.141.3+1.21.11 online Javadoc was inaccessible through the web tool;
+the cached official source artifact was inspected instead. Native NeoForge
+21.11.42 uses the existing public `hasChannel` check; actual REGISTER/UNREGISTER
+behavior was verified on both native clients, not inferred from Fabric alone.
+
+[Paper StandardMessenger, ver/1.21.11](https://github.com/PaperMC/Paper/blob/ver/1.21.11/paper-api/src/main/java/org/bukkit/plugin/messaging/StandardMessenger.java)
+reserves `minecraft:register` and `minecraft:unregister` and rejects ordinary
+plugin registrations for them. [CraftPlayer in the same branch](https://github.com/PaperMC/Paper/blob/ver/1.21.11/paper-server/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java)
+shows the actual supported-channel advertisement packet construction. The
+test-only `ChannelFaults` fault injector sends that real wire packet through
+the pinned Paper 1.21.11-132 server; it uses version-specific reflection only
+because no public Bukkit API sends these reserved packets. It is not inside
+the companion or clients and is not a production networking pattern.
+
+[Yarn ConnectScreen 1.21.11+build.4](https://maven.fabricmc.net/docs/yarn-1.21.11+build.4/net/minecraft/client/gui/screen/multiplayer/ConnectScreen.html)
+exposes the normal six-argument `connect` method. The resolved NeoForge
+21.11.42 Minecraft source entries `ConnectScreen.java` and `ServerData.java`
+expose `startConnecting` and `ServerData.Type.OTHER`. Test adapters use these
+ordinary client connection flows, not a replacement TCP implementation or OS input.
+
+## S38 Controlled Baseline Worlds
+
+Checked **2026-10-12**. [Paper GameRules, ver/1.21.11](https://github.com/PaperMC/Paper/blob/ver/1.21.11/paper-api/src/main/java/org/bukkit/GameRules.java)
+provides the renamed `SPAWN_MOBS`, `ADVANCE_TIME`, `ADVANCE_WEATHER` and
+`RANDOM_TICK_SPEED` constants. [World.setGameRule 1.21.11](https://jd.papermc.io/paper/1.21.11/org/bukkit/World.html#setGameRule(org.bukkit.GameRule,T))
+returns whether the rule was set. The console-only test fixture checks these
+results and controls loaded entities and stationary synthetic players before
+warmup/measurement. None of this runs in the production companion.
+Restoring byte-identical saved worlds reduces world-state drift; it does not
+control OS scheduling/JIT, recreate busy gameplay or prove zero server overhead.
+
+## S39 JFR GC Duration Versus Pauses
+
+Checked **2026-10-12**. [OpenJDK 21u JFR metadata](https://github.com/openjdk/jdk21u/blob/master/src/hotspot/share/jfr/metadata/metadata.xml)
+defines `jdk.GarbageCollection.sumOfPauses` and `longestPause` separately from
+the collection event's duration. The streaming reader retains legacy duration
+fields for compatibility and reports these pause fields separately; a concurrent
+collection's elapsed time must not be labelled a stop-the-world pause. Events
+are selected by their start timestamp inside the measured interval. This is
+not the same accounting as fixture MXBean deltas and does not attribute a slow
+tick without temporal correlation. Reader compatibility was checked against
+all four frozen-baseline and 14 existing pilot windows, without rerunning servers.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.
