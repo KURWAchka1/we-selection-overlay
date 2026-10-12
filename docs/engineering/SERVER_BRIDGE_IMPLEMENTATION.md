@@ -69,6 +69,16 @@ all disconnects release tracked peers. Harness self-tests grow to 22. This is
 not native gameplay evidence or restart during continuing flood. Substantial
 MSPT spread and unattributed long ticks leave cost acceptance explicitly open.
 
+The subsequent [tick attribution and admission research](BRIDGE_TICK_ATTRIBUTION_RESEARCH_2026-10-12.md)
+changes only test tools and the separately packaged fixture. A new 32-player
+frozen-world run records 4,800 complete public-event/JFR tick markers; the new
+installed maxima overlap actual GC pauses without explaining older outliers.
+The actual pure core reproduces ordinary-requester starvation under a 31-sender
+adversarial ordering on both JVMs. Hard admission bounds pass, **fair service
+does not**. Coverage is 50 pure tests per JVM, 23 general Node checks and four
+actual-recording JFR checks per JVM. No client/companion behavior or protocol is
+changed, and the bounded round-robin alternative is still a research proposal.
+
 Pure Java 21 messages, bounded codec, client state machine and owning-thread
 server service; optional native transports in all six runtimes; Paper 1.21.11
 host using official WorldEdit 7.4.2 public session APIs. Only hello/capabilities,
@@ -167,8 +177,11 @@ server versions or modpacks. Only Paper 1.21.11 has a host adapter; 26.x hosts, 
 hosts, FAWE, Folia, proxies and translators remain unimplemented/unverified.
 No advertised compatibility matrix is widened by this work.
 
-Next feature is a revision-safe remote selection transaction/source integrated
-with the existing editor, after native transport proof. Clipboard streaming and
-read-only command simulation follow with aggregate budgets and authorization.
+The next foundation experiment is bounded fair dispatch for metadata/control
+traffic, followed by measured cost acceptance; first-arrival token admission is
+not a starvation-free service policy. The next feature after these gates is a
+revision-safe remote selection transaction/source integrated with the existing
+editor. Clipboard streaming and read-only command simulation follow with
+aggregate budgets and authorization.
 Busy-server CPU/allocation/MSPT profiles and all applicable
 [release gates](SERVER_BRIDGE_VERIFICATION.md) remain required before publication.

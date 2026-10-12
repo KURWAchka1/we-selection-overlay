@@ -1,6 +1,7 @@
 package org.marshal.weaddon_lightposition.bridge.fixture;
 
 import com.destroystokyo.paper.event.server.ServerTickEndEvent;
+import com.destroystokyo.paper.event.server.ServerTickStartEvent;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.sun.management.ThreadMXBean;
@@ -24,6 +25,8 @@ final class FixtureMeasurements implements Listener {
     private String label, startedAt;
     private int samples, chunkLoads, generatedChunks, phases;
     private long startNanos, startCpu, startAllocated, startGcMillis, startGcCount;
+    private long tickCpu, tickAllocated;
+    private FixtureTickEvent pendingTick;
 
     FixtureMeasurements(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -43,6 +46,7 @@ final class FixtureMeasurements implements Listener {
         label = name;
         phases++;
         samples = chunkLoads = generatedChunks = 0;
+        pendingTick = null;
         startGcMillis = gcMillis();
         startGcCount = gcCount();
         startedAt = Instant.now().toString();
@@ -59,10 +63,31 @@ final class FixtureMeasurements implements Listener {
         }
     }
 
+    @EventHandler public void beginTick(ServerTickStartEvent event) {
+        if (label == null) return;
+        if (pendingTick != null) throw new IllegalStateException("Unpaired fixture tick start");
+        pendingTick = new FixtureTickEvent();
+        pendingTick.phase = label;
+        pendingTick.sample = samples;
+        pendingTick.paperTick = event.getTickNumber();
+        tickCpu = threads.getCurrentThreadCpuTime();
+        tickAllocated = threads.getCurrentThreadAllocatedBytes();
+        pendingTick.begin();
+    }
+
     @EventHandler public void tick(ServerTickEndEvent event) {
         if (label == null) return;
+        // A console command can start a window after this tick's start event.
+        if (pendingTick == null) return;
+        pendingTick.end();
+        if (pendingTick.paperTick != event.getTickNumber()) throw new IllegalStateException("Unpaired fixture tick end");
         double duration = event.getTickDuration();
         if (!Double.isFinite(duration) || duration < 0) throw new IllegalStateException("Invalid Paper tick sample");
+        pendingTick.paperMillis = duration;
+        pendingTick.bracketCpuNanos = threads.getCurrentThreadCpuTime() - tickCpu;
+        pendingTick.bracketAllocatedBytes = threads.getCurrentThreadAllocatedBytes() - tickAllocated;
+        pendingTick.commit();
+        pendingTick = null;
         ticks[samples++] = duration;
         if (samples == sampleCount) finish();
     }
@@ -74,6 +99,7 @@ final class FixtureMeasurements implements Listener {
         String endedAt = Instant.now().toString();
         var data = new JsonObject();
         data.addProperty("label", label);
+        data.addProperty("tickTimelineVersion", 1);
         data.addProperty("startedAt", startedAt);
         data.addProperty("endedAt", endedAt);
         data.addProperty("samples", samples);

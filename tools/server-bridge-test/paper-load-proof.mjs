@@ -13,11 +13,12 @@ import { observeOwnedServer } from './owned-server.mjs';
 import { recordLoadWindow } from './load-window.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode = 'load'] = process.argv.slice(2);
-assert(['load', 'baseline', 'restart'].includes(mode));
-const baselineOnly = mode === 'baseline';
+assert(['load', 'baseline', 'restart', 'timeline'].includes(mode));
+const baselineOnly = ['baseline', 'timeline'].includes(mode);
 const restartLoad = mode === 'restart';
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory);
-assert.equal(relative(root, serverDir), join('build', baselineOnly ? 'bridge-baseline-proof' : restartLoad ? 'bridge-restart-load-proof' : 'bridge-load-proof'), 'Never operate a user server');
+const directoryName = { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof' }[mode];
+assert.equal(relative(root, serverDir), join('build', directoryName), 'Never operate a user server');
 const frozen = baselineOnly ? new FrozenFixtureWorld(serverDir) : null;
 let worldDigest;
 const players = Number(playerArgument), samples = Number(sampleArgument), repetitions = Number(repeatArgument);
@@ -38,6 +39,7 @@ const companionName = 'worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar';
 const allowedPlugins = new Set(['worldedit.jar', 'weso-paper-test-fixture.jar', companionName]);
 assert(readdirSync(join(serverDir, 'plugins')).filter(n => n.endsWith('.jar')).every(n => allowedPlugins.has(n)));
 const companionHash = hash(join(serverDir, 'companion.jar'));
+const fixtureHash = hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar'));
 const results = [], checks = [];
 const lifecycleResults = [];
 const restartChannel = 'worldedit_selection_overlay:restart';
@@ -171,6 +173,7 @@ async function run(installed, round, prepare = false) {
     java.stdin.write(`wesofixture measure ${label}\n`);
     await waitFor(() => lines.slice(start).some(s => s.includes(`WESO_MEASURE_DONE ${label}`)), label, samples * 100 + 30000);
     const data = JSON.parse(readFileSync(path, 'utf8'));
+    if (mode === 'timeline') assert.equal(data.tickTimelineVersion, 1, 'Fixture has no per-tick markers');
     const after = await counters();
     data.bridge = installed ? delta(after, before) : null;
     data.connections = after?.connections ?? 0;
@@ -310,7 +313,7 @@ try {
     minecraft: '1.21.11', mode, worldDigest, players, samples, repetitions, javaHome, node: process.version,
     processorModel: cpus()[0]?.model, logicalProcessors: cpus().length,
     serverHash: hash(join(serverDir, 'server.jar')), worldEditHash: hash(join(serverDir, 'plugins/worldedit.jar')),
-    companionHash, checks, results, lifecycleResults,
+    companionHash, fixtureHash, checks, results, lifecycleResults,
     limitations: baselineOnly ? 'Controlled silent baseline from identical frozen world bytes, with random ticks, mob spawning, daylight/weather cycles disabled. Shared laptop, short warmup and stationary headless clients; not busy gameplay or production performance acceptance.' : 'Stationary headless protocol clients on flat loopback fixture; not native GPU clients, busy production gameplay or streaming/simulation cost.' }, null, 2));
   console.log('PAPER BRIDGE LOAD PROOF PASS; all owned processes stopped');
 } catch (error) {

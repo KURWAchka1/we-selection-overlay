@@ -41,6 +41,13 @@ flood admission/progress and zero idle reads in two installed runs. It does not
 close saturated recovery, adversarial fairness or busy-server acceptance. New
 long-tick observations remain unattributed and the performance spread is recorded,
 not discarded. Failed-window diagnostics have separate automated tests.
+The later [tick attribution and admission research](BRIDGE_TICK_ATTRIBUTION_RESEARCH_2026-10-12.md)
+adds 4,800 complete test-only tick markers in a separate frozen-world run. Its
+installed maxima overlap GC pauses, but it does not explain old outliers or
+close busy-server cost acceptance. A deterministic 31-sender ordering reproduces
+**0/60 ordinary replies** on both JVMs while aggregate bounds hold: fair service
+is an explicitly failed gate, not implied by previous network progress tests.
+Bounded fair dispatch remains a proposal; no production behavior changed.
 Published release JARs and the 1.8.0 tag remain unchanged.
 
 ## Evidence Record
@@ -65,6 +72,9 @@ Profile and artifact reports may contain private data; inspect before publicatio
   mismatched totals, oversized declared output and decompression bombs.
 - Test fair admission, stalled consumers, credit exhaustion, quota recovery,
   timeout cleanup and aggregate memory bounds with many connections.
+- Repeat adversarial arrival order/offsets. The current metadata token buckets
+  can starve an ordinary sender; require bounded queue age and control progress,
+  not merely a successful aggregate-limit check or a favorable sender order.
 
 ## Gate 1: Dedicated-Server Transport Proof
 

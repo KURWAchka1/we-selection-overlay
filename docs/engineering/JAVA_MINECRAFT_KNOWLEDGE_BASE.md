@@ -29,6 +29,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Negotiated session close](BRIDGE_SESSION_CLOSE_2026-10-12.md) | Minor-1 graceful-stop invalidation, minor-zero compatibility, terminal core cleanup and verification boundaries |
 | [One-shot restart recovery](BRIDGE_RESTART_RECOVERY_2026-10-12.md) | Opt-in startup hint, fresh negotiation after graceful close, denied/overloaded fallback and native evidence |
 | [32-player restart/load proof](BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md) | Concurrent graceful recovery, flood admission, failed-measurement checks and unaccepted performance outliers |
+| [Tick attribution and admission research](BRIDGE_TICK_ATTRIBUTION_RESEARCH_2026-10-12.md) | Complete public-event/JFR markers, observed GC overlap, deterministic starvation counterexample and bounded fair-dispatch proposal |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

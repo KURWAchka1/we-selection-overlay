@@ -5,7 +5,7 @@ import test from 'node:test';
 import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 
 const build = resolve(import.meta.dirname, '../../build');
-function fixture(t) {
+function fixture(t, name = 'bridge-baseline-proof') {
   mkdirSync(build, { recursive: true });
   const scratch = mkdtempSync(join(build, 'frozen-helper-'));
   t.after(() => {
@@ -13,7 +13,7 @@ function fixture(t) {
     assert(inside.startsWith('frozen-helper-') && !inside.includes(sep));
     rmSync(path, { recursive: true, force: true });
   });
-  const directory = join(scratch, 'bridge-baseline-proof');
+  const directory = join(scratch, name);
   for (const name of ['bridge-fixture', 'bridge-fixture_nether', 'bridge-fixture_the_end']) {
     mkdirSync(join(directory, name, 'region'), { recursive: true });
     writeFileSync(join(directory, name, 'level.dat'), name);
@@ -32,6 +32,15 @@ test('snapshot restores exact bytes repeatedly, including deleted and new files'
     assert.equal(readFileSync(join(directory, 'bridge-fixture/level.dat'), 'utf8'), 'bridge-fixture');
     assert(!existsSync(join(directory, 'bridge-fixture/extra.dat')));
   }
+});
+
+test('the separate tick-timeline fixture preserves the same snapshot guards', t => {
+  const { directory, frozen } = fixture(t, 'bridge-tick-timeline-proof');
+  const digest = frozen.capture();
+  writeFileSync(join(directory, 'bridge-fixture/level.dat'), 'changed');
+  assert.equal(frozen.restore(), digest);
+  assert.equal(readFileSync(join(directory, 'bridge-fixture/level.dat'), 'utf8'), 'bridge-fixture');
+  assert.throws(() => new FrozenFixtureWorld(resolve(directory, '../bridge-load-proof')), /Not a named/);
 });
 test('corrupted snapshot refuses restore before changing live fixture worlds', t => {
   const { directory, frozen } = fixture(t); frozen.capture();

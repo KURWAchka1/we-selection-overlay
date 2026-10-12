@@ -155,8 +155,8 @@ node tools/server-bridge-test/analyze-load-proof.mjs restart
 This uses `build/bridge-restart-load-proof/` and performs three 32-peer restart
 cycles per installed run after flood traffic has settled. Each cycle checks one
 close/hint/hello per peer, fresh epochs, rejection of stale epochs, explicit own
-metadata and quiet counters. `-RestartLoad` and `-ControlledBaseline` are mutually
-exclusive. The [executed 32-player report](../docs/engineering/BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md)
+metadata and quiet counters. `-RestartLoad`, `-ControlledBaseline` and
+`-TickTimeline` are mutually exclusive. The [executed 32-player report](../docs/engineering/BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md)
 records successful control/admission checks and unaccepted performance outliers.
 This is not saturated-restart or native-gameplay acceptance.
 
@@ -175,6 +175,24 @@ removes loaded non-player entities and holds synthetic players stationary before
 warmup. Four reversed-order windows have no application hello/read workload.
 Snapshot path/link/corruption guards have their own Node tests. These controls
 reduce confounds; shared-laptop/JIT noise and busy-server acceptance remain open.
+
+To correlate a new frozen-world run with complete test-only JFR tick markers:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Players 32 -Samples 1200 -Repetitions 2 -TickTimeline -AcceptEula
+node tools/server-bridge-test/analyze-load-proof.mjs timeline
+```
+
+This uses another isolated directory, `build/bridge-tick-timeline-proof/`, and
+does not overwrite earlier proofs. The reader validates exact phase/sample
+coverage before reporting five candidates per window and actual GC pause
+overlap. Public tick brackets are narrower than Paper's reported duration;
+inferred full intervals and sparse profiles are not exact causal accounting.
+The [research report](../docs/engineering/BRIDGE_TICK_ATTRIBUTION_RESEARCH_2026-10-12.md)
+records 4,800 markers, measurement limits and a reproduced adversarial admission
+failure. The offline driver also runs four actual-recording tests and the
+deterministic admission probe on both JVMs. A successful probe process means
+the experiment executed, **not** that all sender-order fairness checks passed.
 
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge
@@ -205,6 +223,9 @@ Frames are at most 256 bytes in this stage. Default request admission is 4/s
 per connection (burst 8) and 100/s globally (burst 100), with at most 1024 tracked
 connections. These conservative prototype defaults are **not measured tick-time
 budgets**; the later heavy stages require the global scheduler in the design.
+The current first-arrival admission can starve an ordinary requester when many
+individually conforming senders exhaust the global bucket first. Fair service
+is a release blocker; bounded per-actor dispatch is still a proposal, not a fix.
 Malformed/oversized/wrong-direction messages never reach WorldEdit. Authorization
 is rechecked before serving even a cached result; identity comes from the actual
 player connection, not a payload UUID. Duplicate request IDs return the original

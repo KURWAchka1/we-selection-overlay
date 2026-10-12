@@ -15,6 +15,7 @@ New-Item -ItemType Directory -Force -Path $logs | Out-Null
 $common = @('--no-daemon', '--max-workers=2', '--console=plain')
 if ($Offline) { $common += '--offline' }
 $previousJava = $env:JAVA_HOME
+$previousTestJava = $env:WESO_TEST_JAVA
 
 function Invoke-BridgeGradle([string]$Module, [string]$Java, [string]$Name, [string[]]$Tasks) {
     $env:JAVA_HOME = $Java
@@ -74,6 +75,15 @@ try {
     Invoke-BridgeGradle 'server-bridge' $Java21 'unit-java21' @('check', 'assemble', '--rerun-tasks', '-PtestJavaVersion=21')
     Assert-PaperArtifact
     Invoke-BridgeGradle 'server-bridge' $Java25 'unit-java25' @('check', '--rerun-tasks', '-PtestJavaVersion=25')
+    foreach ($target in @(@{Java=$Java21; Name='java21'}, @{Java=$Java25; Name='java25'})) {
+        $env:WESO_TEST_JAVA = Join-Path $target.Java 'bin/java.exe'
+        & node --test (Join-Path $root 'tools/server-bridge-test/jfr-tick-timeline.test.mjs') 2>&1 |
+            Tee-Object -FilePath (Join-Path $logs "harness-jfr-$($target.Name).log")
+        if ($LASTEXITCODE -ne 0) { throw "JFR timeline self-tests failed: $($target.Name)" }
+        & $env:WESO_TEST_JAVA -Xmx256m -XX:ActiveProcessorCount=2 --class-path (Join-Path $root 'server-bridge/paper/build/libs/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar') (Join-Path $root 'tools/server-bridge-test/AdmissionOrderingProbe.java') |
+            Tee-Object -FilePath (Join-Path $logs "admission-ordering-$($target.Name).ndjson")
+        if ($LASTEXITCODE -ne 0) { throw "Admission ordering experiment failed to execute: $($target.Name)" }
+    }
     if (!$SkipNativeCodecs) {
         foreach ($target in @(
             @{Name='fabric-1.21.11'; Module='WEaddon_fabric_1.21.11'; Java=$Java21},
@@ -86,5 +96,5 @@ try {
             Invoke-BridgeGradle $target.Module $target.Java "codec-$($target.Name)" @('-I', '../tools/bridge-payload-test.init.gradle', 'verifyBridgePayload')
         }
     }
-} finally { $env:JAVA_HOME = $previousJava }
+} finally { $env:JAVA_HOME = $previousJava; $env:WESO_TEST_JAVA = $previousTestJava }
 Write-Output 'Bridge checks passed. This does not prove dedicated-server joins or gameplay compatibility.'

@@ -431,6 +431,51 @@ JFR measurements complement this; sparse samples are not exact call costs.
 Dedicated busy-server cost acceptance still requires representative workload
 profiling, not simply a 20 TPS result or zero sampled bridge stacks.
 
+## S44 Public Tick Brackets And JFR Timestamps
+
+Checked **2026-10-12**, Paper **1.21.11-132 / c5eb079**, Temurin **21.0.11+10**.
+The public [ServerTickStartEvent](https://jd.papermc.io/paper/1.21.11/com/destroystokyo/paper/event/server/ServerTickStartEvent.html)
+and [ServerTickEndEvent](https://jd.papermc.io/paper/1.21.11/com/destroystokyo/paper/event/server/ServerTickEndEvent.html)
+are consumed by our separate fixture; internal constructors are not called.
+The inspected [pinned Paper tick patch](https://github.com/PaperMC/Paper/blob/c5eb079/paper-server/patches/sources/net/minecraft/server/MinecraftServer.java.patch)
+places queued start-of-tick work before the public start event. Its reported
+duration must not be equated to the fixture's narrower event bracket. Reading
+that patch for interpretation does not introduce an internal production hook.
+
+The public [JDK 21 JFR Event API](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/Event.html)
+supports explicitly timed custom events; [RecordedEvent](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedEvent.html)
+exposes recorded fields and timestamps. The inspected [OpenJDK 21.0.11+10 TimeConverter](https://github.com/openjdk/jdk21u/blob/jdk-21.0.11%2B10/src/jdk.jfr/share/classes/jdk/jfr/internal/consumer/TimeConverter.java)
+derives epoch timestamps from recording chunk clock data. An observed sub-ms
+skew from separately obtained `Instant.now()` values led us to join tick markers
+by unique phase/sample IDs instead of clipping to wall-clock bounds; this is our
+tested policy, not an API guarantee of a particular skew or its exact cause.
+
+The actual local `jfr metadata --events jdk.GCPhasePause` confirms the top-level
+pause event used by the new overlap reader; nested GC phases are not summed.
+[ThreadMXBean](https://docs.oracle.com/en/java/javase/21/docs/api/java.management/java/lang/management/ThreadMXBean.html)
+distinguishes nanosecond precision from accuracy. Zero short-tick CPU deltas or
+missing sampled bridge stacks do not prove zero work. See the
+[complete marker/GC/measurement-limit evidence](BRIDGE_TICK_ATTRIBUTION_RESEARCH_2026-10-12.md).
+
+## S45 Bounded Fair Service Research
+
+Checked **2026-10-12**. Experimental [RFC 8290, sections 3 and 6.1](https://www.rfc-editor.org/rfc/rfc8290)
+describes flow isolation and a modified deficit round-robin discipline, while
+noting that the desired fairness unit may be something other than a flow.
+Together with [RFC 3290](#s43-admission-is-not-fair-scheduling), this supports
+separating metering from service order. It does **not** make network byte quanta,
+CoDel targets or packet-flow identity appropriate Minecraft CPU budgets.
+
+Our inference is to prototype bounded per-authenticated-actor round robin for
+the current fixed metadata operation; variable-cost deficit accounting is a
+later option only after measurement. No network scheduler source was copied.
+The public [BukkitScheduler 1.21.11](https://jd.papermc.io/paper/1.21.11/org/bukkit/scheduler/BukkitScheduler.html)
+provides owning-thread task scheduling, but by itself supplies neither fairness
+nor cost guarantees. The [31-sender deterministic counterexample](BRIDGE_TICK_ATTRIBUTION_RESEARCH_2026-10-12.md#adversarial-admission-ordering)
+reproduces the current core's progress failure on Java 21/25. A future scheduler
+must independently prove deadlines, authority/duplicate semantics, cleanup,
+aggregate memory/CPU/bytes and zero idle work before any production claim.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.
