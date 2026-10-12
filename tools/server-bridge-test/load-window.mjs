@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
+import { validateGameplayWindow } from './gameplay-workload.mjs';
 
-export function validateLoadWindow(data, { players, samples, installed, baselineOnly }) {
+export function validateLoadWindow(data, { players, samples, installed, baselineOnly, gameplay = false, bridgePlayers = players }) {
   assert.equal(data.samples, samples); assert.equal(data.players, players);
   assert.equal(data.tickMillis.length, samples);
   assert(data.tickMillis.every(n => Number.isFinite(n) && n >= 0));
@@ -12,6 +13,7 @@ export function validateLoadWindow(data, { players, samples, installed, baseline
   }
   assert.equal(data.generatedChunks, 0, 'Measurement unexpectedly generated chunks');
   if (baselineOnly) assert.equal(data.chunkLoads, 0, 'Controlled silent baseline loaded chunks');
+  if (gameplay) validateGameplayWindow(data, { players, samples, installed, bridgePlayers });
   if (!installed) return;
   assert(data.bridge.admitted <= 100 + Math.ceil(100 * (data.wallMillis / 1000 + .5)));
   assert.equal(data.bridge.malformed, 0);
@@ -22,7 +24,7 @@ export function validateLoadWindow(data, { players, samples, installed, baseline
     assert(data.sent[0] > 0, 'Ordinary requester sent no workload');
     assert(data.bridge.reads > 0);
     assert(data.received[0] >= Math.floor(data.sent[0] * .9), 'Ordinary requester starved');
-    if (data.label === 'many') assert(data.received.every(n => n > 0), 'An active player received no reply');
+    if (data.label === 'many') assert(data.received.slice(0, bridgePlayers).every(n => n > 0), 'An active player received no reply');
     if (data.label === 'flood') assert(data.bridge.throttled > 0, 'Flood did not exercise admission');
     if (data.label.startsWith('ordered-')) {
       assert(data.received.every(n => n > 0), 'An ordered active player received no reply');

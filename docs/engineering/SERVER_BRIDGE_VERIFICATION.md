@@ -54,6 +54,13 @@ arrival. The reproduced counterexample and additional order/offset cases now
 pass on both JVMs. This closes that specific failure, not arbitrary saturation,
 heavy-feature scheduling or representative busy-server cost acceptance.
 Published release JARs and the 1.8.0 tag remain unchanged.
+The [mixed-gameplay cycle](BRIDGE_GAMEPLAY_LOAD_2026-10-12.md) adds 4,800 verified
+ticks with 32 moving headless clients (four non-consumers), live entities and
+fixed WorldEdit batches, restoring identical starting worlds in reversed-order
+comparisons. Work/progress/queue/cleanup gates pass without changing production
+code. No tick exceeded 50 ms in this bounded run, but paired timing varies and
+dispatch slices exceed their soft target. This is not representative production
+cost acceptance, native gameplay or sustained-restart coverage.
 
 ## Evidence Record
 

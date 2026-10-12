@@ -19,6 +19,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /** Test-only, bounded samples; never linked or bundled into the companion. */
 final class FixtureMeasurements implements Listener {
     private final JavaPlugin plugin;
+    private final FixtureGameplay gameplay;
     private final ThreadMXBean threads;
     private final int sampleCount;
     private final double[] ticks;
@@ -28,8 +29,9 @@ final class FixtureMeasurements implements Listener {
     private long tickCpu, tickAllocated;
     private FixtureTickEvent pendingTick;
 
-    FixtureMeasurements(JavaPlugin plugin) {
+    FixtureMeasurements(JavaPlugin plugin, FixtureGameplay gameplay) {
         this.plugin = plugin;
+        this.gameplay = gameplay;
         sampleCount = Integer.getInteger("weso.bridge.measureTicks", 600);
         if (sampleCount < 100 || sampleCount > 2400) throw new IllegalArgumentException("Invalid fixture sample count");
         ticks = new double[sampleCount];
@@ -64,7 +66,7 @@ final class FixtureMeasurements implements Listener {
     }
 
     @EventHandler public void beginTick(ServerTickStartEvent event) {
-        if (label == null) return;
+        if (label == null) { gameplay.tick(); return; }
         if (pendingTick != null) throw new IllegalStateException("Unpaired fixture tick start");
         pendingTick = new FixtureTickEvent();
         pendingTick.phase = label;
@@ -73,6 +75,8 @@ final class FixtureMeasurements implements Listener {
         tickCpu = threads.getCurrentThreadCpuTime();
         tickAllocated = threads.getCurrentThreadAllocatedBytes();
         pendingTick.begin();
+        if (samples == 0 && gameplay.active()) gameplay.beginWindow();
+        gameplay.tick();
     }
 
     @EventHandler public void tick(ServerTickEndEvent event) {
@@ -112,6 +116,7 @@ final class FixtureMeasurements implements Listener {
         data.addProperty("players", plugin.getServer().getOnlinePlayers().size());
         data.addProperty("chunkLoads", chunkLoads);
         data.addProperty("generatedChunks", generatedChunks);
+        if (gameplay.active()) data.add("gameplay", gameplay.finishWindow(plugin.getServer().getOnlinePlayers().size()));
         data.add("tickMillis", new Gson().toJsonTree(ticks));
         double[] sorted = ticks.clone();
         Arrays.sort(sorted);

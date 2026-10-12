@@ -49,6 +49,13 @@ test('corrupted snapshot refuses restore before changing live fixture worlds', t
   assert.throws(() => frozen.restore(), /snapshot changed/);
   assert.equal(readFileSync(join(directory, 'bridge-fixture/level.dat'), 'utf8'), 'leave me');
 });
+test('gameplay has its own guarded frozen world, not a user server', t => {
+  const { directory, frozen } = fixture(t, 'bridge-gameplay-proof');
+  const digest = frozen.capture();
+  writeFileSync(join(directory, 'bridge-fixture/level.dat'), 'gameplay changed world');
+  assert.equal(frozen.restore(), digest);
+  assert.throws(() => new FrozenFixtureWorld(resolve(directory, '../minecraft')), /Not a named/);
+});
 test('existing snapshots and paths outside intended build fixture are rejected', t => {
   const { directory, frozen } = fixture(t); frozen.capture();
   assert.throws(() => frozen.capture(), /Never overwrite/);

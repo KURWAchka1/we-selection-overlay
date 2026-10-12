@@ -11,20 +11,24 @@ import { channel, hello, request, decode } from './wire-codec.mjs';
 import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 import { observeOwnedServer } from './owned-server.mjs';
 import { recordLoadWindow } from './load-window.mjs';
+import { bridgeConsumerCount, movement } from './gameplay-workload.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode = 'load'] = process.argv.slice(2);
-assert(['load', 'baseline', 'restart', 'timeline', 'fair'].includes(mode));
+assert(['load', 'baseline', 'restart', 'timeline', 'fair', 'gameplay'].includes(mode));
+const gameplay = mode === 'gameplay';
 const baselineOnly = ['baseline', 'timeline'].includes(mode);
 const restartLoad = mode === 'restart';
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory);
-const directoryName = { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof', fair: 'bridge-fair-dispatch-proof' }[mode];
+const directoryName = { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof', fair: 'bridge-fair-dispatch-proof', gameplay: 'bridge-gameplay-proof' }[mode];
 assert.equal(relative(root, serverDir), join('build', directoryName), 'Never operate a user server');
-const frozen = baselineOnly ? new FrozenFixtureWorld(serverDir) : null;
+const frozen = baselineOnly || gameplay ? new FrozenFixtureWorld(serverDir) : null;
 let worldDigest;
 const players = Number(playerArgument), samples = Number(sampleArgument), repetitions = Number(repeatArgument);
 assert(Number.isInteger(players) && players >= 2 && players <= 32);
 assert(Number.isInteger(samples) && samples >= 100 && samples <= 2400);
 assert(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 4);
+if (gameplay) assert(players >= 4 && samples % 20 === 0);
+const bridgePlayers = gameplay ? bridgeConsumerCount(players) : players;
 assert.match(readFileSync(join(serverDir, 'eula.txt'), 'utf8'), /^eula=true\s*$/);
 const properties = readFileSync(join(serverDir, 'server.properties'), 'utf8');
 for (const line of ['server-ip=127.0.0.1', 'server-port=25579', 'online-mode=false', 'max-players=32'])
@@ -32,6 +36,7 @@ for (const line of ['server-ip=127.0.0.1', 'server-port=25579', 'online-mode=fal
 const require = createRequire(join(root, 'build/bridge-wire-deps/package.json'));
 const minecraft = require('minecraft-protocol');
 assert.equal(require('minecraft-protocol/package.json').version, '1.68.0');
+if (gameplay) assert.equal(require('minecraft-data/package.json').version, '3.117.0');
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 assert.equal(hash(join(serverDir, 'server.jar')), '5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba');
 assert.equal(hash(join(serverDir, 'plugins/worldedit.jar')), '0ee152b1be5dfb51500505e2bf5a8c9d66f09c7fa484bf9aea384d7e7b459b06');
@@ -71,7 +76,7 @@ async function run(installed, round, prepare = false) {
   writeFileSync(join(config, 'config.yml'), 'limits:\n  max-connections: 1024\n  global-requests-per-second: 100\n  global-burst: 100\n  player-requests-per-second: 4\n  player-burst: 8\n');
   const output = createWriteStream(join(serverDir, `${runName}.log`));
   const lines = [], peers = [], pending = { out: '', err: '' }, ordinaryLatencies = [];
-  let exited = false, phase = 'none', timer, disconnecting = false;
+  let exited = false, phase = 'none', timer, movementTimer, disconnecting = false;
   const jfrName = `${runName}.jfr`;
   rmSync(join(serverDir, jfrName), { force: true });
   const java = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-XX:ActiveProcessorCount=2',
@@ -173,13 +178,14 @@ async function run(installed, round, prepare = false) {
     const before = await counters();
     const latencyBefore = ordinaryLatencies.length;
     const sentBefore = peers.map(p => p.sent), repliesBefore = peers.map(p => p.replies);
+    const movementBefore = peers.map(p => p.movementPackets);
     const path = join(serverDir, 'plugins/WesoBridgeTestFixture', `load-${label}.json`);
     rmSync(path, { force: true });
     const start = lines.length;
     java.stdin.write(`wesofixture measure ${label}\n`);
     await waitFor(() => lines.slice(start).some(s => s.includes(`WESO_MEASURE_DONE ${label}`)), label, samples * 100 + 30000);
     const data = JSON.parse(readFileSync(path, 'utf8'));
-    if (mode === 'timeline' || mode === 'fair') assert.equal(data.tickTimelineVersion, 1, 'Fixture has no per-tick markers');
+    if (mode === 'timeline' || mode === 'fair' || gameplay) assert.equal(data.tickTimelineVersion, 1, 'Fixture has no per-tick markers');
     const after = await counters();
     data.bridge = installed ? delta(after, before) : null;
     data.connections = after?.connections ?? 0;
@@ -190,9 +196,10 @@ async function run(installed, round, prepare = false) {
       p95Millis: latencies[Math.ceil(latencies.length * .95) - 1] ?? 0 };
     data.sent = peers.map((p, i) => p.sent - sentBefore[i]);
     data.received = peers.map((p, i) => p.replies - repliesBefore[i]);
+    if (gameplay) data.movementPackets = peers.map((p, i) => p.movementPackets - movementBefore[i]);
     const runDirectory = join(serverDir, 'measurements', runName);
     mkdirSync(runDirectory, { recursive: true });
-    recordLoadWindow(join(runDirectory, `${label}.json`), data, { players, samples, installed, baselineOnly });
+    recordLoadWindow(join(runDirectory, `${label}.json`), data, { players, samples, installed, baselineOnly, gameplay, bridgePlayers });
     results.push({ run: runName, worldDigest, ...data, tickMillis: undefined });
     if (baselineOnly) checks.push(`${runName}: identical frozen world, zero chunk loads/generation and silent bridge work`);
     console.log(`PASS ${runName}/${label}: p95=${data.p95.toFixed(3)}ms p99=${data.p99.toFixed(3)}ms reads=${data.bridge?.reads ?? 0}`);
@@ -207,10 +214,14 @@ async function run(installed, round, prepare = false) {
       const client = minecraft.createClient({ host: '127.0.0.1', port: 25579, username: name,
         auth: 'offline', version: '1.21.11', profilesFolder: false, clientSettings: { viewDistance: 2 }, disableChatSigning: true });
       const peer = { client, name, index, errors: [], ended: false, sent: 0, replies: 0, welcome: null, id: 0, next: 0,
-        hints: [], closed: 0, restartArmed: false, restartHellos: 0, expectedNonce: null, sentTimes: new Map() };
+        hints: [], closed: 0, restartArmed: false, restartHellos: 0, expectedNonce: null, sentTimes: new Map(), movementPackets: 0 };
       peers.push(peer);
       client.on('error', error => peer.errors.push(error.message));
       client.on('end', () => { peer.ended = true; });
+      if (gameplay) client.on('position', packet => {
+        // Acknowledge server teleports before sending the bounded synthetic flight route.
+        client.write('teleport_confirm', { teleportId: packet.teleportId });
+      });
       client.on('custom_payload', packet => {
         if (packet.channel === restartChannel) {
           try {
@@ -257,27 +268,44 @@ async function run(installed, round, prepare = false) {
         } catch (error) { peer.errors.push(error.stack); }
       });
       await waitFor(() => lines.some(s => s.includes(`WESO_FIXTURE_JOIN ${name}`)), name);
-      client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(restartLoad ? `${channel}\0${restartChannel}` : channel) });
+      if (index < bridgePlayers)
+        client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(restartLoad ? `${channel}\0${restartChannel}` : channel) });
     }
-    if (baselineOnly) {
+    if (baselineOnly || gameplay) {
       const start = lines.length;
       java.stdin.write('wesofixture control baseline\n');
       await waitFor(() => lines.slice(start).some(s => s.includes('WESO_FIXTURE_OK control baseline')), 'controlled baseline rules');
     }
+    if (gameplay) {
+      const start = lines.length;
+      java.stdin.write('wesofixture control gameplay\n');
+      await waitFor(() => lines.slice(start).some(s => s.includes('WESO_FIXTURE_OK control gameplay')), 'gameplay setup');
+      await delay(1000);
+      let step = 0;
+      movementTimer = setInterval(() => {
+        for (const peer of peers) {
+          try { peer.client.write('position', movement(peer.index, step)); peer.movementPackets++; }
+          catch (error) { peer.errors.push(error.stack); }
+        }
+        step++;
+      }, 200);
+    }
     await delay(15000);
     if (!prepare) await measure('silent');
-    if (installed && !baselineOnly) {
-      for (const peer of peers) {
+    if (!prepare && (installed && !baselineOnly || gameplay)) {
+      const consumers = peers.slice(0, bridgePlayers);
+      if (installed) for (const peer of consumers) {
         peer.lastReplyId = 0n;
         peer.expectedNonce = randomBytes(16);
         peer.client.write('custom_payload', { channel, data: hello(peer.expectedNonce, 1, restartLoad ? 1 : 0, restartLoad ? 3 : 1) });
         await waitFor(() => peer.welcome, `${peer.name} hello`);
       }
-      assert.equal((await counters()).reads, 0);
+      if (installed) assert.equal((await counters()).reads, 0);
       await measure('idle');
       timer = setInterval(() => {
         const now = performance.now();
-        const order = phase === 'ordered-last' ? [...peers.slice(1), peers[0]] : peers;
+        if (!installed) return;
+        const order = phase === 'ordered-last' ? [...consumers.slice(1), consumers[0]] : consumers;
         for (const peer of order) {
           if (phase === 'none' || (phase === 'one' && peer.index !== 0) || now < peer.next) continue;
           const flood = phase === 'flood' && peer.index !== 0;
@@ -304,6 +332,7 @@ async function run(installed, round, prepare = false) {
       }
       await measure('recovery');
       clearInterval(timer); timer = null;
+      if (movementTimer) { clearInterval(movementTimer); movementTimer = null; }
       disconnecting = true;
       for (const peer of peers) peer.client.end('load verification complete');
       const deadline = Date.now() + 15000;
@@ -311,13 +340,16 @@ async function run(installed, round, prepare = false) {
       assert(peers.every(p => p.ended));
       await delay(300);
       const disconnected = await counters();
-      assert.equal(disconnected.connections, 0);
-      assert.equal(disconnected.pending, 0); assert.equal(disconnected.dispatchTasks, 0);
+      if (installed) {
+        assert.equal(disconnected.connections, 0);
+        assert.equal(disconnected.pending, 0); assert.equal(disconnected.dispatchTasks, 0);
+      }
       checks.push(`${runName}: ${players}-way ownership, bounded traffic, legitimate progress, idle recovery, disconnect cleanup`);
     }
     assert.equal(hash(join(serverDir, 'companion.jar')), companionHash, 'Candidate changed during test');
   } finally {
     if (timer) clearInterval(timer);
+    if (movementTimer) clearInterval(movementTimer);
     for (const peer of peers) if (!peer.ended) peer.client.end('fixture shutdown');
     try { await server.stop(); }
     finally { await new Promise(resolve => output.end(resolve)); }
@@ -336,11 +368,11 @@ try {
   }
   await freePort();
   writeFileSync(join(serverDir, 'load-proof.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
-    minecraft: '1.21.11', mode, worldDigest, players, samples, repetitions, javaHome, node: process.version,
+    minecraft: '1.21.11', mode, worldDigest, players, bridgePlayers, samples, repetitions, javaHome, node: process.version,
     processorModel: cpus()[0]?.model, logicalProcessors: cpus().length,
     serverHash: hash(join(serverDir, 'server.jar')), worldEditHash: hash(join(serverDir, 'plugins/worldedit.jar')),
     companionHash, fixtureHash, checks, results, lifecycleResults,
-    limitations: baselineOnly ? 'Controlled silent baseline from identical frozen world bytes, with random ticks, mob spawning, daylight/weather cycles disabled. Shared laptop, short warmup and stationary headless clients; not busy gameplay or production performance acceptance.' : 'Stationary headless protocol clients on flat loopback fixture; not native GPU clients, busy production gameplay or streaming/simulation cost.' }, null, 2));
+    limitations: gameplay ? 'Identical frozen starting worlds, bounded flight routes, 16 live AI cows and 512-block WorldEdit batches per 20 ticks; at least one eighth of clients never negotiate the bridge. All phases matched absent/installed. AI decisions and network timing are not deterministic. Preloaded area, shared laptop and headless TCP clients, not arbitrary production gameplay or native GPU rendering.' : baselineOnly ? 'Controlled silent baseline from identical frozen world bytes, with random ticks, mob spawning, daylight/weather cycles disabled. Shared laptop, short warmup and stationary headless clients; not busy gameplay or production performance acceptance.' : 'Stationary headless protocol clients on flat loopback fixture; not native GPU clients, busy production gameplay or streaming/simulation cost.' }, null, 2));
   console.log('PAPER BRIDGE LOAD PROOF PASS; all owned processes stopped');
 } catch (error) {
   writeFileSync(join(serverDir, 'load-failure.json'), JSON.stringify({ checkedAt: new Date().toISOString(),

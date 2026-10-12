@@ -495,6 +495,32 @@ metering differs from global decode/read metering. See the
 [fair-dispatch report](BRIDGE_FAIR_DISPATCH_2026-10-12.md) for deterministic,
 real-network and native evidence. No broader performance support is inferred.
 
+## S47 Controlled Mixed-Gameplay Fixture
+
+Checked **2026-10-12**, Paper **1.21.11-132 / c5eb079**, WorldEdit **7.4.2**.
+Public [PlayerMoveEvent](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/player/PlayerMoveEvent.html)
+provides accepted/cancelled movement observations; teleport events are a separate
+subclass and are excluded from our workload counts. Public
+[RegionAccessor.spawn](https://jd.papermc.io/paper/1.21.11/org/bukkit/RegionAccessor.html)
+and [LivingEntity AI controls](https://jd.papermc.io/paper/1.21.11/org/bukkit/entity/LivingEntity.html)
+support explicit fixture entities. These APIs do not promise deterministic AI
+decisions or establish CPU cost from entity count/lifetime alone.
+
+The [WorldEdit edit-session lifecycle](https://worldedit.enginehub.org/en/latest/api/concepts/edit-sessions/)
+requires closing/flushing each completed session. Our test-only host workload
+creates/finishes one bounded edit session per batch; it is not a bridge feature
+and never writes into a user's installed world or actor history.
+
+The [PrismarineJS 1.21.11 packet definitions](https://github.com/PrismarineJS/minecraft-data/blob/master/data/pc/1.21.11/protocol.json)
+were cross-checked against installed **minecraft-data 3.117.0**, protocol 774,
+used by pinned **minecraft-protocol 1.68.0**. The local `position` serverbound
+packet has x/y/z doubles and `MovementFlags` (`onGround`,
+`hasHorizontalCollision`); clientbound position carries a teleport ID. Our
+headless clients acknowledge teleports and send bounded flight positions.
+No client class, packet decoder or server internals were copied into production.
+The [mixed-gameplay method and evidence](BRIDGE_GAMEPLAY_LOAD_2026-10-12.md)
+distinguishes sent packets, server-observed moves, exact block edits and timing.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

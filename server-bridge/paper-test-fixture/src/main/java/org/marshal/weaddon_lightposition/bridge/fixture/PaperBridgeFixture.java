@@ -23,6 +23,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 public final class PaperBridgeFixture extends JavaPlugin implements Listener {
     private final Map<UUID, PermissionAttachment> grants = new HashMap<>();
     private FixtureMeasurements measurements;
+    private FixtureGameplay gameplay;
 
     @Override public void onEnable() {
         if (!Boolean.getBoolean("weso.bridge.fixture") || getServer().getOnlineMode()
@@ -33,8 +34,14 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         }
         Objects.requireNonNull(getCommand("wesofixture")).setExecutor(this);
         getServer().getPluginManager().registerEvents(this, this);
-        measurements = new FixtureMeasurements(this);
+        gameplay = new FixtureGameplay(this);
+        getServer().getPluginManager().registerEvents(gameplay, this);
+        measurements = new FixtureMeasurements(this, gameplay);
         getServer().getPluginManager().registerEvents(measurements, this);
+    }
+
+    @Override public void onDisable() {
+        if (gameplay != null) gameplay.stop();
     }
 
     @EventHandler public void join(PlayerJoinEvent event) {
@@ -74,6 +81,11 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         if (!(sender instanceof ConsoleCommandSender) || args.length != 2) return true;
         if (args[0].equals("measure")) {
             measurements.start(args[1]);
+            return true;
+        }
+        if (args[0].equals("control") && args[1].equals("gameplay")) {
+            gameplay.start();
+            getLogger().info("WESO_FIXTURE_OK control gameplay");
             return true;
         }
         if (args[0].equals("control") && args[1].equals("baseline")) {

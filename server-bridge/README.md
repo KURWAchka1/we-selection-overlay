@@ -36,7 +36,7 @@ selection commits and dedicated Fabric/NeoForge server hosts remain planned.
 | `../shared/server-bridge-client` | Loader-independent client connection state |
 | `core` | Loader-independent, connection-owned server request handling |
 | `paper` | Paper messaging/lifecycle and official WorldEdit metadata access |
-| `paper-test-fixture` | Console-only isolated test grants/selection seeds; never distributed |
+| `paper-test-fixture` | Isolated grants/selections, measurements and opt-in mixed world workload; never distributed |
 
 Client-native files live in each runtime's `client/bridge` package. Maintain the
 Fabric 26.2 adapters and run `node tools/sync-server-bridge.mjs` from the root to
@@ -51,8 +51,8 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-25 harness self-tests (owned-process shutdown, frozen-world safety and wire
-helpers); they run without Minecraft windows or third-party Node packages.
+31 harness self-tests (owned-process shutdown, frozen-world safety, wire
+helpers and mixed-workload validation); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
 the cursor, accept an EULA or prove a dedicated-server login.
@@ -208,6 +208,23 @@ fixtures. It adds ordinary-first/ordinary-last timer workloads, reply latency,
 queue/expiry/task checks and disconnect cleanup. Separate TCP sockets cannot
 guarantee application arrival order; the deterministic probe supplies that check.
 See [fair-dispatch evidence and limits](../docs/engineering/BRIDGE_FAIR_DISPATCH_2026-10-12.md).
+
+For matched mixed-world activity, use a separate frozen fixture:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Players 32 -Samples 200 -Repetitions 2 -GameplayLoad -AcceptEula
+node tools/server-bridge-test/analyze-load-proof.mjs gameplay
+```
+
+This uses `build/bridge-gameplay-proof/`, restores hashed starting worlds, moves
+all 32 headless TCP clients, ticks 16 explicit AI entities and alternates 512
+blocks through closed WorldEdit sessions every 20 ticks. Four clients never
+negotiate the bridge. All six phases run in both absent/installed comparisons;
+server movement and exact world-work counts are checked independently of bridge
+replies. Requires at least four players and samples divisible by 20. Fixture
+world mutations are deliberately test-only; the companion stays read-only.
+See the [predeclared method and results](../docs/engineering/BRIDGE_GAMEPLAY_LOAD_2026-10-12.md)
+before interpreting this bounded scenario as ordinary production gameplay.
 
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge

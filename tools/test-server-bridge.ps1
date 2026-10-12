@@ -68,7 +68,7 @@ function Assert-PaperArtifact {
 }
 
 try {
-    $nodeTests = @('owned-server.test.mjs', 'frozen-fixture-world.test.mjs', 'wire-codec.test.mjs', 'load-window.test.mjs') |
+    $nodeTests = @('owned-server.test.mjs', 'frozen-fixture-world.test.mjs', 'wire-codec.test.mjs', 'load-window.test.mjs', 'gameplay-workload.test.mjs') |
             ForEach-Object { Join-Path $root "tools/server-bridge-test/$_" }
     & node --test @nodeTests 2>&1 | Tee-Object -FilePath (Join-Path $logs 'harness-node.log')
     if ($LASTEXITCODE -ne 0) { throw 'Bridge harness self-tests failed' }
