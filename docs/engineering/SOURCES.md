@@ -540,6 +540,47 @@ the failed run's decoder error alone does not establish its exact wire cause.
 Guard/negative tests and subsequent real repeats are recorded in the
 [active-lifecycle evidence](BRIDGE_ACTIVE_LIFECYCLE_2026-10-12.md).
 
+## S49 Test-Only Method Interval Instrumentation
+
+Checked **2026-10-12**, Temurin **21.0.11+10 / 25.0.2+10**, ASM **9.9**.
+The public [ClassFileTransformer contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.instrument/java/lang/instrument/ClassFileTransformer.html)
+provides load-time instrumentation. A failed transformer normally leaves loading
+to continue, so the opt-in diagnostic agent fails its disposable JVM loudly on
+missing pinned targets. [Bootstrap search append](https://docs.oracle.com/en/java/javase/21/docs/api/java.instrument/java/lang/instrument/Instrumentation.html#appendToBootstrapClassLoaderSearch(java.util.jar.JarFile))
+supports isolated helper visibility: only the three recorder classes enter that
+search, never ASM, Minecraft, WorldEdit or the companion. This corrected an actual
+Paper plugin-loader failure in the first diagnostic attempt.
+
+The [ASM FAQ](https://asm.ow2.io/faq.html) describes computed stack limits and
+verification failures. Our narrow wrappers preserve existing method bodies and
+frames and add a catch/rethrow interval boundary. Return values, wide locals,
+original exceptions, nesting, missing/double targets and actual JFR round trips
+are independently checked. ASM remains relocated and test-only, using the
+existing repository's pin/license pattern; no external implementation was copied.
+The public [JFR Event API](https://docs.oracle.com/en/java/javase/21/docs/api/jdk.jfr/jdk/jfr/Event.html)
+supports the interval records. These wrappers themselves add time/allocation;
+their results are diagnostic evidence, not uninstrumented production cost.
+
+## S50 Safepoints And Background Profiler Control
+
+Checked **2026-10-12**, pinned Paper **c5eb079** and OpenJDK **21.0.11+10**.
+The [JFR event schema](https://github.com/openjdk/jdk21u/blob/jdk-21.0.11%2B10/src/hotspot/share/jfr/metadata/metadata.xml)
+distinguishes `SafepointBegin` from `ExecuteVMOperation` and exposes the VM
+operation's caller and safepoint ID. A short VM-operation body does not exclude
+a longer synchronization interval. Their overlaps are reported separately, not
+summed/subtracted as exact per-thread CPU. The local `profile.jfc` enables both
+with zero thresholds, but not every detailed safepoint subphase. Short CPU
+MXBean deltas remain quantized; see [S44](#s44-public-tick-brackets-and-jfr-timestamps).
+
+Pinned [Paper configuration](https://github.com/PaperMC/Paper/blob/c5eb079/paper-server/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java)
+defines `spark.enabled`, while [SparksFly](https://github.com/PaperMC/Paper/blob/c5eb079/paper-server/src/main/java/io/papermc/paper/SparksFly.java)
+checks it before enabling the bundled profiler. The test control uses this normal
+configuration, not an internal production call. Actual startup logs and recorded
+`spark-java-sampler-*` VM-operation callers distinguish enabled and disabled runs.
+This is a local diagnostic control, not advice to disable profiling on users'
+servers or proof that all historical outliers had the same cause. Results and
+remaining unknowns are in the [interval report](BRIDGE_SLICE_DIAGNOSTICS_2026-10-12.md).
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

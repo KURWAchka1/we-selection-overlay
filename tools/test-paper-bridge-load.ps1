@@ -9,6 +9,8 @@ param(
     [switch]$FairDispatch,
     [switch]$GameplayLoad,
     [switch]$LifecycleLoad,
+    [switch]$SliceDiagnostics,
+    [switch]$WithoutSpark,
     [switch]$AcceptEula
 )
 $ErrorActionPreference = 'Stop'
@@ -16,9 +18,11 @@ if (!$AcceptEula) { throw 'Owner acceptance of https://www.minecraft.net/eula is
 if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $GameplayLoad, $LifecycleLoad).Where({ $_ }).Count -gt 1) { throw 'Choose one workload mode: frozen baseline, restart load, tick timeline, fair dispatch, gameplay or active lifecycle' }
 if ($GameplayLoad -and ($Players -lt 4 -or $Samples % 20 -ne 0)) { throw 'Gameplay requires at least 4 players and a sample count divisible by 20' }
 if ($LifecycleLoad -and ($Players -ne 32 -or $Samples % 20 -ne 0)) { throw 'Active lifecycle requires 32 players and a sample count divisible by 20' }
+if ($SliceDiagnostics -and !$LifecycleLoad) { throw 'Slice diagnostics require the active lifecycle workload' }
+if ($WithoutSpark -and !$SliceDiagnostics) { throw 'Spark control requires slice diagnostics; ordinary fixture behavior is unchanged' }
 $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root 'build/bridge-paper-proof'
-$server = Join-Path $root $(if ($ControlledBaseline) { 'build/bridge-baseline-proof' } elseif ($RestartLoad) { 'build/bridge-restart-load-proof' } elseif ($TickTimeline) { 'build/bridge-tick-timeline-proof' } elseif ($FairDispatch) { 'build/bridge-fair-dispatch-proof' } elseif ($GameplayLoad) { 'build/bridge-gameplay-proof' } elseif ($LifecycleLoad) { 'build/bridge-active-lifecycle-proof' } else { 'build/bridge-load-proof' })
+$server = Join-Path $root $(if ($WithoutSpark) { 'build/bridge-slice-diagnostics-no-spark' } elseif ($SliceDiagnostics) { 'build/bridge-slice-diagnostics' } elseif ($ControlledBaseline) { 'build/bridge-baseline-proof' } elseif ($RestartLoad) { 'build/bridge-restart-load-proof' } elseif ($TickTimeline) { 'build/bridge-tick-timeline-proof' } elseif ($FairDispatch) { 'build/bridge-fair-dispatch-proof' } elseif ($GameplayLoad) { 'build/bridge-gameplay-proof' } elseif ($LifecycleLoad) { 'build/bridge-active-lifecycle-proof' } else { 'build/bridge-load-proof' })
 foreach ($file in @((Join-Path $Java21 'bin/java.exe'), (Join-Path $source 'server.jar'),
         (Join-Path $source 'plugins/worldedit.jar'), (Join-Path $root 'build/bridge-wire-deps/package.json'))) {
     if (!(Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing verified fixture dependency: $file" }
@@ -29,6 +33,10 @@ Push-Location $root
 try {
     & .\WEaddon_fabric_1.21.11\gradlew.bat -p server-bridge :paper:jar :paper-test-fixture:jar --offline --no-daemon --max-workers=2 --console=plain
     if ($LASTEXITCODE -ne 0) { throw 'Paper fixture build failed' }
+    if ($SliceDiagnostics) {
+        & .\WEaddon_fabric_1.21.11\gradlew.bat -p tools/bridge-slice-agent check --offline --no-daemon --max-workers=2 --console=plain
+        if ($LASTEXITCODE -ne 0) { throw 'Slice diagnostic agent checks failed' }
+    }
     New-Item -ItemType Directory -Force -Path (Join-Path $server 'plugins') | Out-Null
     Copy-Item -LiteralPath (Join-Path $source 'server.jar') -Destination $server
     foreach ($directory in @('cache', 'libraries', 'versions')) {
@@ -45,6 +53,7 @@ try {
     'eula=true' | Set-Content -LiteralPath (Join-Path $server 'eula.txt') -Encoding ASCII
     $mode = if ($ControlledBaseline) { 'baseline' } elseif ($RestartLoad) { 'restart' } elseif ($TickTimeline) { 'timeline' } elseif ($FairDispatch) { 'fair' } elseif ($GameplayLoad) { 'gameplay' } else { 'load' }
     $runner = if ($LifecycleLoad) { 'server-bridge-test/paper-active-lifecycle-proof.mjs' } else { 'server-bridge-test/paper-load-proof.mjs' }
-    & node (Join-Path $PSScriptRoot $runner) $Java21 $server $Players $Samples $Repetitions $mode
+    [string[]]$diagnosticArguments = @(if ($SliceDiagnostics) { '--slice-diagnostics' }; if ($WithoutSpark) { '--without-spark' })
+    & node (Join-Path $PSScriptRoot $runner) $Java21 $server $Players $Samples $Repetitions $mode @diagnosticArguments
     if ($LASTEXITCODE -ne 0) { throw "Paper load proof failed; inspect $server" }
 } finally { Pop-Location; $env:JAVA_HOME = $previousJava }

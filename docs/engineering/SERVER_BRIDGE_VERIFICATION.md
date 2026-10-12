@@ -69,6 +69,13 @@ client pre-play movement race is fixed and the failed attempt retained. This
 closes those exact functional scenarios, not native saturated recovery, heavy
 streaming, hot reload or production cost gates. Cumulative slices again exceed
 their soft target; no production change or performance acceptance is claimed.
+The [method-interval diagnostic cycle](BRIDGE_SLICE_DIAGNOSTICS_2026-10-12.md)
+adds four fresh instrumented JVM runs and 6,400 verified ticks, including a
+separate no-spark control. Independent counter reconciliation passes. Specific
+large intervals overlap profiler safepoints or GC, while other intervals remain
+unattributed; disabling spark does not establish a speedup. Test-loader/launcher
+and attribution defects are corrected without changing production. This closes
+the missing per-call observation, not the soft-budget or production cost gates.
 
 ## Evidence Record
 

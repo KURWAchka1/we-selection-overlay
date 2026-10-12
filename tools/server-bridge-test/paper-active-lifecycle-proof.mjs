@@ -14,7 +14,11 @@ import { channel, hello, request, decode } from './wire-codec.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument] = process.argv.slice(2);
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory);
-assert.equal(relative(root, serverDir), join('build', 'bridge-active-lifecycle-proof'), 'Never operate a user server');
+const sliceDiagnostics = process.argv.slice(7).includes('--slice-diagnostics');
+const withoutSpark = process.argv.slice(7).includes('--without-spark');
+assert(!withoutSpark || sliceDiagnostics);
+assert(process.argv.slice(7).every(arg => ['load', '--slice-diagnostics', '--without-spark'].includes(arg)));
+assert.equal(relative(root, serverDir), join('build', withoutSpark ? 'bridge-slice-diagnostics-no-spark' : sliceDiagnostics ? 'bridge-slice-diagnostics' : 'bridge-active-lifecycle-proof'), 'Never operate a user server');
 assert.equal(Number(playerArgument), 32);
 const samples = Number(sampleArgument), repetitions = Number(repeatArgument);
 assert(Number.isInteger(samples) && samples >= 100 && samples <= 2400 && samples % 20 === 0);
@@ -29,6 +33,11 @@ assert.equal(require('minecraft-data/package.json').version, '3.117.0');
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const hashes = { paper: hash(join(serverDir, 'server.jar')), worldEdit: hash(join(serverDir, 'plugins/worldedit.jar')),
   companion: hash(join(serverDir, 'companion.jar')), fixture: hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar')) };
+const sliceAgent = join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-agent.jar');
+if (sliceDiagnostics) {
+  hashes.sliceAgent = hash(sliceAgent);
+  hashes.sliceBootstrap = hash(join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-bootstrap.jar'));
+}
 assert.equal(hashes.paper, '5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba');
 assert.equal(hashes.worldEdit, '0ee152b1be5dfb51500505e2bf5a8c9d66f09c7fa484bf9aea384d7e7b459b06');
 const companionName = 'worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar';
@@ -49,6 +58,13 @@ async function freePort() {
 
 async function run(round) {
   await freePort();
+  if (withoutSpark) {
+    const config = join(serverDir, 'config'); mkdirSync(config, { recursive: true });
+    // JSON is a YAML subset. This owned control fixture deliberately starts from
+    // the pinned Paper defaults, overriding only its bundled profiler setting.
+    writeFileSync(join(config, 'paper-global.yml'), JSON.stringify({ _version: 31,
+      spark: { enabled: false, 'enable-immediately': false } }, null, 2));
+  }
   copyFileSync(join(serverDir, 'companion.jar'), join(serverDir, 'plugins', companionName));
   const config = join(serverDir, 'plugins/WorldEditSelectionOverlayBridge'); mkdirSync(config, { recursive: true });
   writeFileSync(join(config, 'config.yml'), 'limits:\n  max-connections: 1024\n  global-requests-per-second: 100\n  global-burst: 100\n  player-requests-per-second: 4\n  player-burst: 8\n');
@@ -61,7 +77,8 @@ async function run(round) {
   let exited = false, traffic = false, trafficTimer, movementTimer, closing = false, faultCount = 0;
   const jfrName = `round-${round}.jfr`; rmSync(join(serverDir, jfrName), { force: true });
   const java = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-XX:ActiveProcessorCount=2',
-    `-XX:StartFlightRecording=filename=${jfrName},settings=profile,dumponexit=true,maxsize=32m`,
+    `-XX:StartFlightRecording=filename=${jfrName},settings=profile,dumponexit=true,maxsize=${sliceDiagnostics ? 128 : 32}m`,
+    ...(sliceDiagnostics ? [`-javaagent:${sliceAgent}`, '-Dweso.bridge.sliceDiagnostics=true'] : []),
     '-Dweso.bridge.fixture=true', `-Dweso.bridge.measureTicks=${samples}`, '-jar', 'server.jar', '--nogui'],
   { cwd: serverDir, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   const server = observeOwnedServer(java);
@@ -79,7 +96,7 @@ async function run(round) {
     const deadline = Date.now() + timeout;
     while (!predicate()) {
       if (cancelled || exited) throw new Error(`Cancelled/server closed during ${label}: ${lines.slice(-10).join('\n')}`);
-      assert(!lines.some(s => /Queued lifecycle fixture failed|Gameplay workload edit failed|Unpaired fixture tick|Cannot write fixture/.test(s)), 'Fixture failed');
+      assert(!lines.some(s => /Queued lifecycle fixture failed|Gameplay workload edit failed|Unpaired fixture tick|Cannot write fixture|generated an exception whilst handling plugin message|NoClassDefFoundError|VerifyError/.test(s)), 'Fixture failed');
       const problem = allPeers.find(p => p.errors.length || p.ended && !p.expectedEnd && !closing);
       if (problem) throw new Error(`${label}: ${problem.name}: ${problem.errors.join(', ')} ended=${problem.ended}, reason=${JSON.stringify(problem.disconnectReason)}`);
       if (Date.now() >= deadline) throw new Error(`Timeout: ${label}`);
@@ -215,6 +232,11 @@ async function run(round) {
     if (java.pid) setPriority(java.pid, constants.priority.PRIORITY_BELOW_NORMAL);
     await waitFor(() => lines.some(s => /Done \(/.test(s)), 'startup', 180000);
     assert(lines.some(s => s.includes('Experimental read-only bridge enabled')));
+    if (withoutSpark) {
+      assert(lines.some(s => s.includes('spark profiler will not be enabled because it is currently disabled')));
+      assert(!lines.some(s => s.includes('Starting background profiler')));
+    }
+    if (sliceDiagnostics) assert.equal(lines.filter(s => s.includes('WESO_SLICE_INSTRUMENTED ')).length, 3, 'Missing diagnostic class wrappers');
     for (let index = 0; index < 32; index++) await connect(index);
     await action('control', 'baseline'); await action('control', 'gameplay');
     let step = 0;
@@ -302,9 +324,9 @@ try {
   for (let round = 1; round <= repetitions; round++) await run(round);
   await freePort();
   writeFileSync(join(serverDir, 'lifecycle-proof.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
-    minecraft: '1.21.11', players: 32, bridgePlayers: 28, samples, repetitions, javaHome, node: process.version,
+    minecraft: '1.21.11', players: 32, bridgePlayers: 28, samples, repetitions, javaHome, node: process.version, sliceDiagnostics, withoutSpark,
     processorModel: cpus()[0]?.model, logicalProcessors: cpus().length, hashes, results,
-    limitations: 'Functional active-load proof, not a paired performance baseline. Actual queued wire requests observed with test-only reflection before public lifecycle actions. Moving headless TCP clients, 16 AI cows and fixed WorldEdit batches; batches pause when WorldEdit disables. Epoch replays observe no disclosure but do not prove every replay passed rate admission. No native GPU, ungraceful restart, proxy switch or heavy transfer claim.' }, null, 2));
+    limitations: `${sliceDiagnostics ? 'Test-only method wrappers alter timing and allocation: diagnostic attribution, not clean performance acceptance. ' : ''}Functional active-load proof, not a paired performance baseline. Actual queued wire requests observed with test-only reflection before public lifecycle actions. Moving headless TCP clients, 16 AI cows and fixed WorldEdit batches; batches pause when WorldEdit disables. Epoch replays observe no disclosure but do not prove every replay passed rate admission. No native GPU, ungraceful restart, proxy switch or heavy transfer claim.` }, null, 2));
   console.log('PAPER ACTIVE LIFECYCLE PROOF PASS; all owned processes stopped');
 } catch (error) {
   writeFileSync(join(serverDir, 'lifecycle-failure.json'), JSON.stringify({ checkedAt: new Date().toISOString(), hashes,

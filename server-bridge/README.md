@@ -244,6 +244,26 @@ The [active-lifecycle report](../docs/engineering/BRIDGE_ACTIVE_LIFECYCLE_2026-1
 distinguishes headless functional evidence from native recovery, production
 performance, ungraceful loss, heavy transfers and supported hot reload.
 
+For test-only method interval attribution of dispatcher peaks:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Players 32 -Samples 200 -Repetitions 2 -LifecycleLoad -SliceDiagnostics -AcceptEula
+node tools/server-bridge-test/analyze-active-lifecycle.mjs --slice-diagnostics
+```
+
+Add `-WithoutSpark` to the launch and `--without-spark` to the analysis for a
+separate control with the pinned Paper configuration's bundled profiler disabled.
+The two modes use `build/bridge-slice-diagnostics/` and
+`build/bridge-slice-diagnostics-no-spark/`; prior evidence is not overwritten.
+The diagnostic agent is checked before launch, requires both fixture opt-ins,
+and is never attached to existing JVMs or packaged into the companion/client.
+Seven method intervals are reconciled against independent source/dispatch/send
+and ingress counters. GC, safepoint synchronization, VM operations and method
+wall time are distinct measurements; inclusive nested timings must not be added.
+The [diagnostic report](../docs/engineering/BRIDGE_SLICE_DIAGNOSTICS_2026-10-12.md)
+records failed attempts, profiler interference and remaining cost gates. These
+instrumented functional runs are not a clean paired performance benchmark.
+
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge
 clients discover the channel only when advertised. No player gets the new

@@ -45,7 +45,7 @@ function Assert-PaperArtifact {
             if ($null -eq $zip.GetEntry($name)) { throw "Companion entry missing: $name" }
         }
         foreach ($entry in $zip.Entries) {
-            if ($entry.FullName -match '^(net/|com/sk89q/|org/bukkit/)|/bridge/(client|fixture)/|Test\.class$') {
+            if ($entry.FullName -match '^(net/|com/sk89q/|org/bukkit/|org/marshal/wesotest/)|/bridge/(client|fixture)/|Test\.class$') {
                 throw "Companion contains client, test or provided dependency: $($entry.FullName)"
             }
             if ($entry.FullName.EndsWith('.class')) {
@@ -76,7 +76,11 @@ try {
     Assert-PaperArtifact
     Invoke-BridgeGradle 'server-bridge' $Java25 'unit-java25' @('check', '--rerun-tasks', '-PtestJavaVersion=25')
     foreach ($target in @(@{Java=$Java21; Name='java21'}, @{Java=$Java25; Name='java25'})) {
+        Invoke-BridgeGradle 'tools/bridge-slice-agent' $target.Java "slice-agent-$($target.Name)" @('check', '--rerun-tasks', "-PtestJavaVersion=$($target.Name.Replace('java',''))")
         $env:WESO_TEST_JAVA = Join-Path $target.Java 'bin/java.exe'
+        & node --test (Join-Path $root 'tools/server-bridge-test/jfr-bridge-slices.test.mjs') 2>&1 |
+            Tee-Object -FilePath (Join-Path $logs "harness-slices-$($target.Name).log")
+        if ($LASTEXITCODE -ne 0) { throw "JFR slice reader self-tests failed: $($target.Name)" }
         & node --test (Join-Path $root 'tools/server-bridge-test/jfr-tick-timeline.test.mjs') 2>&1 |
             Tee-Object -FilePath (Join-Path $logs "harness-jfr-$($target.Name).log")
         if ($LASTEXITCODE -ne 0) { throw "JFR timeline self-tests failed: $($target.Name)" }

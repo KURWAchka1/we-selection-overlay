@@ -1,0 +1,62 @@
+plugins {
+    id 'java'
+    id 'com.gradleup.shadow' version '9.4.2'
+}
+repositories { mavenCentral() }
+dependencies { implementation 'org.ow2.asm:asm:9.9' }
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
+tasks.withType(JavaCompile).configureEach { options.release = 21 }
+tasks.named('test') { enabled = false }
+tasks.register('bootstrapJar', Jar) {
+    dependsOn classes
+    archiveFileName = 'bridge-slice-bootstrap.jar'
+    from(sourceSets.main.output) {
+        include 'org/marshal/wesotest/slices/CallEvent.class', 'org/marshal/wesotest/slices/SliceProbe*.class'
+    }
+}
+shadowJar {
+    archiveFileName = 'bridge-slice-agent.jar'
+    manifest { attributes 'Premain-Class': 'org.marshal.wesotest.slices.SliceAgent' }
+    relocate 'org.objectweb.asm', 'org.marshal.wesotest.slices.internal.asm'
+    from('../test-desktop/agent/src/main/resources') { include 'META-INF/ASM-LICENSE.txt' }
+    exclude 'module-info.class'
+    exclude 'org/marshal/wesotest/slices/CallEvent.class', 'org/marshal/wesotest/slices/SliceProbe*.class'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+tasks.register('verifyAgentJar') {
+    dependsOn shadowJar, bootstrapJar
+    doLast {
+        new java.util.zip.ZipFile(shadowJar.archiveFile.get().asFile).withCloseable { zip ->
+            if (zip.entries().find { it.name.startsWith('org/objectweb/asm/') })
+                throw new GradleException('Diagnostic agent exports unrelocated ASM')
+            for (def name : ['META-INF/ASM-LICENSE.txt', 'org/marshal/wesotest/slices/SliceAgent.class'])
+                if (!zip.getEntry(name)) throw new GradleException("Missing diagnostic resource: ${name}")
+        }
+        new java.util.zip.ZipFile(tasks.bootstrapJar.archiveFile.get().asFile).withCloseable { zip ->
+            if (!zip.getEntry('org/marshal/wesotest/slices/CallEvent.class') || zip.entries().find { it.name.contains('/asm/') })
+                throw new GradleException('Invalid bootstrap helper isolation')
+        }
+    }
+}
+tasks.register('verifyProbe', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'org.marshal.wesotest.slices.SliceAgentChecks'
+    args layout.buildDirectory.file('probe.jfr').get().asFile.absolutePath
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(providers.gradleProperty('testJavaVersion').getOrElse('21').toInteger())
+    }
+    maxHeapSize = '256m'
+    jvmArgs '-XX:ActiveProcessorCount=2'
+}
+tasks.register('verifyBootstrapProbe', JavaExec) {
+    dependsOn testClasses, verifyAgentJar
+    classpath = sourceSets.test.output + files(shadowJar)
+    mainClass = 'org.marshal.wesotest.slices.SliceAgentChecks'
+    args layout.buildDirectory.file('bootstrap-probe.jfr').get().asFile.absolutePath
+    javaLauncher = tasks.verifyProbe.javaLauncher
+    maxHeapSize = '256m'
+    jvmArgs '-XX:ActiveProcessorCount=2', '-Dweso.bridge.fixture=true', '-Dweso.bridge.sliceDiagnostics=true',
+            "-javaagent:${shadowJar.archiveFile.get().asFile.absolutePath}"
+}
+check.dependsOn verifyAgentJar, verifyProbe, verifyBootstrapProbe
