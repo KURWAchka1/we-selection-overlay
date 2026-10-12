@@ -16,6 +16,8 @@ clients to include the new transport. Do not replace or move the `1.8.0` tag.
   bounded connection state, duplicate-read caching and context cleanup.
 - Optional minor-1 session-close notification before graceful Paper disable;
   client metadata, grants and pending requests are discarded without polling.
+- Separate opt-in 22-byte startup hint: one fresh negotiation after graceful
+  close, with no automatic metadata read, permission polling or retry loop.
 - No recurring server tasks, workers, block reads, clipboard scans, command
   simulation, mutations or automatic selection subscriptions.
 
@@ -192,6 +194,15 @@ Malformed/oversized/wrong-direction messages never reach WorldEdit. Authorizatio
 is rechecked before serving even a cached result; identity comes from the actual
 player connection, not a payload UUID. Duplicate request IDs return the original
 read result, not a promise of a refreshed selection.
+
+The [restart regression](../docs/engineering/BRIDGE_RESTART_RECOVERY_2026-10-12.md)
+verifies graceful disable/re-enable on both native 1.21.11 loaders without
+reconnecting. An already-online listener receives one optional hint per enable;
+only a previously negotiated close arms one fresh handshake. Denied clients do
+not retry. There are no additional server tasks, listeners or retained recovery
+maps; startup work is O(online players), with separate hint byte counters.
+Crowded restarts can exhaust the existing admission budget and fall back to CUI;
+missed signals, ungraceful loss and backend switches are not solved by a heartbeat.
 
 See the [wire contract](../docs/engineering/SERVER_BRIDGE_PROTOCOL.md),
 [engineering design](../docs/engineering/SERVER_BRIDGE_DESIGN.md), and

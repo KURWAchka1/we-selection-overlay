@@ -120,7 +120,8 @@ public final class NativeBridgeChecks {
                 check(invoke(field(overlay, overlay.getClass(), "selectionManager"), "primaryRegionForAnalysis") != null, "Bridge denial broke CUI");
                 if (scenario.equals("allowed")) {
                     rememberContext(); waitFor("reconnect", 23);
-                } else waitFor("disconnect", 9);
+                } else if (scenario.equals("denied")) waitFor("bridgeoff", 35);
+                else waitFor("disconnect", 9);
             } else if (stage == 23 && !adapter.joined() && status().equals("DISCONNECTED")) {
                 verifyCleared(); waitFor("rejoin", 24);
             } else if (stage == 24 && acknowledged("rejoin")) {
@@ -158,11 +159,27 @@ public final class NativeBridgeChecks {
                 System.out.println("NATIVE PAPER CONTEXT PASS: negotiated plugin stop");
                 waitFor("bridgeon", 32);
             } else if (stage == 32 && acknowledged("bridgeon")) {
-                quietTicks = 30; stage = 33;
-            } else if (stage == 33 && --quietTicks <= 0) {
-                check(status().equals("UNAVAILABLE"), "Silent restart reused an old session or retried discovery");
-                verifyCleared();
-                System.out.println("NATIVE PAPER CONTEXT PASS: quiet silent restart");
+                contextStarted = System.nanoTime(); stage = 33;
+            } else if (stage == 33 && recoveredContext("silent plugin restart")) {
+                check(adapter.world() == previousWorld && adapter.player() == previousPlayer,
+                        "Restart replaced gameplay context");
+                quietTicks = 30; stage = 34;
+            } else if (stage == 34 && --quietTicks <= 0) {
+                check(status().equals("READY") && call(null, "selection") == null, "Restart read metadata without consumer");
+                waitFor("restarted", 37);
+            } else if (stage == 37 && acknowledged("restarted")) {
+                call(null, "requestSelection"); stage = 38;
+            } else if (stage == 38 && call(null, "selection") != null) {
+                verifySelection("READY"); waitFor("disconnect", 9);
+            } else if (stage == 35 && acknowledged("bridgeoff")) {
+                check(status().equals("DENIED"), "Shutdown changed denied session");
+                waitFor("bridgeon", 36);
+            } else if (stage == 36 && acknowledged("bridgeon")) {
+                quietTicks = 30; stage = 39;
+            } else if (stage == 39 && --quietTicks <= 0) {
+                check(status().equals("DENIED") && call(null, "selection") == null,
+                        "Restart hint retried or bypassed denial");
+                System.out.println("NATIVE PAPER CONTEXT PASS: denied silent restart stays quiet");
                 waitFor("disconnect", 9);
             }
         } catch (Throwable ex) {

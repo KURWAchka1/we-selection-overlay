@@ -4,6 +4,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeCodec;
+import org.marshal.weaddon_lightposition.bridge.protocol.BridgeRestartHint;
 import org.marshal.weaddon_lightposition.bridge.server.BridgeServer;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -12,6 +13,138 @@ import static org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.*;
 class BridgeClientTest {
     private final UUID player = new UUID(1, 1), nonce = new UUID(2, 2), epoch = new UUID(3, 3);
     private final BridgeClient client = new BridgeClient(() -> nonce);
+
+    @Test void restartHintRenewsOnceAfterCloseAndCannotResurrectOldSession() {
+        var serial = new AtomicLong();
+        var local = new BridgeClient(() -> new UUID(2, serial.incrementAndGet()));
+        local.connect(0);
+        for (int cycle = 1; cycle <= 4; cycle++) {
+            Hello hello = (Hello) BridgeCodec.decode(local.poll(true, cycle), BridgeCodec.Direction.TO_SERVER);
+            UUID currentEpoch = new UUID(3, cycle);
+            byte[] welcome = BridgeCodec.encode(new Welcome(hello.nonce(), currentEpoch, WelcomeStatus.READY,
+                    MAJOR, MINOR, SUPPORTED_CAPABILITIES, 256));
+            local.receive(welcome);
+            local.requestSelection(cycle);
+            byte[] reply = BridgeCodec.encode(new SelectionReply(currentEpoch, 1, SelectionState.unavailable(SelectionStatus.EMPTY)));
+            if (cycle % 2 == 0) local.receive(reply);
+            byte[] closed = BridgeCodec.encode(new SessionClosed(hello.nonce(), currentEpoch));
+            local.receive(closed);
+            local.receiveRestartHint(new byte[22], cycle);
+            if (cycle > 1) local.receiveRestartHint(BridgeRestartHint.encode(new UUID(4, cycle - 1)), cycle);
+            assertEquals(BridgeClient.State.UNAVAILABLE, local.state());
+            assertNull(local.poll(true, cycle));
+            byte[] hint = BridgeRestartHint.encode(new UUID(4, cycle));
+            local.receiveRestartHint(hint, cycle);
+            assertEquals(BridgeClient.State.DISCOVERING, local.state());
+            assertNull(local.selection()); assertFalse(local.pending()); assertEquals(0, local.capabilities());
+            local.receive(welcome); local.receive(reply); local.receive(closed);
+            for (int i = 0; i < 10_000; i++) local.receiveRestartHint(hint, cycle);
+            // Leave the fresh one-shot hello for the next cycle; no read is implied.
+        }
+        assertEquals(4, serial.get() - 1);
+        local.disconnect();
+        local.receiveRestartHint(BridgeRestartHint.encode(new UUID(4, 99)), 10);
+        assertEquals(BridgeClient.State.DISCONNECTED, local.state());
+    }
+
+    @Test void restartHintDoesNotRetryDenialAbsenceTimeoutOrNonNegotiatedStop() {
+        byte[] hint = BridgeRestartHint.encode(new UUID(4, 1));
+        client.connect(0);
+        client.receiveRestartHint(hint, 0);
+        client.poll(true, 0);
+        client.receiveRestartHint(hint, 0);
+        assertNull(client.poll(true, BridgeClient.TIMEOUT_NANOS));
+        for (int i = 0; i < 10_000; i++) {
+            client.receiveRestartHint(BridgeRestartHint.encode(new UUID(4, i + 1)), i);
+            assertNull(client.poll(true, i));
+        }
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state());
+        client.connect(0); client.poll(true, 0);
+        client.receive(BridgeCodec.encode(new Welcome(nonce, NO_EPOCH, WelcomeStatus.DENIED, 1, 1, 0, 256)));
+        client.receiveRestartHint(hint, 1);
+        assertEquals(BridgeClient.State.DENIED, client.state());
+        ready(); client.receive(BridgeCodec.encode(new SessionClosed(nonce, epoch)));
+        client.receiveRestartHint(hint, 1);
+        assertEquals(BridgeClient.State.READY, client.state());
+    }
+
+    @Test void failedRestartConsumesArmUntilAnotherNegotiatedCloseAndContextLossClearsIt() {
+        client.connect(0); client.poll(true, 0);
+        client.receive(BridgeCodec.encode(new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 1, 3, 256)));
+        byte[] close = BridgeCodec.encode(new SessionClosed(nonce, epoch));
+        client.receive(close);
+        client.receiveRestartHint(BridgeRestartHint.encode(new UUID(4, 1)), 1);
+        assertNotNull(client.poll(true, 1));
+        client.receive(close);
+        client.poll(true, BridgeClient.TIMEOUT_NANOS + 1);
+        client.receiveRestartHint(BridgeRestartHint.encode(new UUID(4, 2)), BridgeClient.TIMEOUT_NANOS + 2);
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state());
+        assertNull(client.poll(true, BridgeClient.TIMEOUT_NANOS + 2));
+        client.connect(0); client.poll(true, 0);
+        client.receive(BridgeCodec.encode(new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 1, 3, 256)));
+        client.receive(close); client.poll(false, 1);
+        client.receiveRestartHint(BridgeRestartHint.encode(new UUID(4, 3)), 2);
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state());
+        assertNotNull(client.poll(true, 3));
+    }
+
+    @Test void restartedServerRechecksPermissionAndDoesNotReuseOldGrantsOrMetadata() {
+        var serial = new AtomicLong();
+        var local = new BridgeClient(() -> new UUID(2, serial.incrementAndGet()));
+        BridgeServer.Host allowed = new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { return true; }
+            public SelectionState readSelection(UUID id) { return SelectionState.unavailable(SelectionStatus.EMPTY); }
+        };
+        var old = new BridgeServer(allowed, BridgeServer.Limits.defaults(), () -> 0, () -> epoch);
+        local.connect(0);
+        byte[] oldWelcome = old.receive(player, local.poll(true, 0));
+        local.receive(oldWelcome);
+        byte[] oldReply = old.receive(player, local.requestSelection(0));
+        local.receive(oldReply);
+        old.shutdown((id, frame) -> local.receive(frame));
+        var replacement = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { return false; }
+            public SelectionState readSelection(UUID id) { fail("Denied restart read a session"); return null; }
+        }, BridgeServer.Limits.defaults(), () -> 0, () -> new UUID(3, 4));
+        byte[] hint = BridgeRestartHint.encode(new UUID(4, 1));
+        local.receiveRestartHint(hint, 1);
+        local.receive(oldWelcome); local.receive(oldReply);
+        assertEquals(BridgeClient.State.DISCOVERING, local.state());
+        local.receive(replacement.receive(player, local.poll(true, 1)));
+        assertEquals(BridgeClient.State.DENIED, local.state());
+        assertNull(local.selection()); assertFalse(local.pending()); assertEquals(0, local.capabilities());
+        for (int i = 0; i < 10_000; i++) {
+            local.receiveRestartHint(hint, i); local.receive(oldWelcome); local.receive(oldReply);
+            assertNull(local.poll(true, i)); assertNull(local.requestSelection(i));
+        }
+        assertEquals(1, replacement.metrics().admitted());
+        assertEquals(0, replacement.metrics().selectionReads());
+    }
+
+    @Test void saturatedRestartFailsClosedWithoutBypassingLimitsOrRetryingAfterCapacityReturns() {
+        client.connect(0); client.poll(true, 0);
+        client.receive(BridgeCodec.encode(new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 1, 3, 256)));
+        client.receive(BridgeCodec.encode(new SessionClosed(nonce, epoch)));
+        var replacement = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { return true; }
+            public SelectionState readSelection(UUID id) { fail("Recovery must not read metadata"); return null; }
+        }, new BridgeServer.Limits(1, 1, 1, 1, 1), () -> 0, () -> new UUID(3, 4));
+        UUID other = new UUID(5, 1);
+        assertNotNull(replacement.receive(other, BridgeCodec.encode(new Hello(new UUID(5, 2), 1, 1, 3))));
+        client.receiveRestartHint(BridgeRestartHint.encode(new UUID(4, 1)), 1);
+        assertNull(replacement.receive(player, client.poll(true, 1)), "Recovery bypassed bounded admission");
+        replacement.disconnect(other);
+        client.poll(true, BridgeClient.TIMEOUT_NANOS + 1);
+        for (int i = 0; i < 10_000; i++) {
+            client.receiveRestartHint(BridgeRestartHint.encode(new UUID(4, i + 2)), BridgeClient.TIMEOUT_NANOS + 2 + i);
+            assertNull(client.poll(true, BridgeClient.TIMEOUT_NANOS + 2 + i));
+        }
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state());
+        assertNull(client.selection()); assertEquals(0, client.capabilities());
+        assertEquals(0, replacement.metrics().connections());
+        assertEquals(1, replacement.metrics().admitted());
+        assertEquals(0, replacement.metrics().selectionReads());
+    }
     private void ready() {
         client.connect(0); assertNotNull(client.poll(true, 0));
         client.receive(BridgeCodec.encode(new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 0, 1, 256)));

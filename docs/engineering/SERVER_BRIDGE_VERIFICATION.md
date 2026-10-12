@@ -28,6 +28,13 @@ pending work are cleared without a retry loop; ordinary CUI survives. This close
 graceful-stop invalidation for negotiated peers, **not** automatic silent-restart
 discovery, ungraceful loss, backend-switch or busy-server acceptance gates.
 Other host/version joins and remote features are not marked passed.
+The later [one-shot restart regression](BRIDGE_RESTART_RECOVERY_2026-10-12.md)
+closes the narrow graceful-restart gate for native Fabric/NeoForge 1.21.11:
+an opt-in startup hint triggers one fresh handshake after negotiated close.
+It does not read metadata without a consumer or retry denied/timed-out states.
+Saturated admission is tested as a safe unavailable fallback, not guaranteed
+all-player recovery. Busy-server reconnect bursts, missing/ungraceful lifecycle
+signals, between-tick flaps and backend switches remain unaccepted.
 Published release JARs and the 1.8.0 tag remain unchanged.
 
 ## Evidence Record

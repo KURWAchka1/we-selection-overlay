@@ -5,6 +5,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeCodec;
+import org.marshal.weaddon_lightposition.bridge.protocol.BridgeRestartHint;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage;
 
 import static org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.*;
@@ -20,6 +21,8 @@ public final class BridgeClient {
     private int capabilities;
     private SelectionState selection;
     private boolean channelWasAvailable;
+    private boolean restartArmed;
+    private UUID lastRestartGeneration;
 
     public BridgeClient() { this(UUID::randomUUID); }
     public BridgeClient(Supplier<UUID> nonces) { this.nonces = Objects.requireNonNull(nonces); }
@@ -36,6 +39,8 @@ public final class BridgeClient {
         nonce = null; epoch = null; selection = null;
         requestId = 0; pendingId = 0; capabilities = 0;
         channelWasAvailable = false;
+        restartArmed = false;
+        lastRestartGeneration = null;
     }
 
     /** One hello per context/advertisement edge, no retries/heartbeats. */
@@ -82,8 +87,11 @@ public final class BridgeClient {
                 && (capabilities & SESSION_CLOSE) != 0 && closed.nonce().equals(nonce) && closed.epoch().equals(epoch)) {
             // A still-advertised channel is not a restart edge. Do not retry into a stopped service.
             boolean advertised = channelWasAvailable;
+            UUID generation = lastRestartGeneration;
             disconnect();
             channelWasAvailable = advertised;
+            lastRestartGeneration = generation;
+            restartArmed = true;
             state = State.UNAVAILABLE;
         } else if (message instanceof SelectionReply reply && state == State.READY
                 && reply.epoch().equals(epoch) && pendingId != 0 && reply.requestId() == pendingId) {
@@ -94,6 +102,19 @@ public final class BridgeClient {
                 capabilities = 0;
             }
         }
+    }
+
+    /** One fresh handshake after an opted-in graceful close; hints grant nothing. */
+    public void receiveRestartHint(byte[] frame, long now) {
+        if (state != State.UNAVAILABLE || !restartArmed) return;
+        UUID generation;
+        try { generation = BridgeRestartHint.decode(frame); }
+        catch (IllegalArgumentException ex) { return; }
+        if (generation.equals(lastRestartGeneration)) return;
+        boolean advertised = channelWasAvailable;
+        connect(now);
+        channelWasAvailable = advertised;
+        lastRestartGeneration = generation;
     }
 
     /** On-demand metadata only; enabling a connection does not start a subscription. */

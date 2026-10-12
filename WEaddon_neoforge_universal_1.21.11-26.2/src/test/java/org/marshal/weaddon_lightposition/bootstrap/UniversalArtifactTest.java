@@ -92,7 +92,8 @@ class UniversalArtifactTest {
                 String base = "org/marshal/weaddon_lightposition/runtime/" + id + "/";
                 for (String type : List.of("client/bridge/BridgePayload", "client/bridge/NativeServerBridge",
                         "bridge/client/BridgeClient", "bridge/protocol/BridgeCodec", "bridge/protocol/BridgeMessage",
-                        "bridge/protocol/BridgeMessage$SessionClosed"))
+                        "bridge/protocol/BridgeMessage$SessionClosed", "bridge/protocol/BridgeRestartHint",
+                        "client/bridge/BridgeRestartPayload"))
                     assertNotNull(jar.getEntry(base + type + ".class"), base + type);
             }
             assertFalse(jar.stream().anyMatch(e -> e.getName().contains("/bridge/server/")

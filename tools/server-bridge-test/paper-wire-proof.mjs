@@ -28,6 +28,7 @@ await new Promise((accept, reject) => { portProbe.once('error', reject); portPro
 await new Promise((accept, reject) => portProbe.close(error => error ? reject(error) : accept()));
 rmSync(join(serverDir, 'wire-proof.json'), { force: true });
 const clients = [];
+const restartChannel = 'worldedit_selection_overlay:restart';
 const checks = [];
 const record = name => { checks.push(name); console.log(`PASS: ${name}`); };
 const output = createWriteStream(join(serverDir, 'wire-server.log'));
@@ -71,20 +72,21 @@ async function consoleAction(action, player) {
 async function metrics() {
   const start = lines.length;
   java.stdin.write('wesobridge\n');
-  await waitFor(() => lines.slice(start).some(s => /Selection metadata reads=/.test(s)), 'diagnostic counters');
+  await waitFor(() => lines.slice(start).some(s => /Restart hints=/.test(s)), 'diagnostic counters');
   const a = lines.slice(start).find(s => /connections=/.test(s));
   const b = lines.slice(start).find(s => /Selection metadata reads=/.test(s));
+  const c = lines.slice(start).find(s => /Restart hints=/.test(s));
   const number = (text, key) => Number(text.match(new RegExp(`${key}=(\\d+)`))[1]);
   return { connections: number(a, 'connections'), admitted: number(a, 'admitted'),
     throttled: number(a, 'throttled'), malformed: number(a, 'malformed'),
-    reads: number(b, 'reads'), replies: number(b, 'replies') };
+    reads: number(b, 'reads'), replies: number(b, 'replies'), restartHints: number(c, 'hints'), hintBytes: number(c, 'bytes') };
 }
 async function connect(name, advertise = true) {
   const joinStart = lines.length;
   const client = minecraft.createClient({ host: '127.0.0.1', port: 25579, username: name,
     auth: 'offline', version: '1.21.11', profilesFolder: false,
     clientSettings: { viewDistance: 2 }, disableChatSigning: true });
-  const peer = { client, frames: [], cui: [], advertised: false, serverChannels: new Set(), errors: [], ended: false };
+  const peer = { client, frames: [], restartHints: [], cui: [], advertised: false, serverChannels: new Set(), errors: [], ended: false };
   clients.push(peer);
   client.on('error', error => peer.errors.push(error.message));
   client.on('end', () => { peer.ended = true; });
@@ -98,6 +100,7 @@ async function connect(name, advertise = true) {
       peer.advertised ||= peer.serverChannels.has(channel);
     }
     if (packet.channel === channel) peer.frames.push(Buffer.from(packet.data));
+    if (packet.channel === restartChannel) peer.restartHints.push(Buffer.from(packet.data));
     if (packet.channel === 'worldedit:cui') peer.cui.push(packet.data.toString());
   });
   await waitFor(() => lines.slice(joinStart).some(s => s.includes(`WESO_FIXTURE_JOIN ${name}`)), `join ${name}`);
@@ -225,9 +228,13 @@ try {
   let current = await negotiate(reconnected, 1, 1, 3);
   assert.equal(current.status, 0); assert.equal(current.minor, 1); assert.equal(current.capabilities, 3);
   record('minor-zero remains compatible; close notification alone grants no access; minor-one requires explicit opt-in');
+  for (const peer of [reconnected, denied])
+    peer.client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(restartChannel) });
+  await delay(300);
   let currentEpoch = current.epoch;
   const lifecycle = [];
   for (let cycle = 1; cycle <= 3; cycle++) {
+    const legacyMinorOne = cycle === 3 ? await negotiate(second, 1, 1, 3) : null;
     await consoleAction('bridgeactive', 'WesoAllowed');
     const start = reconnected.frames.length;
     const legacyFrames = second.frames.length, deniedFrames = denied.frames.length;
@@ -236,19 +243,38 @@ try {
     assert.equal(reconnected.frames.length, start + 1, 'Repeated close notification');
     const closed = decode(reconnected.frames[start]);
     assert.equal(closed.opcode, 5); assert.deepEqual(closed.nonce, current.nonce); assert.deepEqual(closed.epoch, current.epoch);
-    assert.equal(second.frames.length, legacyFrames, 'Minor-zero client received an unknown lifecycle opcode');
+    await delay(100);
+    const expectedLegacyFrames = legacyFrames + (legacyMinorOne ? 1 : 0);
+    assert.equal(second.frames.length, expectedLegacyFrames, 'Legacy lifecycle contract changed');
+    if (legacyMinorOne) {
+      const legacyClosed = decode(second.frames[legacyFrames]);
+      assert.equal(legacyClosed.opcode, 5); assert.deepEqual(legacyClosed.nonce, legacyMinorOne.nonce);
+      assert.deepEqual(legacyClosed.epoch, legacyMinorOne.epoch);
+    }
     assert.equal(denied.frames.length, deniedFrames, 'Denied client received a session notification');
     assert.equal(ordinary.frames.length, 0, 'Ordinary client received a bridge payload');
     await consoleAction('channels', 'WesoAllowed');
     await silent(reconnected, request(currentEpoch, 2));
     assert.equal(reconnected.frames.length, start + 1, 'Late duplicate close notification');
-    assert.equal(second.frames.length, legacyFrames, 'Legacy peer received a late lifecycle notification');
+    assert.equal(second.frames.length, expectedLegacyFrames, 'Legacy peer received a late lifecycle notification');
     assert.equal(denied.frames.length, deniedFrames, 'Denied peer received a late lifecycle notification');
     const remoteStillAdvertised = reconnected.serverChannels.has(channel);
+    const hintIndex = reconnected.restartHints.length, deniedHintIndex = denied.restartHints.length;
     await consoleAction('bridgeon', 'WesoAllowed');
     await consoleAction('bridgeactive', 'WesoAllowed');
     const fresh = await metrics();
     assert.equal(fresh.connections, 0); assert.equal(fresh.reads, 0); assert.equal(fresh.replies, 0);
+    assert.equal(fresh.restartHints, 2); assert.equal(fresh.hintBytes, 44);
+    await waitFor(() => reconnected.restartHints.length > hintIndex && denied.restartHints.length > deniedHintIndex, 'opt-in restart hint');
+    assert.equal(reconnected.restartHints.length, hintIndex + 1);
+    assert.equal(denied.restartHints.length, deniedHintIndex + 1);
+    assert.equal(second.restartHints.length, 0, 'Legacy client received an unsupported channel');
+    assert.equal(ordinary.restartHints.length, 0, 'Ordinary client received an unsupported channel');
+    const hint = reconnected.restartHints[hintIndex];
+    assert.equal(hint.length, 22); assert.equal(hint.subarray(0, 6).toString('hex'), '574553520101');
+    assert(!hint.subarray(6).equals(Buffer.alloc(16)), 'Zero startup generation');
+    assert.deepEqual(denied.restartHints[deniedHintIndex], hint, 'Startup created per-player authority tokens');
+    if (hintIndex) assert.notDeepEqual(reconnected.restartHints[hintIndex - 1], hint, 'Restart reused generation');
     await silent(reconnected, request(currentEpoch, 2));
     assert.equal((await metrics()).reads, 0, 'Restart accepted a previous core epoch');
     const welcome = await negotiate(reconnected, 1, 1, 3);
@@ -260,11 +286,15 @@ try {
     assert.equal(beforeQuiet.reads, 1); assert.equal(beforeQuiet.replies, 3, 'Duplicate callback/reply after re-enable');
     await delay(1000);
     assert.deepEqual(await metrics(), beforeQuiet, 'Idle restarted companion performed unsolicited work');
-    lifecycle.push({ cycle, remoteStillAdvertised, sessionClosed: true, legacyNotNotified: true, metrics: beforeQuiet });
+    assert.equal(reconnected.restartHints.length, hintIndex + 1, 'Periodic startup hints');
+    lifecycle.push({ cycle, remoteStillAdvertised, sessionClosed: true, restartHint: hint.toString('hex'),
+      legacyMinor: legacyMinorOne ? 1 : 0, legacyCloseNotified: !!legacyMinorOne, legacyRestartHintNotified: false, metrics: beforeQuiet });
     currentEpoch = welcome.epoch;
     current = welcome;
   }
   record('three same-process plugin disable/enable cycles release resources, reject old epochs and do not duplicate work');
+  record('restart sends one 22-byte hint per opt-in listener, no legacy/ordinary payload, reads or permission bypass');
+  record('previous minor-one client still receives negotiated close only, without an unsupported restart channel');
 
   for (const peer of clients) if (peer !== first && peer !== reconnected) {
     assert(!peer.ended, peer.errors.join(', ')); peer.client.end('verification complete');
@@ -284,6 +314,7 @@ try {
   await consoleAction('bridgeon', 'WesoAllowed');
   await consoleAction('channels', 'WesoAllowed');
   await silent(reconnected, hello(randomBytes(16)));
+  assert.equal(reconnected.restartHints.length, 3, 'Failed dependency startup sent a restart hint');
   record('re-enable with disabled WorldEdit fails closed without channel/listener/task ownership');
   reconnected.client.end('verification complete');
   await waitFor(() => clients.every(p => p.ended), 'client disconnect');

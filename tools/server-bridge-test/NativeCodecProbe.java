@@ -8,6 +8,8 @@ import java.util.UUID;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeCodec;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage;
 import org.marshal.weaddon_lightposition.client.bridge.BridgePayload;
+import org.marshal.weaddon_lightposition.client.bridge.BridgeRestartPayload;
+import org.marshal.weaddon_lightposition.bridge.protocol.BridgeRestartHint;
 
 public final class NativeCodecProbe {
     public static void main(String[] args) throws Exception {
@@ -40,6 +42,23 @@ public final class NativeCodecProbe {
             check(closed.equals(BridgeCodec.decode(decodedClose.bytes(), BridgeCodec.Direction.TO_CLIENT)),
                     "Native close notification failed application decoding");
             check(!buffer.isReadable(), "Native close notification left trailing bytes");
+            byte[] restart = BridgeRestartHint.encode(new UUID(4, 5));
+            var restartPayload = new BridgeRestartPayload(restart);
+            restart[0] = 0;
+            check(restartPayload.bytes()[0] == 0x57, "Restart wrapper leaked input array");
+            var exposedRestart = restartPayload.bytes(); exposedRestart[0] = 0;
+            buffer.clear();
+            encode.invoke(BridgeRestartPayload.CODEC, buffer, restartPayload);
+            byte[] restartBytes = new byte[buffer.readableBytes()]; buffer.getBytes(0, restartBytes);
+            check(Arrays.equals(restartBytes, restartPayload.bytes()), "Restart hint gained framing");
+            var decodedRestart = (BridgeRestartPayload) decode.invoke(BridgeRestartPayload.CODEC, buffer);
+            check(BridgeRestartHint.decode(decodedRestart.bytes()).equals(new UUID(4, 5)), "Restart decode differs");
+            check(!buffer.isReadable(), "Restart decode left trailing bytes");
+            for (int size : new int[]{0, 21, 23, 256, 4096}) {
+                buffer.clear().writeZero(size);
+                var invalid = (BridgeRestartPayload) decode.invoke(BridgeRestartPayload.CODEC, buffer);
+                check(invalid.bytes().length == 0 && !buffer.isReadable(), "Invalid restart payload did not drop boundedly");
+            }
             for (int size : new int[]{0, 5, 257, 4096}) {
                 buffer.clear().writeZero(size);
                 BridgePayload invalid = (BridgePayload) decode.invoke(BridgePayload.CODEC, buffer);

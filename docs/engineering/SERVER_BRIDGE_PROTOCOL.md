@@ -105,9 +105,39 @@ unregisters channels and clears resources if early notification is unavailable.
 
 This does not detect an ungraceful loss without a wire signal or a channel flap
 entirely between availability observations. Minor-zero peers cannot be notified.
-Automatic recovery after silent re-enable is **not implemented**: reconnect,
-a genuine observed re-advertisement edge or a new gameplay context can renew
-discovery. Do not retry on every tick or claim native hot-reload support.
+An additional **optional S2C-only** channel, `worldedit_selection_overlay:restart`,
+supports one-shot discovery after a negotiated graceful close. Its independent
+22-byte frame is magic `0x57455352` (WESR), version u8 `1`, kind u8 `1`, then a
+nonzero startup-generation UUID. It has no length prefix or authority fields;
+all other lengths/headers and the zero UUID are invalid. Application protocol
+1.1 and the original channel's five message layouts are unchanged.
+
+After successful Paper enable, send the same newly generated hint once to each
+already-online player advertising this optional channel. Initial joins use the
+normal hello; there are no registration-triggered replies, per-player recovery
+records, tasks, permission probes or WorldEdit reads. Work is O(online players)
+once per enable, not per tick; hint counts/bytes are separate diagnostics.
+Legacy and ordinary clients not advertising the channel receive no hint.
+
+Only a matching negotiated SessionClosed arms recovery. In UNAVAILABLE the
+first valid new-generation hint consumes that arm, clears old state and starts
+one fresh nonce negotiation. Cache only the last accepted generation to reject
+its duplicate after another close. Malformed hints do not consume the arm;
+hints cannot re-arm it, retry denial/incompatibility/timeouts, or complete a read.
+Channel/context loss clears the arm and generation. A failed recovery remains
+unavailable until a normal fresh context/channel edge, not a recurring retry.
+New grants always require a fresh Welcome and live server authorization.
+The normal aggregate/per-player admission limits also apply to this hello.
+If a crowded restart saturates them, discovery may time out and safely fall back
+to CUI; there is no guaranteed all-player recovery or admission-bypass retry.
+Fair recovery under a simultaneous reconnect burst remains a load/release gate.
+
+The hint is a lifecycle signal on the current ordered game connection, **not**
+a credential or authenticated history of every server generation. An arbitrary
+server replay from an older-than-last generation can consume the single armed
+attempt, but cannot restore old grants or metadata. Ungraceful disappearance,
+missed lifecycle signals and backend switches remain separate gates. Do not
+claim general native hot-reload support or retry on every tick.
 See the earlier [channel/reconnect evidence](BRIDGE_CHANNEL_AND_BASELINE_2026-10-12.md)
 for the separate advertisement-based path.
 

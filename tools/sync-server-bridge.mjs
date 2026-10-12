@@ -11,15 +11,22 @@ const targets = [
   ['WEaddon_neoforge_26.1', '26.1', true], ['WEaddon_neoforge_26.2', '26.2', true]
 ];
 const payload = await fs.readFile(path.join(root, canonical, java, 'bridge/BridgePayload.java'), 'utf8');
+const restartPayload = await fs.readFile(path.join(root, canonical, java, 'bridge/BridgeRestartPayload.java'), 'utf8');
 const transport = await fs.readFile(path.join(root, canonical, java, 'bridge/NativeServerBridge.java'), 'utf8');
 const fabricHooks = `        PayloadTypeRegistry.clientboundPlay().register(BridgePayload.TYPE, BridgePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(BridgePayload.TYPE, BridgePayload.CODEC);
         ClientPlayNetworking.registerGlobalReceiver(BridgePayload.TYPE, (payload, context) -> receive(context.client(), payload));
+        PayloadTypeRegistry.clientboundPlay().register(BridgeRestartPayload.TYPE, BridgeRestartPayload.CODEC);
+        ClientPlayNetworking.registerGlobalReceiver(BridgeRestartPayload.TYPE,
+                (payload, context) -> receiveRestartHint(context.client(), payload));
         ClientTickEvents.END_CLIENT_TICK.register(NativeServerBridge::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> reset());`;
 const neoHooks = `        modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
                 event.registrar("weso-bridge-1").optional().playBidirectional(BridgePayload.TYPE, BridgePayload.CODEC,
                         (payload, context) -> { }, (payload, context) -> receive(Minecraft.getInstance(), payload)));
+        modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
+                event.registrar("weso-bridge-restart-1").optional().playToClient(BridgeRestartPayload.TYPE, BridgeRestartPayload.CODEC,
+                        (payload, context) -> receiveRestartHint(Minecraft.getInstance(), payload)));
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.client.event.ClientTickEvent.Post event) -> tick(Minecraft.getInstance()));
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
@@ -28,6 +35,15 @@ const neoHooks = `        modBus.addListener((net.neoforged.neoforge.network.eve
 function replaceRequired(code, before, after, label) {
   if (!code.includes(before)) throw new Error(`Missing ${label} anchor`);
   return code.replace(before, after);
+}
+
+function yarnPayload(frame) {
+  return frame.replace('net.minecraft.network.codec.StreamCodec', 'net.minecraft.network.codec.PacketCodec')
+    .replace('net.minecraft.network.protocol.common.custom.CustomPacketPayload', 'net.minecraft.network.packet.CustomPayload')
+    .replace('net.minecraft.resources.Identifier', 'net.minecraft.util.Identifier')
+    .replaceAll('CustomPacketPayload', 'CustomPayload').replaceAll('StreamCodec', 'PacketCodec')
+    .replaceAll('Type<', 'Id<').replaceAll('new Type<>', 'new Id<>').replaceAll('type()', 'getId()')
+    .replace('Identifier.fromNamespaceAndPath(', 'Identifier.of(').replace('PacketCodec.of(', 'PacketCodec.ofStatic(');
 }
 
 for (const [module, version, neo] of targets) {
@@ -40,24 +56,20 @@ for (const [module, version, neo] of targets) {
       .replace('ClientPlayNetworking.canSend(BridgePayload.TYPE)', 'client.getConnection().hasChannel(BridgePayload.TYPE)')
       .replace('ClientPlayNetworking.send(new BridgePayload(frame))', 'net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new BridgePayload(frame))');
   } else if (version === 'yarn') {
-    native = native.replace('PayloadTypeRegistry.clientboundPlay()', 'PayloadTypeRegistry.playS2C()')
-      .replace('PayloadTypeRegistry.serverboundPlay()', 'PayloadTypeRegistry.playC2S()');
+    native = native.replaceAll('PayloadTypeRegistry.clientboundPlay()', 'PayloadTypeRegistry.playS2C()')
+      .replaceAll('PayloadTypeRegistry.serverboundPlay()', 'PayloadTypeRegistry.playC2S()');
   }
   if (version === 'yarn') {
     native = native.replaceAll('net.minecraft.client.Minecraft', 'net.minecraft.client.MinecraftClient')
       .replaceAll('Minecraft', 'MinecraftClient').replaceAll('MinecraftClientClient', 'MinecraftClient')
       .replaceAll('.getConnection()', '.getNetworkHandler()').replaceAll('.getSingleplayerServer()', '.getServer()')
       .replaceAll('client.level', 'client.world');
-    frame = frame.replace('net.minecraft.network.codec.StreamCodec', 'net.minecraft.network.codec.PacketCodec')
-      .replace('net.minecraft.network.protocol.common.custom.CustomPacketPayload', 'net.minecraft.network.packet.CustomPayload')
-      .replace('net.minecraft.resources.Identifier', 'net.minecraft.util.Identifier')
-      .replaceAll('CustomPacketPayload', 'CustomPayload').replaceAll('StreamCodec', 'PacketCodec')
-      .replaceAll('Type<', 'Id<').replaceAll('new Type<>', 'new Id<>').replaceAll('type()', 'getId()')
-      .replace('Identifier.fromNamespaceAndPath(', 'Identifier.of(').replace('PacketCodec.of(', 'PacketCodec.ofStatic(');
+    frame = yarnPayload(frame);
   }
   const destination = path.join(root, module, java, 'bridge');
   await fs.mkdir(destination, { recursive: true });
   await fs.writeFile(path.join(destination, 'BridgePayload.java'), frame);
+  await fs.writeFile(path.join(destination, 'BridgeRestartPayload.java'), version === 'yarn' ? yarnPayload(restartPayload) : restartPayload);
   await fs.writeFile(path.join(destination, 'NativeServerBridge.java'), native);
 
   const gradlePath = path.join(root, module, 'build.gradle');

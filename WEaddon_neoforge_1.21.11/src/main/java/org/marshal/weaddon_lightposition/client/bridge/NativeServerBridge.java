@@ -18,6 +18,9 @@ public final class NativeServerBridge {
         modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
                 event.registrar("weso-bridge-1").optional().playBidirectional(BridgePayload.TYPE, BridgePayload.CODEC,
                         (payload, context) -> { }, (payload, context) -> receive(Minecraft.getInstance(), payload)));
+        modBus.addListener((net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) ->
+                event.registrar("weso-bridge-restart-1").optional().playToClient(BridgeRestartPayload.TYPE, BridgeRestartPayload.CODEC,
+                        (payload, context) -> receiveRestartHint(Minecraft.getInstance(), payload)));
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
                 (net.neoforged.neoforge.client.event.ClientTickEvent.Post event) -> tick(Minecraft.getInstance()));
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
@@ -58,6 +61,10 @@ public final class NativeServerBridge {
 
     private static void receive(Minecraft client, BridgePayload payload) {
         if (sameContext(client) && canSend(client)) CLIENT.receive(payload.bytes());
+    }
+
+    private static void receiveRestartHint(Minecraft client, BridgeRestartPayload payload) {
+        if (sameContext(client) && canSend(client)) CLIENT.receiveRestartHint(payload.bytes(), System.nanoTime());
     }
 
     private static boolean sameContext(Minecraft client) {

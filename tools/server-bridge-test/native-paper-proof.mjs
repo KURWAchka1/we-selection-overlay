@@ -88,11 +88,13 @@ async function consoleAction(action, name) {
 async function metrics() {
   const start = server.lines.length;
   server.child.stdin.write('wesobridge\n');
-  await waitFor(() => server.lines.slice(start).some(s => /Selection metadata reads=/.test(s)), 'metrics', 10000);
+  await waitFor(() => server.lines.slice(start).some(s => /Restart hints=/.test(s)), 'metrics', 10000);
   const a = server.lines.slice(start).find(s => /connections=/.test(s));
   const b = server.lines.slice(start).find(s => /Selection metadata reads=/.test(s));
+  const c = server.lines.slice(start).find(s => /Restart hints=/.test(s));
   const number = (line, key) => Number(line.match(new RegExp(`${key}=(\\d+)`))[1]);
-  return { connections: number(a, 'connections'), reads: number(b, 'reads'), replies: number(b, 'replies') };
+  return { connections: number(a, 'connections'), reads: number(b, 'reads'), replies: number(b, 'replies'),
+    restartHints: number(c, 'hints'), hintBytes: number(c, 'bytes') };
 }
 async function runClient(loader, scenario) {
   assert.equal(hash(artifactPaths[loader]), clientHashes[loader], 'Client artifact changed during the matrix');
@@ -111,7 +113,7 @@ async function runClient(loader, scenario) {
     for (; index < client.lines.length; index++) {
       const line = client.lines[index];
       assert(!line.includes('NATIVE PAPER BRIDGE FAIL:'), line);
-      const phase = line.match(/NATIVE PAPER WAIT: (initial|quiet|respawn|nether|overworld|channeloff|channelon|empty|seed|revoke|grant|reconnect|rejoin|rejoined|bridgeoff|bridgeon|disconnect)\s*$/)?.[1];
+      const phase = line.match(/NATIVE PAPER WAIT: (initial|quiet|respawn|nether|overworld|channeloff|channelon|empty|seed|revoke|grant|reconnect|rejoin|rejoined|bridgeoff|bridgeon|restarted|disconnect)\s*$/)?.[1];
       if (!phase) continue;
       if (phase === 'initial' || phase === 'quiet') {
         if (baseline) assert.equal((await metrics()).reads, baseline.reads, 'Hello/idle scanned selection');
@@ -129,14 +131,20 @@ async function runClient(loader, scenario) {
         assert.equal((await metrics()).reads - baseline.reads, 7, 'Reconnect performed unsolicited read');
       } else if (phase === 'bridgeoff') {
         beforeShutdown = await metrics();
-        assert.equal(beforeShutdown.reads - baseline.reads, 8, 'Unexpected source work before shutdown');
+        assert.equal(beforeShutdown.reads - baseline.reads, scenario === 'allowed' ? 8 : 0, 'Unexpected source work before shutdown');
         await consoleAction('bridgeoff', name);
         await consoleAction('channels', name);
       } else if (phase === 'bridgeon') {
         await consoleAction('bridgeon', name);
         await consoleAction('bridgeactive', name);
         const restarted = await metrics();
-        assert.equal(restarted.connections, 0); assert.equal(restarted.reads, 0); assert.equal(restarted.replies, 0);
+        assert.equal(restarted.restartHints, 1); assert.equal(restarted.hintBytes, 22);
+        assert.equal(restarted.reads, 0, 'Restart performed unsolicited selection read');
+        assert(restarted.connections <= (scenario === 'allowed' ? 1 : 0));
+        assert(restarted.replies <= (scenario === 'allowed' ? 1 : 0));
+      } else if (phase === 'restarted') {
+        const restarted = await metrics();
+        assert.equal(restarted.connections, 1); assert.equal(restarted.reads, 0); assert.equal(restarted.replies, 1);
       } else if (phase === 'disconnect' || phase === 'reconnect') {
         server.child.stdin.write(`kick ${name} Verification complete\n`);
       } else await consoleAction(phase, name);
@@ -147,8 +155,9 @@ async function runClient(loader, scenario) {
   await client.drained;
   assert.equal(client.code, 0, client.lines.slice(-30).join('\n'));
   for (const marker of ['CURSOR ISOLATION GUARD PASS:', 'NATIVE PAPER CUI PASS:', `NATIVE PAPER BRIDGE PASS: ${scenario}`]) assert(client.lines.some(s => s.includes(marker)), `Missing ${marker}`);
-  if (scenario === 'allowed') for (const context of ['same-world respawn', 'Nether transition', 'Overworld return', 'channel re-advertisement', 'same-process reconnect', 'negotiated plugin stop', 'quiet silent restart'])
+  if (scenario === 'allowed') for (const context of ['same-world respawn', 'Nether transition', 'Overworld return', 'channel re-advertisement', 'same-process reconnect', 'negotiated plugin stop', 'silent plugin restart'])
     assert(client.lines.some(s => s.includes(`NATIVE PAPER CONTEXT PASS: ${context}`)), `Missing context recovery: ${context}`);
+  if (scenario === 'denied') assert(client.lines.some(s => s.includes('NATIVE PAPER CONTEXT PASS: denied silent restart stays quiet')));
   assert(!client.lines.some(s => s.includes('NATIVE PAPER BRIDGE FAIL:')));
   assert.equal(hash(artifactPaths[loader]), clientHashes[loader], 'Client artifact changed during the run');
   await delay(250);
@@ -159,9 +168,9 @@ async function runClient(loader, scenario) {
   if (final) {
     assert.equal(final.connections, 0, 'Disconnect leaked peers');
     if (scenario === 'allowed') {
-      assert.equal(final.reads, 0, 'Restart scanned a selection');
-      assert.equal(final.replies, 0, 'Restart sent an unsolicited application frame');
-    } else assert.equal(final.reads - baseline.reads, 0, 'Unexpected denied metadata reads');
+      assert.equal(final.reads, 1, 'Restarted source was not explicitly read exactly once');
+      assert.equal(final.replies, 2, 'Restart duplicated negotiation or read');
+    } else { assert.equal(final.reads, 0, 'Unexpected denied metadata reads'); assert.equal(final.replies, 0, 'Denied hint retried hello'); }
   }
   evidence.push({ loader, scenario, baseline, beforeShutdown, final });
   checks.push(`${loader} native 1.21.11 -> Paper: ${scenario}, CUI and disconnect cleanup`);

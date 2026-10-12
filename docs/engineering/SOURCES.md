@@ -397,6 +397,25 @@ restart. Minor/capability negotiation and nonce/epoch matching are our protocol
 policy, verified separately by pure, wire and native tests; documentation of an
 API ordering alone is not cross-version runtime evidence.
 
+## S42 Opt-In Restart Announcement
+
+Checked **2026-10-12**, pinned Paper commit `c5eb079`. The public
+[PluginMessageRecipient contract](https://jd.papermc.io/paper/1.21.11/org/bukkit/plugin/messaging/PluginMessageRecipient.html)
+exposes the listening-channel set and plugin message send operation. The pinned
+[StandardMessenger](https://github.com/PaperMC/Paper/blob/c5eb079/paper-api/src/main/java/org/bukkit/plugin/messaging/StandardMessenger.java)
+requires outgoing registration and an enabled sending plugin. Our experimental
+host registers a normal, separate namespaced outgoing channel and sends only to
+already-online listeners during successful enable, while enabled. It never
+manufactures reserved REGISTER packets or adds a polling task.
+
+The public [PlayerRegisterChannelEvent](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/player/PlayerRegisterChannelEvent.html)
+exists, but this design deliberately adds no reply handler for registration:
+normal joins already negotiate, and repeated registration should not amplify
+startup traffic. One-shot client arming and fresh hello authorization are our
+protocol policy, not guarantees supplied by these Bukkit APIs. Native evidence
+must establish that Fabric and NeoForge advertise the optional S2C receiver and
+deliver its unchanged bytes; compilation alone does not establish this.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

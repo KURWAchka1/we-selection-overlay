@@ -52,6 +52,15 @@ Coverage includes 42 pure tests on each JVM, 17 Node harness checks, six native
 codecs and 132 packager tests. Silent restart remains unavailable until a fresh
 discovery context/advertisement edge; automatic restart recovery is not claimed.
 
+The subsequent [restart-recovery cycle](BRIDGE_RESTART_RECOVERY_2026-10-12.md)
+adds a separate optional 22-byte startup hint without changing main protocol 1.1.
+Both native 1.21.11 loaders now renegotiate once after a correlated graceful close,
+without reconnecting or implicitly reading selection metadata. Denied clients
+remain quiet; ordinary/legacy clients receive no unsupported hint. Coverage is
+50 pure tests per JVM, 17 Node checks, six codecs, 17 Paper wire groups and 132
+packager tests. Saturated admission fails closed without retrying; busy-server
+recovery, missed/ungraceful signals and backend switches are still open gates.
+
 Pure Java 21 messages, bounded codec, client state machine and owning-thread
 server service; optional native transports in all six runtimes; Paper 1.21.11
 host using official WorldEdit 7.4.2 public session APIs. Only hello/capabilities,

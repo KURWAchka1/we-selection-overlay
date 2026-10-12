@@ -22,6 +22,9 @@ public final class NativeServerBridge {
         PayloadTypeRegistry.playS2C().register(BridgePayload.TYPE, BridgePayload.CODEC);
         PayloadTypeRegistry.playC2S().register(BridgePayload.TYPE, BridgePayload.CODEC);
         ClientPlayNetworking.registerGlobalReceiver(BridgePayload.TYPE, (payload, context) -> receive(context.client(), payload));
+        PayloadTypeRegistry.playS2C().register(BridgeRestartPayload.TYPE, BridgeRestartPayload.CODEC);
+        ClientPlayNetworking.registerGlobalReceiver(BridgeRestartPayload.TYPE,
+                (payload, context) -> receiveRestartHint(context.client(), payload));
         ClientTickEvents.END_CLIENT_TICK.register(NativeServerBridge::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> reset());
     }
@@ -60,6 +63,10 @@ public final class NativeServerBridge {
 
     private static void receive(MinecraftClient client, BridgePayload payload) {
         if (sameContext(client) && canSend(client)) CLIENT.receive(payload.bytes());
+    }
+
+    private static void receiveRestartHint(MinecraftClient client, BridgeRestartPayload payload) {
+        if (sameContext(client) && canSend(client)) CLIENT.receiveRestartHint(payload.bytes(), System.nanoTime());
     }
 
     private static boolean sameContext(MinecraftClient client) {

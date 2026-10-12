@@ -23,6 +23,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeCodec;
+import org.marshal.weaddon_lightposition.bridge.protocol.BridgeRestartHint;
 import org.marshal.weaddon_lightposition.bridge.server.BridgeServer;
 
 import static org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.*;
@@ -31,6 +32,7 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
     private BridgeServer bridge;
     private long lastFailureLog;
     private boolean warnedThread;
+    private long restartHints;
 
     @Override public void onEnable() {
         var worldEdit = getServer().getPluginManager().getPlugin("WorldEdit");
@@ -57,10 +59,28 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
         }
         bridge = new BridgeServer(new SelectionHost(), limits, System::nanoTime, UUID::randomUUID);
         getServer().getMessenger().registerOutgoingPluginChannel(this, BridgeCodec.CHANNEL);
+        getServer().getMessenger().registerOutgoingPluginChannel(this, BridgeRestartHint.CHANNEL);
         getServer().getMessenger().registerIncomingPluginChannel(this, BridgeCodec.CHANNEL, this);
         getServer().getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("wesobridge")).setExecutor(this);
         getLogger().info("Experimental read-only bridge enabled. No block scanning or background tasks.");
+        announceRestart();
+    }
+
+    private void announceRestart() {
+        String channel = BridgeRestartHint.CHANNEL;
+        byte[] frame = BridgeRestartHint.encode(UUID.randomUUID());
+        restartHints = 0;
+        // Only lifecycle work: no retained players, permission probes, sessions or retry tasks.
+        for (Player player : getServer().getOnlinePlayers()) {
+            if (!player.getListeningPluginChannels().contains(channel)) continue;
+            try {
+                player.sendPluginMessage(this, channel, frame);
+                restartHints++;
+            } catch (IllegalArgumentException | IllegalStateException ex) {
+                logFailure(ex);
+            }
+        }
     }
 
     @Override public void onDisable() {
@@ -124,6 +144,7 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
                 + ", admitted=" + m.admitted() + ", throttled=" + m.throttled() + ", malformed=" + m.malformed());
         sender.sendMessage("Selection metadata reads=" + m.selectionReads() + ", replies=" + m.replies()
                 + ", reply bytes=" + m.encodedReplyBytes() + ". No block scans, subscriptions or mutations.");
+        sender.sendMessage("Restart hints=" + restartHints + ", hint bytes=" + restartHints * BridgeRestartHint.FRAME_BYTES + ". Lifecycle only.");
         return true;
     }
 

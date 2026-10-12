@@ -139,10 +139,11 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         String channel = "worldedit_selection_overlay:bridge";
         var messenger = getServer().getMessenger();
         var expectedChannels = active ? java.util.Set.of(channel) : java.util.Set.<String>of();
+        var expectedOutgoing = active ? java.util.Set.of(channel, "worldedit_selection_overlay:restart") : java.util.Set.<String>of();
         int listeners = org.bukkit.event.HandlerList.getRegisteredListeners(plugin).size();
         if (plugin.isEnabled() != active
                 || !messenger.getIncomingChannels(plugin).equals(expectedChannels)
-                || !messenger.getOutgoingChannels(plugin).equals(expectedChannels)
+                || !messenger.getOutgoingChannels(plugin).equals(expectedOutgoing)
                 || messenger.getIncomingChannelRegistrations(plugin).size() != (active ? 1 : 0)
                 || listeners != (active ? 5 : 0)
                 || getServer().getScheduler().getPendingTasks().stream().anyMatch(task -> task.getOwner() == plugin)
