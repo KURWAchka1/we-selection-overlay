@@ -35,6 +35,12 @@ It does not read metadata without a consumer or retry denied/timed-out states.
 Saturated admission is tested as a safe unavailable fallback, not guaranteed
 all-player recovery. Busy-server reconnect bursts, missing/ungraceful lifecycle
 signals, between-tick flaps and backend switches remain unaccepted.
+The [32-player load/restart cycle](BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md)
+passes concurrent graceful recovery after traffic settles, own-player metadata,
+flood admission/progress and zero idle reads in two installed runs. It does not
+close saturated recovery, adversarial fairness or busy-server acceptance. New
+long-tick observations remain unattributed and the performance spread is recorded,
+not discarded. Failed-window diagnostics have separate automated tests.
 Published release JARs and the 1.8.0 tag remain unchanged.
 
 ## Evidence Record

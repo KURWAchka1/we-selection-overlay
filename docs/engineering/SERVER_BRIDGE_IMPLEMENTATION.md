@@ -61,6 +61,14 @@ remain quiet; ordinary/legacy clients receive no unsupported hint. Coverage is
 packager tests. Saturated admission fails closed without retrying; busy-server
 recovery, missed/ungraceful signals and backend switches are still open gates.
 
+The later [32-player restart/load proof](BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md)
+checks the same production candidate with 14 measurement windows and six
+concurrent graceful restarts. Each restart sends 32 hints/704 bytes and performs
+zero implicit reads. Flood admission and ordinary requester progress pass;
+all disconnects release tracked peers. Harness self-tests grow to 22. This is
+not native gameplay evidence or restart during continuing flood. Substantial
+MSPT spread and unattributed long ticks leave cost acceptance explicitly open.
+
 Pure Java 21 messages, bounded codec, client state machine and owning-thread
 server service; optional native transports in all six runtimes; Paper 1.21.11
 host using official WorldEdit 7.4.2 public session APIs. Only hello/capabilities,

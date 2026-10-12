@@ -5,8 +5,8 @@ import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '../..');
 const mode = process.argv[2] ?? 'load';
-assert(['load', 'baseline'].includes(mode));
-const directory = join(root, 'build', mode === 'baseline' ? 'bridge-baseline-proof' : 'bridge-load-proof');
+assert(['load', 'baseline', 'restart'].includes(mode));
+const directory = join(root, 'build', mode === 'baseline' ? 'bridge-baseline-proof' : mode === 'restart' ? 'bridge-restart-load-proof' : 'bridge-load-proof');
 const proof = JSON.parse(readFileSync(join(directory, 'load-proof.json'), 'utf8'));
 assert.equal(proof.mode ?? 'load', mode);
 const runs = [...new Set(proof.results.map(result => result.run))];

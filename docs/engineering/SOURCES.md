@@ -416,6 +416,21 @@ protocol policy, not guarantees supplied by these Bukkit APIs. Native evidence
 must establish that Fabric and NeoForge advertise the optional S2C receiver and
 deliver its unchanged bytes; compilation alone does not establish this.
 
+## S43 Admission Is Not Fair Scheduling
+
+Checked **2026-10-12**. Informational [RFC 3290, Appendix A.2 and section 7.1.2](https://www.rfc-editor.org/rfc/rfc3290)
+describes rate/burst token-bucket conformance separately from scheduling service
+disciplines. Our application counts frames, not IP packet bytes: the analogy
+supports distinguishing admission from fair service, not a claim of Diffserv
+compliance or a Minecraft tick-time guarantee. A passing bounded workload does
+not establish starvation freedom for every sender ordering.
+
+[Paper profiling guidance](https://docs.papermc.io/paper/profiling/), rechecked
+today, prefers its bundled spark profiler for Paper workloads. Our bounded local
+JFR measurements complement this; sparse samples are not exact call costs.
+Dedicated busy-server cost acceptance still requires representative workload
+profiling, not simply a 20 TPS result or zero sampled bridge stacks.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

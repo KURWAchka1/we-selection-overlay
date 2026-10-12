@@ -145,6 +145,21 @@ and disconnect cleanup. No native window or system input is involved. It is
 a read-only metadata workload, not clipboard/simulation or production-gameplay
 benchmarking. The test-only fixture must never be deployed to ordinary servers.
 
+For concurrent graceful restart checks, keep the results in a third fixture:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Players 32 -Samples 300 -Repetitions 2 -RestartLoad -AcceptEula
+node tools/server-bridge-test/analyze-load-proof.mjs restart
+```
+
+This uses `build/bridge-restart-load-proof/` and performs three 32-peer restart
+cycles per installed run after flood traffic has settled. Each cycle checks one
+close/hint/hello per peer, fresh epochs, rejection of stale epochs, explicit own
+metadata and quiet counters. `-RestartLoad` and `-ControlledBaseline` are mutually
+exclusive. The [executed 32-player report](../docs/engineering/BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md)
+records successful control/admission checks and unaccepted performance outliers.
+This is not saturated-restart or native-gameplay acceptance.
+
 For the narrower silent-installed-cost comparison, use a separate controlled
 fixture and restore the same frozen saved worlds before every server start:
 

@@ -10,12 +10,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { channel, hello, request, decode } from './wire-codec.mjs';
 import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 import { observeOwnedServer } from './owned-server.mjs';
+import { recordLoadWindow } from './load-window.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode = 'load'] = process.argv.slice(2);
-assert(['load', 'baseline'].includes(mode));
+assert(['load', 'baseline', 'restart'].includes(mode));
 const baselineOnly = mode === 'baseline';
+const restartLoad = mode === 'restart';
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory);
-assert.equal(relative(root, serverDir), join('build', baselineOnly ? 'bridge-baseline-proof' : 'bridge-load-proof'), 'Never operate a user server');
+assert.equal(relative(root, serverDir), join('build', baselineOnly ? 'bridge-baseline-proof' : restartLoad ? 'bridge-restart-load-proof' : 'bridge-load-proof'), 'Never operate a user server');
 const frozen = baselineOnly ? new FrozenFixtureWorld(serverDir) : null;
 let worldDigest;
 const players = Number(playerArgument), samples = Number(sampleArgument), repetitions = Number(repeatArgument);
@@ -37,10 +39,13 @@ const allowedPlugins = new Set(['worldedit.jar', 'weso-paper-test-fixture.jar', 
 assert(readdirSync(join(serverDir, 'plugins')).filter(n => n.endsWith('.jar')).every(n => allowedPlugins.has(n)));
 const companionHash = hash(join(serverDir, 'companion.jar'));
 const results = [], checks = [];
+const lifecycleResults = [];
+const restartChannel = 'worldedit_selection_overlay:restart';
 let cancelled = false;
 process.on('SIGINT', () => { cancelled = true; });
 process.on('SIGTERM', () => { cancelled = true; });
 rmSync(join(serverDir, 'load-proof.json'), { force: true });
+rmSync(join(serverDir, 'load-failure.json'), { force: true });
 
 async function freePort() {
   const probe = createServer();
@@ -96,12 +101,65 @@ async function run(installed, round, prepare = false) {
     if (!installed) return null;
     const start = lines.length;
     java.stdin.write('wesobridge\n');
-    await waitFor(() => lines.slice(start).some(s => s.includes('Selection metadata reads=')), 'bridge counters');
+    await waitFor(() => lines.slice(start).some(s => s.includes('Restart hints=')), 'bridge counters');
     const a = lines.slice(start).find(s => s.includes('connections='));
     const b = lines.slice(start).find(s => s.includes('Selection metadata reads='));
+    const c = lines.slice(start).find(s => s.includes('Restart hints='));
     const number = (line, key) => Number(line.match(new RegExp(`${key}=(\\d+)`))[1]);
     return { connections: number(a, 'connections'), admitted: number(a, 'admitted'), throttled: number(a, 'throttled'),
-      malformed: number(a, 'malformed'), reads: number(b, 'reads'), replies: number(b, 'replies'), bytes: number(b, 'reply bytes') };
+      malformed: number(a, 'malformed'), reads: number(b, 'reads'), replies: number(b, 'replies'), bytes: number(b, 'reply bytes'),
+      restartHints: number(c, 'hints'), hintBytes: number(c, 'bytes') };
+  }
+  async function consoleAction(action) {
+    const start = lines.length;
+    java.stdin.write(`wesofixture ${action} WesoLoad00\n`);
+    await waitFor(() => lines.slice(start).some(s => s.includes(`WESO_FIXTURE_OK ${action} WesoLoad00`)), action);
+  }
+
+  async function restartCycle(cycle) {
+    const before = await counters();
+    const old = peers.map(p => p.welcome);
+    const oldHints = peers.map(p => p.hints.length);
+    const oldClosed = peers.map(p => p.closed);
+    await consoleAction('bridgeoff');
+    await consoleAction('channels');
+    await waitFor(() => peers.every((p, i) => p.closed === oldClosed[i] + 1 && p.restartArmed && p.welcome === null), 'all negotiated closes');
+    await delay(1000);
+    assert(peers.every((p, i) => p.closed === oldClosed[i] + 1 && p.hints.length === oldHints[i]), 'Stopped service sent more control traffic');
+    const started = performance.now();
+    await consoleAction('bridgeon');
+    await consoleAction('bridgeactive');
+    await waitFor(() => peers.every(p => p.welcome), '32-way fresh negotiation');
+    const recoveryMillis = performance.now() - started;
+    const negotiated = await counters();
+    assert.equal(negotiated.connections, players);
+    assert.equal(negotiated.admitted, players);
+    assert.equal(negotiated.replies, players);
+    assert.equal(negotiated.reads, 0, 'Recovery implicitly read metadata');
+    assert.equal(negotiated.restartHints, players); assert.equal(negotiated.hintBytes, players * 22);
+    assert.equal(negotiated.throttled, 0); assert.equal(negotiated.malformed, 0);
+    for (let i = 0; i < peers.length; i++) {
+      const p = peers[i];
+      assert.equal(p.hints.length, oldHints[i] + 1);
+      assert.notDeepEqual(p.welcome.epoch, old[i].epoch);
+      assert.notDeepEqual(p.welcome.nonce, old[i].nonce);
+      assert.equal(p.restartHellos, cycle);
+      // Old epochs cannot read the replacement core even after a fresh hello.
+      p.client.write('custom_payload', { channel, data: request(old[i].epoch, 1) });
+    }
+    await delay(500);
+    assert.equal((await counters()).reads, 0, 'A previous core epoch disclosed metadata');
+    for (const p of peers) {
+      p.client.write('custom_payload', { channel, data: request(p.welcome.epoch, ++p.id) }); p.sent++;
+    }
+    await waitFor(() => peers.every(p => p.lastReplyId === 1n), 'explicit own selection after recovery');
+    const explicit = await counters();
+    assert.equal(explicit.reads, players); assert.equal(explicit.replies, players * 2);
+    await delay(1000);
+    assert.deepEqual(await counters(), explicit, 'Restarted service did background work');
+    const record = { run: runName, cycle, players, recoveryMillis, before, negotiated, explicit };
+    lifecycleResults.push(record);
+    console.log(`PASS ${runName}/restart-${cycle}: ${players} fresh hellos, ${players * 22} hint bytes, recovery=${recoveryMillis.toFixed(1)}ms`);
   }
   async function measure(label) {
     await delay(5000);
@@ -118,26 +176,9 @@ async function run(installed, round, prepare = false) {
     data.connections = after?.connections ?? 0;
     data.sent = peers.map((p, i) => p.sent - sentBefore[i]);
     data.received = peers.map((p, i) => p.replies - repliesBefore[i]);
-    assert.equal(data.samples, samples); assert.equal(data.players, players);
-    assert.equal(data.tickMillis.length, samples); assert(data.wallMillis > 0);
-    assert.equal(data.generatedChunks, 0, 'Measurement unexpectedly generated chunks');
-    if (baselineOnly) assert.equal(data.chunkLoads, 0, 'Controlled silent baseline loaded chunks');
-    if (installed) {
-      assert(data.bridge.admitted <= 100 + Math.ceil(100 * (data.wallMillis / 1000 + .5)));
-      assert.equal(data.bridge.malformed, 0);
-      if (['silent', 'idle', 'recovery'].includes(label)) {
-        assert.equal(data.bridge.reads, 0); assert.equal(data.bridge.bytes, 0); assert.equal(data.bridge.replies, 0);
-      } else {
-        assert(data.bridge.reads > 0);
-        assert(data.received[0] >= Math.floor(data.sent[0] * .9), 'Ordinary requester starved');
-        if (label === 'many') assert(data.received.every(n => n > 0), 'An active player received no reply');
-        if (label === 'flood') assert(data.bridge.throttled > 0, 'Flood did not exercise admission');
-      }
-      if (baselineOnly) assert.equal(data.bridge.admitted, 0, 'Silent baseline admitted application work');
-    }
     const runDirectory = join(serverDir, 'measurements', runName);
     mkdirSync(runDirectory, { recursive: true });
-    writeFileSync(join(runDirectory, `${label}.json`), JSON.stringify(data, null, 2));
+    recordLoadWindow(join(runDirectory, `${label}.json`), data, { players, samples, installed, baselineOnly });
     results.push({ run: runName, worldDigest, ...data, tickMillis: undefined });
     if (baselineOnly) checks.push(`${runName}: identical frozen world, zero chunk loads/generation and silent bridge work`);
     console.log(`PASS ${runName}/${label}: p95=${data.p95.toFixed(3)}ms p99=${data.p99.toFixed(3)}ms reads=${data.bridge?.reads ?? 0}`);
@@ -151,16 +192,42 @@ async function run(installed, round, prepare = false) {
       const name = `WesoLoad${String(index).padStart(2, '0')}`;
       const client = minecraft.createClient({ host: '127.0.0.1', port: 25579, username: name,
         auth: 'offline', version: '1.21.11', profilesFolder: false, clientSettings: { viewDistance: 2 }, disableChatSigning: true });
-      const peer = { client, name, index, errors: [], ended: false, sent: 0, replies: 0, welcome: null, id: 0, next: 0 };
+      const peer = { client, name, index, errors: [], ended: false, sent: 0, replies: 0, welcome: null, id: 0, next: 0,
+        hints: [], closed: 0, restartArmed: false, restartHellos: 0, expectedNonce: null };
       peers.push(peer);
       client.on('error', error => peer.errors.push(error.message));
       client.on('end', () => { peer.ended = true; });
       client.on('custom_payload', packet => {
+        if (packet.channel === restartChannel) {
+          try {
+            assert(restartLoad && installed, 'Unsupported restart hint');
+            const bytes = Buffer.from(packet.data);
+            assert.equal(bytes.length, 22); assert.equal(bytes.subarray(0, 6).toString('hex'), '574553520101');
+            assert(!bytes.subarray(6).equals(Buffer.alloc(16)));
+            const generation = bytes.toString('hex');
+            assert(!peer.hints.includes(generation), 'Repeated startup generation');
+            peer.hints.push(generation);
+            if (peer.restartArmed) {
+              peer.restartArmed = false; peer.restartHellos++;
+              peer.expectedNonce = randomBytes(16);
+              client.write('custom_payload', { channel, data: hello(peer.expectedNonce, 1, 1, 3) });
+            }
+          } catch (error) { peer.errors.push(error.stack); }
+          return;
+        }
         if (packet.channel !== channel) return;
         try {
           assert(installed, 'Absent companion sent bridge traffic');
           const value = decode(Buffer.from(packet.data));
-          if (value.opcode === 2) { assert.equal(value.status, 0); peer.welcome = value; }
+          if (value.opcode === 2) {
+            assert.equal(value.status, 0);
+            if (restartLoad) { assert.deepEqual(value.nonce, peer.expectedNonce); assert.equal(value.capabilities, 3); }
+            peer.welcome = value;
+          } else if (value.opcode === 5) {
+            assert(restartLoad && peer.welcome, 'Unexpected close');
+            assert.deepEqual(value.nonce, peer.welcome.nonce); assert.deepEqual(value.epoch, peer.welcome.epoch);
+            peer.closed++; peer.restartArmed = true; peer.welcome = null; peer.id = 0; peer.lastReplyId = 0n;
+          }
           else {
             assert.equal(value.status, 0); assert.deepEqual(value.epoch, peer.welcome.epoch);
             const x = 100 + index * 16;
@@ -171,7 +238,7 @@ async function run(installed, round, prepare = false) {
         } catch (error) { peer.errors.push(error.stack); }
       });
       await waitFor(() => lines.some(s => s.includes(`WESO_FIXTURE_JOIN ${name}`)), name);
-      client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(channel) });
+      client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(restartLoad ? `${channel}\0${restartChannel}` : channel) });
     }
     if (baselineOnly) {
       const start = lines.length;
@@ -183,7 +250,8 @@ async function run(installed, round, prepare = false) {
     if (installed && !baselineOnly) {
       for (const peer of peers) {
         peer.lastReplyId = 0n;
-        peer.client.write('custom_payload', { channel, data: hello(randomBytes(16)) });
+        peer.expectedNonce = randomBytes(16);
+        peer.client.write('custom_payload', { channel, data: hello(peer.expectedNonce, 1, restartLoad ? 1 : 0, restartLoad ? 3 : 1) });
         await waitFor(() => peer.welcome, `${peer.name} hello`);
       }
       assert.equal((await counters()).reads, 0);
@@ -202,7 +270,12 @@ async function run(installed, round, prepare = false) {
         }
       }, 25);
       for (const name of ['one', 'many', 'flood']) { phase = name; await measure(name); }
-      phase = 'none'; await measure('recovery');
+      phase = 'none';
+      if (restartLoad) {
+        await delay(1500);
+        for (let cycle = 1; cycle <= 3; cycle++) await restartCycle(cycle);
+      }
+      await measure('recovery');
       clearInterval(timer); timer = null;
       disconnecting = true;
       for (const peer of peers) peer.client.end('load verification complete');
@@ -237,7 +310,11 @@ try {
     minecraft: '1.21.11', mode, worldDigest, players, samples, repetitions, javaHome, node: process.version,
     processorModel: cpus()[0]?.model, logicalProcessors: cpus().length,
     serverHash: hash(join(serverDir, 'server.jar')), worldEditHash: hash(join(serverDir, 'plugins/worldedit.jar')),
-    companionHash, checks, results,
+    companionHash, checks, results, lifecycleResults,
     limitations: baselineOnly ? 'Controlled silent baseline from identical frozen world bytes, with random ticks, mob spawning, daylight/weather cycles disabled. Shared laptop, short warmup and stationary headless clients; not busy gameplay or production performance acceptance.' : 'Stationary headless protocol clients on flat loopback fixture; not native GPU clients, busy production gameplay or streaming/simulation cost.' }, null, 2));
   console.log('PAPER BRIDGE LOAD PROOF PASS; all owned processes stopped');
-} catch (error) { console.error(error); process.exitCode = 1; }
+} catch (error) {
+  writeFileSync(join(serverDir, 'load-failure.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
+    mode, players, samples, repetitions, companionHash, error: error.stack, checks, results, lifecycleResults }, null, 2));
+  console.error(error); process.exitCode = 1;
+}
