@@ -5,9 +5,10 @@ import java.util.UUID;
 
 public sealed interface BridgeMessage {
     int MAJOR = 1;
-    int MINOR = 0;
+    int MINOR = 1;
     int SELECTION_READ = 1;
-    int SUPPORTED_CAPABILITIES = SELECTION_READ;
+    int SESSION_CLOSE = 2;
+    int SUPPORTED_CAPABILITIES = SELECTION_READ | SESSION_CLOSE;
     UUID NO_EPOCH = new UUID(0, 0);
 
     enum WelcomeStatus { READY, DENIED, INCOMPATIBLE }
@@ -31,6 +32,7 @@ public sealed interface BridgeMessage {
             unsignedShort(minor);
             if (maxFrameBytes < BridgeCodec.MIN_FRAME_BYTES || maxFrameBytes > BridgeCodec.MAX_FRAME_BYTES
                     || (capabilities & ~SUPPORTED_CAPABILITIES) != 0
+                    || ((capabilities & SESSION_CLOSE) != 0 && (minor < 1 || (capabilities & SELECTION_READ) == 0))
                     || (status != WelcomeStatus.READY && (capabilities != 0 || !epoch.equals(NO_EPOCH)))
                     || (status == WelcomeStatus.READY && (epoch.equals(NO_EPOCH) || capabilities == 0))) {
                 throw new IllegalArgumentException("Invalid welcome");
@@ -47,6 +49,15 @@ public sealed interface BridgeMessage {
             Objects.requireNonNull(epoch);
             Objects.requireNonNull(selection);
             positive(requestId);
+        }
+    }
+
+    /** Negotiated minor-1 notification; never a command or a request for data. */
+    record SessionClosed(UUID nonce, UUID epoch) implements BridgeMessage {
+        public SessionClosed {
+            Objects.requireNonNull(nonce);
+            Objects.requireNonNull(epoch);
+            if (epoch.equals(NO_EPOCH)) throw new IllegalArgumentException("Invalid closed session epoch");
         }
     }
 

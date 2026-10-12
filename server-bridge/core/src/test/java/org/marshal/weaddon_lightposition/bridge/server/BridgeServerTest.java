@@ -1,6 +1,8 @@
 package org.marshal.weaddon_lightposition.bridge.server;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -85,9 +87,11 @@ class BridgeServerTest {
         assertEquals(0, wrong.capabilities());
         Welcome unknown = (Welcome) exchange(server, player, new Hello(nonce, 1, 0, 2));
         assertEquals(WelcomeStatus.DENIED, unknown.status());
+        Welcome unknownBit = (Welcome) exchange(server, player, new Hello(nonce, 1, 1, 4));
+        assertEquals(WelcomeStatus.DENIED, unknownBit.status()); assertEquals(0, unknownBit.capabilities());
         Welcome future = (Welcome) exchange(server, player, new Hello(nonce, 1, 65535, -1));
-        assertEquals(0, future.minor());
-        assertEquals(SELECTION_READ, future.capabilities());
+        assertEquals(MINOR, future.minor());
+        assertEquals(SUPPORTED_CAPABILITIES, future.capabilities());
     }
 
     @Test void aggregateRateIsNotMultipliedByPlayerCount() {
@@ -167,9 +171,9 @@ class BridgeServerTest {
         assertEquals(0, target.metrics().connections());
         time.addAndGet(1_000_000_000L);
         allowed.add(player);
-        assertNotNull(exchange(target, player, new Hello(nonce, 1, 0, 1)));
-        assertEquals(1, target.metrics().connections());
-        assertEquals(101, target.metrics().admitted());
+        assertNull(exchange(target, player, new Hello(nonce, 1, 0, 1)));
+        assertEquals(0, target.metrics().connections());
+        assertEquals(100, target.metrics().admitted());
         assertEquals(0, target.metrics().selectionReads());
     }
 
@@ -217,5 +221,56 @@ class BridgeServerTest {
         assertInstanceOf(IllegalStateException.class, failure.get());
         assertEquals(0, server.metrics().connections());
         assertEquals(0, reads);
+    }
+
+    @Test void closeNotificationsRequireBothMinorAndCapabilityAndNeverAuthorizeData() {
+        allowed.add(player); allowed.add(second);
+        Welcome legacy = (Welcome) exchange(server, player, new Hello(nonce, 1, 0, -1));
+        assertEquals(0, legacy.minor()); assertEquals(SELECTION_READ, legacy.capabilities());
+        Welcome noOptIn = (Welcome) exchange(server, second, new Hello(nonce, 1, 1, SELECTION_READ));
+        assertEquals(SELECTION_READ, noOptIn.capabilities());
+        UUID optedIn = new UUID(1, 3), denied = new UUID(1, 4);
+        allowed.add(optedIn);
+        Welcome modern = (Welcome) exchange(server, optedIn, new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES));
+        assertEquals(SUPPORTED_CAPABILITIES, modern.capabilities());
+        Welcome refused = (Welcome) exchange(server, denied, new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES));
+        assertEquals(WelcomeStatus.DENIED, refused.status());
+        assertEquals(0, refused.capabilities());
+        UUID noSelection = new UUID(1, 5);
+        allowed.add(noSelection);
+        Welcome closeOnly = (Welcome) exchange(server, noSelection, new Hello(nonce, 1, 1, SESSION_CLOSE));
+        assertEquals(WelcomeStatus.DENIED, closeOnly.status());
+        var sent = new HashMap<UUID, BridgeMessage>();
+        server.shutdown((id, bytes) -> {
+            assertNull(server.receive(id, BridgeCodec.encode(new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES))));
+            sent.put(id, BridgeCodec.decode(bytes, BridgeCodec.Direction.TO_CLIENT));
+        });
+        assertEquals(Map.of(optedIn, new SessionClosed(nonce, modern.epoch())), sent);
+        assertEquals(0, reads); assertEquals(0, server.metrics().connections());
+        server.shutdown((id, bytes) -> fail("Repeated shutdown notified twice"));
+        server.close();
+        assertNull(exchange(server, player, new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES)));
+        assertEquals(0, server.metrics().connections());
+    }
+
+    @Test void deniedLegacyWelcomeStaysMinorZeroAndContextResetDropsCloseRecipients() {
+        Welcome denied = hello(player);
+        assertEquals(WelcomeStatus.DENIED, denied.status()); assertEquals(0, denied.minor());
+        allowed.add(player);
+        exchange(server, player, new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES));
+        server.resetContext(player);
+        server.shutdown((id, bytes) -> fail("Invalidated session was notified"));
+        assertEquals(0, reads); assertEquals(0, server.metrics().connections());
+    }
+
+    @Test void failedShutdownSenderStillClearsSessionsAndCannotReopenCore() {
+        allowed.add(player);
+        exchange(server, player, new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES));
+        assertThrows(IllegalStateException.class, () -> server.shutdown((id, bytes) -> {
+            throw new IllegalStateException("test transport failure");
+        }));
+        assertEquals(0, server.metrics().connections()); assertEquals(0, reads);
+        assertNull(exchange(server, player, new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES)));
+        server.shutdown((id, bytes) -> fail("Failed core retried notification"));
     }
 }

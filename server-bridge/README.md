@@ -14,10 +14,12 @@ clients to include the new transport. Do not replace or move the `1.8.0` tag.
   inclusive world height and expand/contract/shift permission bits.
 - Owning-thread enforcement, per-connection and aggregate admission limits,
   bounded connection state, duplicate-read caching and context cleanup.
+- Optional minor-1 session-close notification before graceful Paper disable;
+  client metadata, grants and pending requests are discarded without polling.
 - No recurring server tasks, workers, block reads, clipboard scans, command
   simulation, mutations or automatic selection subscriptions.
 
-The sole implemented capability is **selection metadata read**, not remote
+The sole implemented data capability is **selection metadata read**, not remote
 selection editing. Bounds do not describe non-cuboid geometry; CUI remains its
 source. Existing local previews, isolation, selection editing and UI are not
 rerouted through this prototype. Clipboard synchronization, command previews,
@@ -46,7 +48,7 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-16 harness self-tests (owned-process shutdown, frozen-world safety and wire
+17 harness self-tests (owned-process shutdown, frozen-world safety and wire
 helpers); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
@@ -120,6 +122,10 @@ subsequently verifies three real companion disable/enable cycles, resource
 cleanup and rejection of re-enable with disabled WorldEdit. It also confirms
 that Paper-side channel removal does not withdraw the remote advertisement on
 the pinned host; do not claim automatic native hot-reload recovery.
+The [negotiated-close cycle](../docs/engineering/BRIDGE_SESSION_CLOSE_2026-10-12.md)
+adds a correlated, opt-in notification before graceful disable; minor-zero and
+ordinary clients are not sent the new opcode. Silent restart discovery and
+ungraceful/backend loss are still separate gates, not heartbeat-based retries.
 
 For repeated, bounded server-cost experiments (pinned wire dependencies required):
 

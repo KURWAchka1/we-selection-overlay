@@ -381,6 +381,22 @@ tested on local **Node 24.21.0**, including real child processes. The attempted
 termination, and is idempotent. It never kills by process name or touches an
 unowned process.
 
+## S41 Negotiated Graceful Session Close
+
+Checked **2026-10-12**, Paper build 132 commit `c5eb079`. The pinned [Paper instance manager](https://github.com/PaperMC/Paper/blob/c5eb079/paper-server/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java)
+dispatches `PluginDisableEvent` before `JavaPlugin.setEnabled(false)`. The
+[StandardMessenger validator](https://github.com/PaperMC/Paper/blob/c5eb079/paper-api/src/main/java/org/bukkit/plugin/messaging/StandardMessenger.java)
+rejects plugin messages from a disabled plugin. Consequently our owning-thread
+handler sends negotiated close notifications in that event; `onDisable` only
+performs final cleanup. The existing dependency-disable path disables this
+plugin through the same public manager, reaching its own disable event.
+
+This is a graceful-stop mechanism, not a heartbeat or a hot-reload guarantee.
+Neither source supplies the missing client-visible re-advertisement on plugin
+restart. Minor/capability negotiation and nonce/epoch matching are our protocol
+policy, verified separately by pure, wire and native tests; documentation of an
+API ordering alone is not cross-version runtime evidence.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

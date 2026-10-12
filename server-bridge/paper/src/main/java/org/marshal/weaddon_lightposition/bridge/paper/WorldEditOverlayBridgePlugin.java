@@ -101,8 +101,19 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
     }
 
     @EventHandler public void onDependencyDisable(PluginDisableEvent event) {
+        if (event.getPlugin() == this && bridge != null) bridge.shutdown(this::sendSessionClosed);
         if (event.getPlugin().getName().equals("WorldEdit"))
             getServer().getPluginManager().disablePlugin(this);
+    }
+
+    private void sendSessionClosed(UUID id, byte[] frame) {
+        Player player = getServer().getPlayer(id);
+        if (player == null || !player.isOnline() || !player.getListeningPluginChannels().contains(BridgeCodec.CHANNEL)) return;
+        try {
+            player.sendPluginMessage(this, BridgeCodec.CHANNEL, frame);
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            logFailure(ex);
+        }
     }
 
     @Override public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
@@ -162,7 +173,7 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
         long now = System.nanoTime();
         if (lastFailureLog == 0 || now - lastFailureLog >= 30_000_000_000L) {
             lastFailureLog = now;
-            getLogger().log(Level.WARNING, "WorldEdit bridge selection API failed.", ex);
+            getLogger().log(Level.WARNING, "WorldEdit bridge host operation failed.", ex);
         }
     }
 }

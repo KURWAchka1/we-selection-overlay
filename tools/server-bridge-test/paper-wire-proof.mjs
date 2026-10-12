@@ -113,8 +113,8 @@ async function connect(name, advertise = true) {
   };
   return peer;
 }
-async function negotiate(peer, major = 1) {
-  const nonce = randomBytes(16), response = await peer.exchange(hello(nonce, major));
+async function negotiate(peer, major = 1, minor = 0, capabilities = 1) {
+  const nonce = randomBytes(16), response = await peer.exchange(hello(nonce, major, minor, capabilities));
   assert.equal(response.value.opcode, 2); assert.deepEqual(response.value.nonce, nonce);
   assert.equal(response.value.frameBytes, 256);
   return response.value;
@@ -145,6 +145,7 @@ try {
   record('normal CUI works independently for granted and bridge-denied clients');
   const a = await negotiate(first), b = await negotiate(second);
   assert.equal(a.status, 0); assert.equal(b.status, 0); assert.equal(a.capabilities, 1);
+  assert.equal(a.minor, 0); assert.equal(b.minor, 0);
   assert.notDeepEqual(a.epoch, b.epoch);
   await delay(1500);
   assert.equal((await metrics()).reads, 0);
@@ -217,13 +218,32 @@ try {
   assert.equal((await reconnected.exchange(request(newConnection.epoch, 1))).value.status, 0);
   record('same offline identity reconnects in this server process without retaining old epoch');
 
-  let currentEpoch = newConnection.epoch;
+  const closeOnly = await negotiate(reconnected, 1, 1, 2);
+  assert.equal(closeOnly.status, 1); assert.equal(closeOnly.capabilities, 0);
+  const downgrade = await negotiate(reconnected, 1, 0, 3);
+  assert.equal(downgrade.status, 0); assert.equal(downgrade.minor, 0); assert.equal(downgrade.capabilities, 1);
+  let current = await negotiate(reconnected, 1, 1, 3);
+  assert.equal(current.status, 0); assert.equal(current.minor, 1); assert.equal(current.capabilities, 3);
+  record('minor-zero remains compatible; close notification alone grants no access; minor-one requires explicit opt-in');
+  let currentEpoch = current.epoch;
   const lifecycle = [];
   for (let cycle = 1; cycle <= 3; cycle++) {
     await consoleAction('bridgeactive', 'WesoAllowed');
+    const start = reconnected.frames.length;
+    const legacyFrames = second.frames.length, deniedFrames = denied.frames.length;
     await consoleAction('bridgeoff', 'WesoAllowed');
+    await waitFor(() => reconnected.frames.length > start, 'negotiated close before channel cleanup');
+    assert.equal(reconnected.frames.length, start + 1, 'Repeated close notification');
+    const closed = decode(reconnected.frames[start]);
+    assert.equal(closed.opcode, 5); assert.deepEqual(closed.nonce, current.nonce); assert.deepEqual(closed.epoch, current.epoch);
+    assert.equal(second.frames.length, legacyFrames, 'Minor-zero client received an unknown lifecycle opcode');
+    assert.equal(denied.frames.length, deniedFrames, 'Denied client received a session notification');
+    assert.equal(ordinary.frames.length, 0, 'Ordinary client received a bridge payload');
     await consoleAction('channels', 'WesoAllowed');
     await silent(reconnected, request(currentEpoch, 2));
+    assert.equal(reconnected.frames.length, start + 1, 'Late duplicate close notification');
+    assert.equal(second.frames.length, legacyFrames, 'Legacy peer received a late lifecycle notification');
+    assert.equal(denied.frames.length, deniedFrames, 'Denied peer received a late lifecycle notification');
     const remoteStillAdvertised = reconnected.serverChannels.has(channel);
     await consoleAction('bridgeon', 'WesoAllowed');
     await consoleAction('bridgeactive', 'WesoAllowed');
@@ -231,7 +251,7 @@ try {
     assert.equal(fresh.connections, 0); assert.equal(fresh.reads, 0); assert.equal(fresh.replies, 0);
     await silent(reconnected, request(currentEpoch, 2));
     assert.equal((await metrics()).reads, 0, 'Restart accepted a previous core epoch');
-    const welcome = await negotiate(reconnected);
+    const welcome = await negotiate(reconnected, 1, 1, 3);
     assert.notDeepEqual(welcome.epoch, currentEpoch);
     const read = await reconnected.exchange(request(welcome.epoch, 1));
     assert.deepEqual(read.value.bounds, one.value.bounds);
@@ -240,8 +260,9 @@ try {
     assert.equal(beforeQuiet.reads, 1); assert.equal(beforeQuiet.replies, 3, 'Duplicate callback/reply after re-enable');
     await delay(1000);
     assert.deepEqual(await metrics(), beforeQuiet, 'Idle restarted companion performed unsolicited work');
-    lifecycle.push({ cycle, remoteStillAdvertised, metrics: beforeQuiet });
+    lifecycle.push({ cycle, remoteStillAdvertised, sessionClosed: true, legacyNotNotified: true, metrics: beforeQuiet });
     currentEpoch = welcome.epoch;
+    current = welcome;
   }
   record('three same-process plugin disable/enable cycles release resources, reject old epochs and do not duplicate work');
 
@@ -251,7 +272,12 @@ try {
   await waitFor(() => clients.filter(p => p !== reconnected).every(p => p.ended), 'other clients disconnect');
   await delay(200);
   assert.equal((await metrics()).connections, 1);
+  const dependencyStop = reconnected.frames.length;
   await consoleAction('stopwe', 'WesoAllowed');
+  await waitFor(() => reconnected.frames.length > dependencyStop, 'WorldEdit dependency stop notification');
+  assert.equal(reconnected.frames.length, dependencyStop + 1);
+  const closed = decode(reconnected.frames[dependencyStop]);
+  assert.equal(closed.opcode, 5); assert.deepEqual(closed.nonce, current.nonce); assert.deepEqual(closed.epoch, currentEpoch);
   await consoleAction('channels', 'WesoAllowed');
   await silent(reconnected, request(currentEpoch, 2));
   record('WorldEdit disable also disables companion and unregisters both channel directions');

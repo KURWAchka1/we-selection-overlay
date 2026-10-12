@@ -36,3 +36,16 @@ test('non-ready states do not imply a bounds payload', () => {
   const value = decode(bytes);
   assert.equal(value.status, 3); assert.equal(value.bounds, undefined);
 });
+
+test('minor-one opt-in and session close match Java golden bytes without altering legacy hello', () => {
+  const nonce = Buffer.from('00000000000000000000000000000001', 'hex');
+  const epoch = Buffer.from('00000000000000020000000000000003', 'hex');
+  assert.equal(hello(nonce, 1, 1, 3).toString('hex'),
+    '5745534f0101000000000000000000000000000000010001000100000003');
+  const bytes = Buffer.from('5745534f01050000000000000000000000000000000100000000000000020000000000000003', 'hex');
+  assert.deepEqual(decode(bytes), { opcode: 5, nonce, epoch });
+  for (let length = 0; length < bytes.length; length++) assert.throws(() => decode(bytes.subarray(0, length)));
+  assert.throws(() => decode(Buffer.concat([bytes, Buffer.alloc(1)])));
+  const zeroEpoch = Buffer.from(bytes); zeroEpoch.fill(0, 22);
+  assert.throws(() => decode(zeroEpoch));
+});

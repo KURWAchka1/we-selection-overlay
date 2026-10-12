@@ -30,6 +30,16 @@ public final class NativeCodecProbe {
             check(!buffer.isReadable(), "Native decode left trailing bytes");
             check(BridgeCodec.decode(decoded.bytes(), BridgeCodec.Direction.TO_SERVER) instanceof BridgeMessage.Hello,
                     "Application decode failed");
+            var closed = new BridgeMessage.SessionClosed(new UUID(0, 1), new UUID(2, 3));
+            byte[] closedBytes = BridgeCodec.encode(closed);
+            buffer.clear();
+            encode.invoke(BridgePayload.CODEC, buffer, new BridgePayload(closedBytes));
+            byte[] actualClose = new byte[buffer.readableBytes()]; buffer.getBytes(0, actualClose);
+            check(Arrays.equals(actualClose, closedBytes), "Native close notification gained framing");
+            var decodedClose = (BridgePayload) decode.invoke(BridgePayload.CODEC, buffer);
+            check(closed.equals(BridgeCodec.decode(decodedClose.bytes(), BridgeCodec.Direction.TO_CLIENT)),
+                    "Native close notification failed application decoding");
+            check(!buffer.isReadable(), "Native close notification left trailing bytes");
             for (int size : new int[]{0, 5, 257, 4096}) {
                 buffer.clear().writeZero(size);
                 BridgePayload invalid = (BridgePayload) decode.invoke(BridgePayload.CODEC, buffer);

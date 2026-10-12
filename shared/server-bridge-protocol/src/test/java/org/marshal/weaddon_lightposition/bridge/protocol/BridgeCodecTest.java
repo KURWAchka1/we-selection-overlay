@@ -18,9 +18,21 @@ class BridgeCodecTest {
                 HexFormat.of().formatHex(BridgeCodec.encode(new Hello(nonce, 1, 0, 1))));
     }
 
+    @Test void negotiatedSessionCloseHasStableWireBytesAndRejectsZeroEpoch() {
+        assertEquals("5745534f01050000000000000000000000000000000100000000000000020000000000000003",
+                HexFormat.of().formatHex(BridgeCodec.encode(new SessionClosed(nonce, epoch))));
+        assertThrows(IllegalArgumentException.class, () -> new SessionClosed(nonce, NO_EPOCH));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 0, SELECTION_READ | SESSION_CLOSE, 256));
+        assertThrows(IllegalArgumentException.class,
+                () -> new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 1, SESSION_CLOSE, 256));
+    }
+
     @Test void allMessagesRoundTripAndRejectWrongDirection() {
         List<BridgeMessage> messages = List.of(new Hello(nonce, 65535, 65535, -1),
                 new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 0, 1, 256),
+                new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 1, SELECTION_READ | SESSION_CLOSE, 256),
+                new SessionClosed(nonce, epoch),
                 new Welcome(nonce, NO_EPOCH, WelcomeStatus.DENIED, 1, 0, 0, 256),
                 new SelectionRequest(epoch, Long.MAX_VALUE),
                 new SelectionReply(epoch, 1, new SelectionState(SelectionStatus.READY,
@@ -90,8 +102,8 @@ class BridgeCodecTest {
     @Test void structuredFuzzReachesEveryOpcodeAndNeverEscapesDomainErrors() {
         Random random = new Random(622419);
         int accepted = 0;
-        int[] lengths = {30, 49, 30, 64};
-        for (int opcode = 1; opcode <= 4; opcode++) {
+        int[] lengths = {30, 49, 30, 64, 38};
+        for (int opcode = 1; opcode <= 5; opcode++) {
             for (int i = 0; i < 25_000; i++) {
                 byte[] frame = new byte[i % 2 == 0 ? lengths[opcode - 1] : random.nextInt(257)];
                 random.nextBytes(frame);
@@ -110,7 +122,7 @@ class BridgeCodecTest {
     @Test void everySingleBitMutationHasACanonicalResultOrDomainRejection() {
         List<BridgeMessage> messages = List.of(new Hello(nonce, 1, 0, 1),
                 new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 0, 1, 256),
-                new SelectionRequest(epoch, 123),
+                new SelectionRequest(epoch, 123), new SessionClosed(nonce, epoch),
                 new SelectionReply(epoch, 123, new SelectionState(SelectionStatus.READY,
                         new Bounds(-17, -64, -1, 33, 319, 16), -64, 319, 7)),
                 new SelectionReply(epoch, 123, SelectionState.unavailable(SelectionStatus.DENIED)));

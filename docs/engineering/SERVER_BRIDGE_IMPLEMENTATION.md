@@ -42,12 +42,21 @@ The [server lifecycle and harness audit](BRIDGE_SERVER_LIFECYCLE_2026-10-12.md)
 adds an enabled-WorldEdit startup guard after a real failing fixture, 14 wire
 check groups including three plugin cycles, and 16 automated Node harness tests.
 It changes only the experimental companion and test tools, not client JARs or
-the wire schema. Silent-stop recovery remains explicitly unimplemented.
+the wire schema. That cycle confirms the silent-stop gap rather than closing it.
+
+The [negotiated-close cycle](BRIDGE_SESSION_CLOSE_2026-10-12.md) adds experimental
+minor-1/capability opt-in and a nonce/epoch-bound SessionClosed frame before
+graceful Paper disable. Both native 1.21.11 loaders discard cached metadata,
+grants and pending work while preserving CUI and their gameplay connection.
+Coverage includes 42 pure tests on each JVM, 17 Node harness checks, six native
+codecs and 132 packager tests. Silent restart remains unavailable until a fresh
+discovery context/advertisement edge; automatic restart recovery is not claimed.
 
 Pure Java 21 messages, bounded codec, client state machine and owning-thread
 server service; optional native transports in all six runtimes; Paper 1.21.11
-host using official WorldEdit 7.4.2 public session APIs. Only hello/capabilities
-and explicit **read-only selection bounds/height/grants** are implemented.
+host using official WorldEdit 7.4.2 public session APIs. Only hello/capabilities,
+negotiated lifecycle notification and explicit **read-only selection
+bounds/height/grants** are implemented.
 See [wire schema](SERVER_BRIDGE_PROTOCOL.md) and [build instructions](../../server-bridge/README.md).
 
 No server polling tasks, workers, block/chunk reads, clipboard subscriptions,

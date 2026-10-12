@@ -1,6 +1,6 @@
 # Bridge Transport: Experimental Read-Only Schema
 
-Date: 2026-10-11. Implementation: `0.1.0-dev`. This schema is **experimental**;
+Updated: 2026-10-12. Implementation: `0.1.0-dev`. This schema is **experimental**;
 numeric version 1 does not establish a released stable protocol. Unsupported
 capabilities are not advertised just because the longer-term design mentions them.
 
@@ -30,11 +30,16 @@ The following fields come **after** the six-byte header, in this exact order.
 | 2 Welcome | Server -> client | echoed nonce UUID, server epoch UUID, status u8, major u16, minor u16, granted capabilities i32, max frame bytes u16 | 49 |
 | 3 SelectionRequest | Client -> server | epoch UUID, request ID i64 | 30 |
 | 4 SelectionReply | Server -> client | epoch UUID, request ID i64, selection status u8, optional ready fields below | 31 or 64 |
+| 5 SessionClosed | Server -> client | echoed nonce UUID, closed epoch UUID (nonzero) | 38 |
 
-Current application version: major `1`, minor `0`. A different major produces
+Current application version: major `1`, minor `1`. A different major produces
 an incompatible welcome with no grants. Negotiate the lower supported minor;
-unknown requested capability bits are ignored, not authorized. The sole current
-bit is `0x01`: **read own selection metadata**. It is not a write/edit grant.
+unknown requested capability bits are ignored, not authorized. Capability `0x01`
+means **read own selection metadata**, not a write/edit grant. Optional `0x02`
+means **session-close notification**, available only at minor >= 1, explicitly
+requested and together with an authorized selection-read grant. Requesting only
+notifications does not authorize a session. Minor-zero clients retain their
+original four-message contract; every welcome status uses the negotiated minor.
 
 Welcome status values: `0 READY`, `1 DENIED`, `2 INCOMPATIBLE`.
 Non-ready welcomes grant no capabilities and use the zero UUID epoch. A ready
@@ -84,12 +89,30 @@ nonce negotiation, including a channel first advertised after discovery timeout.
 Constant channel availability never retries a denied or timed-out handshake.
 Receiving frames also requires the native channel to remain available.
 These checks add no permission polling, metadata subscription or heartbeat.
-They cannot detect a silent server-side plugin shutdown with no wire signal, or
-an unregister/register pair entirely between availability observations; those
-remain separate lifecycle gates. See the [channel/reconnect evidence](BRIDGE_CHANNEL_AND_BASELINE_2026-10-12.md).
+At minor 1 with `0x02` granted, a matching SessionClosed also immediately discards
+metadata, grants, nonce, epoch and pending request. Match both nonce and epoch;
+ignore unsolicited, duplicate, old-context and non-negotiated notifications.
+The native channel may remain advertised: keep that observation so constant
+availability cannot start a retry loop. Late welcomes/replies cannot resurrect
+closed state. Existing CUI is independent and remains usable.
+
+On graceful Paper disable, send the notification from `PluginDisableEvent`
+**before** the plugin loses send authority, never from `onDisable`. Send only
+to negotiated live sessions, at most one 38-byte frame per bounded core peer;
+then close the core terminally and release its records. No tasks, subscriptions,
+WorldEdit reads or retained recovery registry are introduced. `onDisable` still
+unregisters channels and clears resources if early notification is unavailable.
+
+This does not detect an ungraceful loss without a wire signal or a channel flap
+entirely between availability observations. Minor-zero peers cannot be notified.
+Automatic recovery after silent re-enable is **not implemented**: reconnect,
+a genuine observed re-advertisement edge or a new gameplay context can renew
+discovery. Do not retry on every tick or claim native hot-reload support.
+See the earlier [channel/reconnect evidence](BRIDGE_CHANNEL_AND_BASELINE_2026-10-12.md)
+for the separate advertisement-based path.
 
 Handlers are owned by their platform game thread. Cheap frame/admission checks
 precede application decoding and session access. Invalid or throttled traffic is
 dropped without per-packet logging; quotas apply globally as well as per player.
-No unsolicited state stream, background polling, mutation acknowledgment or
+No unsolicited selection stream, background polling, mutation acknowledgment or
 clipboard/command-preview operation exists in this schema.

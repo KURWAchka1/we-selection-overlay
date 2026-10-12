@@ -78,6 +78,13 @@ public final class BridgeClient {
             epoch = welcome.epoch();
             capabilities = welcome.capabilities() & SUPPORTED_CAPABILITIES;
             state = capabilities == 0 ? State.UNAVAILABLE : State.READY;
+        } else if (message instanceof SessionClosed closed && state == State.READY
+                && (capabilities & SESSION_CLOSE) != 0 && closed.nonce().equals(nonce) && closed.epoch().equals(epoch)) {
+            // A still-advertised channel is not a restart edge. Do not retry into a stopped service.
+            boolean advertised = channelWasAvailable;
+            disconnect();
+            channelWasAvailable = advertised;
+            state = State.UNAVAILABLE;
         } else if (message instanceof SelectionReply reply && state == State.READY
                 && reply.epoch().equals(epoch) && pendingId != 0 && reply.requestId() == pendingId) {
             pendingId = 0;

@@ -21,6 +21,12 @@ adds three real companion disable/enable cycles and a reproduced/fixed guard
 against startup with disabled WorldEdit. All three stops left the remote channel
 advertised; automatic native silent-stop recovery remains a release blocker.
 The shared process runner rejects failed/forced shutdowns before proof publication.
+The subsequent [negotiated-close regression](BRIDGE_SESSION_CLOSE_2026-10-12.md)
+implements opt-in minor-1 graceful-stop invalidation and tests it on both native
+1.21.11 loaders while the channel remains advertised. Cached data, grants and
+pending work are cleared without a retry loop; ordinary CUI survives. This closes
+graceful-stop invalidation for negotiated peers, **not** automatic silent-restart
+discovery, ungraceful loss, backend-switch or busy-server acceptance gates.
 Other host/version joins and remote features are not marked passed.
 Published release JARs and the 1.8.0 tag remain unchanged.
 

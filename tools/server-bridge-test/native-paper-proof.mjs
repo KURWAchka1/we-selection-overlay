@@ -44,7 +44,9 @@ async function waitFor(predicate, label, timeout = 180000) {
 }
 function capture(child, path) {
   const log = createWriteStream(path), lines = [];
-  const state = { child, lines, exited: false, code: null, log };
+  const drained = new Promise((resolve, reject) => { log.once('finish', resolve); log.once('error', reject); });
+  drained.catch(() => {});
+  const state = { child, lines, exited: false, code: null, log, drained };
   for (const stream of [child.stdout, child.stderr]) {
     let pending = '';
     stream.on('data', bytes => {
@@ -73,7 +75,10 @@ async function startServer(companion) {
   assert.equal(server.lines.some(s => s.includes('Experimental read-only bridge enabled')), companion);
 }
 async function stopServer() {
-  if (server) await server.lifecycle.stop({ graceMillis: 20000 });
+  if (server) {
+    try { await server.lifecycle.stop({ graceMillis: 20000 }); }
+    finally { if (server.exited) await server.drained; }
+  }
 }
 async function consoleAction(action, name) {
   const start = server.lines.length;
@@ -98,7 +103,7 @@ async function runClient(loader, scenario) {
   const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-File', join(root, 'tools/test-command-matrix.ps1'), '-Java21', javaHome, '-Java25', javaHome, '-Only', `${loader}-1.21.11`, '-ModVersion', modVersion, '-NativeBridgeScenario', scenario, '-NativeBridgeControl', control, '-DesktopWorker'], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   client = capture(child, join(serverDir, `${loader}-${scenario}.log`));
   let index = 0;
-  let channelReads;
+  let channelReads, beforeShutdown;
   const end = Date.now() + 300000;
   while (!client.exited) {
     assert(Date.now() < end && !cancelled, 'Native client timeout/cancellation');
@@ -106,7 +111,7 @@ async function runClient(loader, scenario) {
     for (; index < client.lines.length; index++) {
       const line = client.lines[index];
       assert(!line.includes('NATIVE PAPER BRIDGE FAIL:'), line);
-      const phase = line.match(/NATIVE PAPER WAIT: (initial|quiet|respawn|nether|overworld|channeloff|channelon|empty|seed|revoke|grant|reconnect|rejoin|rejoined|disconnect)\s*$/)?.[1];
+      const phase = line.match(/NATIVE PAPER WAIT: (initial|quiet|respawn|nether|overworld|channeloff|channelon|empty|seed|revoke|grant|reconnect|rejoin|rejoined|bridgeoff|bridgeon|disconnect)\s*$/)?.[1];
       if (!phase) continue;
       if (phase === 'initial' || phase === 'quiet') {
         if (baseline) assert.equal((await metrics()).reads, baseline.reads, 'Hello/idle scanned selection');
@@ -122,6 +127,16 @@ async function runClient(loader, scenario) {
         assert.equal((await metrics()).connections, 0, 'First disconnect leaked peers');
       } else if (phase === 'rejoined') {
         assert.equal((await metrics()).reads - baseline.reads, 7, 'Reconnect performed unsolicited read');
+      } else if (phase === 'bridgeoff') {
+        beforeShutdown = await metrics();
+        assert.equal(beforeShutdown.reads - baseline.reads, 8, 'Unexpected source work before shutdown');
+        await consoleAction('bridgeoff', name);
+        await consoleAction('channels', name);
+      } else if (phase === 'bridgeon') {
+        await consoleAction('bridgeon', name);
+        await consoleAction('bridgeactive', name);
+        const restarted = await metrics();
+        assert.equal(restarted.connections, 0); assert.equal(restarted.reads, 0); assert.equal(restarted.replies, 0);
       } else if (phase === 'disconnect' || phase === 'reconnect') {
         server.child.stdin.write(`kick ${name} Verification complete\n`);
       } else await consoleAction(phase, name);
@@ -129,19 +144,26 @@ async function runClient(loader, scenario) {
     }
     await delay(50);
   }
+  await client.drained;
   assert.equal(client.code, 0, client.lines.slice(-30).join('\n'));
   for (const marker of ['CURSOR ISOLATION GUARD PASS:', 'NATIVE PAPER CUI PASS:', `NATIVE PAPER BRIDGE PASS: ${scenario}`]) assert(client.lines.some(s => s.includes(marker)), `Missing ${marker}`);
-  if (scenario === 'allowed') for (const context of ['same-world respawn', 'Nether transition', 'Overworld return', 'channel re-advertisement', 'same-process reconnect'])
+  if (scenario === 'allowed') for (const context of ['same-world respawn', 'Nether transition', 'Overworld return', 'channel re-advertisement', 'same-process reconnect', 'negotiated plugin stop', 'quiet silent restart'])
     assert(client.lines.some(s => s.includes(`NATIVE PAPER CONTEXT PASS: ${context}`)), `Missing context recovery: ${context}`);
   assert(!client.lines.some(s => s.includes('NATIVE PAPER BRIDGE FAIL:')));
   assert.equal(hash(artifactPaths[loader]), clientHashes[loader], 'Client artifact changed during the run');
   await delay(250);
+  if (scenario === 'allowed') {
+    assert(beforeShutdown, 'Shutdown phase was not observed');
+  }
   const final = baseline ? await metrics() : null;
   if (final) {
     assert.equal(final.connections, 0, 'Disconnect leaked peers');
-    assert.equal(final.reads - baseline.reads, scenario === 'allowed' ? 8 : 0, 'Unexpected background/denied metadata reads');
+    if (scenario === 'allowed') {
+      assert.equal(final.reads, 0, 'Restart scanned a selection');
+      assert.equal(final.replies, 0, 'Restart sent an unsolicited application frame');
+    } else assert.equal(final.reads - baseline.reads, 0, 'Unexpected denied metadata reads');
   }
-  evidence.push({ loader, scenario, baseline, final });
+  evidence.push({ loader, scenario, baseline, beforeShutdown, final });
   checks.push(`${loader} native 1.21.11 -> Paper: ${scenario}, CUI and disconnect cleanup`);
   console.log(`PASS: ${checks.at(-1)}`);
   client = null;

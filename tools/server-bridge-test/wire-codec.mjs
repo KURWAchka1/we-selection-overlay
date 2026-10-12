@@ -4,10 +4,10 @@ export const channel = 'worldedit_selection_overlay:bridge';
 export function frame(opcode, body) {
   return Buffer.concat([Buffer.from([0x57, 0x45, 0x53, 0x4f, 1, opcode]), body]);
 }
-export function hello(nonce, major = 1) {
+export function hello(nonce, major = 1, minor = 0, capabilities = 1) {
   const body = Buffer.alloc(24);
   assert.equal(nonce.length, 16);
-  nonce.copy(body); body.writeUInt16BE(major, 16); body.writeUInt32BE(1, 20);
+  nonce.copy(body); body.writeUInt16BE(major, 16); body.writeUInt16BE(minor, 18); body.writeUInt32BE(capabilities, 20);
   return frame(1, body);
 }
 export function request(epoch, id) {
@@ -24,6 +24,11 @@ export function decode(bytes) {
     return { opcode: 2, nonce: bytes.subarray(6, 22), epoch: bytes.subarray(22, 38),
       status: bytes[38], major: bytes.readUInt16BE(39), minor: bytes.readUInt16BE(41),
       capabilities: bytes.readUInt32BE(43), frameBytes: bytes.readUInt16BE(47) };
+  }
+  if (bytes[5] === 5) {
+    assert.equal(bytes.length, 38);
+    assert(!bytes.subarray(22).equals(Buffer.alloc(16)), 'Session close has no epoch');
+    return { opcode: 5, nonce: bytes.subarray(6, 22), epoch: bytes.subarray(22, 38) };
   }
   assert.equal(bytes[5], 4);
   assert(bytes.length >= 31);

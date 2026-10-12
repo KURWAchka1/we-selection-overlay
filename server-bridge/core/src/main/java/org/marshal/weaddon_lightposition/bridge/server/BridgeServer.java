@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
@@ -49,6 +50,7 @@ public final class BridgeServer {
     private final TokenBucket aggregate;
     private final Map<UUID, Peer> peers = new HashMap<>();
     private long admitted, throttled, malformed, selectionReads, replies, encodedReplyBytes;
+    private boolean closed;
 
     public BridgeServer(Host host, Limits limits, LongSupplier clock, Supplier<UUID> epochs) {
         this.host = Objects.requireNonNull(host);
@@ -62,6 +64,7 @@ public final class BridgeServer {
     public byte[] receive(UUID player, byte[] frame) {
         checkThread();
         Objects.requireNonNull(player);
+        if (closed) return null;
         if (frame == null || frame.length < BridgeCodec.MIN_FRAME_BYTES || frame.length > BridgeCodec.MAX_FRAME_BYTES) {
             malformed++;
             return null;
@@ -91,14 +94,16 @@ public final class BridgeServer {
     }
 
     private Welcome hello(UUID player, Peer peer, Hello hello) {
+        int minor = Math.min(MINOR, hello.minor());
         if (hello.major() != MAJOR) {
             invalidate(peer);
-            return new Welcome(hello.nonce(), NO_EPOCH, WelcomeStatus.INCOMPATIBLE, MAJOR, MINOR, 0, BridgeCodec.MAX_FRAME_BYTES);
+            return new Welcome(hello.nonce(), NO_EPOCH, WelcomeStatus.INCOMPATIBLE, MAJOR, minor, 0, BridgeCodec.MAX_FRAME_BYTES);
         }
         int allowed = host.mayReadSelection(player) ? hello.capabilities() & SUPPORTED_CAPABILITIES : 0;
-        if (allowed == 0) {
+        if (minor < 1) allowed &= ~SESSION_CLOSE;
+        if ((allowed & SELECTION_READ) == 0) {
             invalidate(peer);
-            return new Welcome(hello.nonce(), NO_EPOCH, WelcomeStatus.DENIED, MAJOR, MINOR, 0, BridgeCodec.MAX_FRAME_BYTES);
+            return new Welcome(hello.nonce(), NO_EPOCH, WelcomeStatus.DENIED, MAJOR, minor, 0, BridgeCodec.MAX_FRAME_BYTES);
         }
         if (!hello.nonce().equals(peer.nonce) || peer.epoch == null || peer.capabilities == 0) {
             peer.nonce = hello.nonce();
@@ -108,7 +113,7 @@ public final class BridgeServer {
         }
         peer.capabilities = allowed;
         return new Welcome(hello.nonce(), peer.epoch, WelcomeStatus.READY, MAJOR,
-                Math.min(MINOR, hello.minor()), allowed, BridgeCodec.MAX_FRAME_BYTES);
+                minor, allowed, BridgeCodec.MAX_FRAME_BYTES);
     }
 
     private SelectionReply selection(UUID player, Peer peer, SelectionRequest request) {
@@ -149,7 +154,27 @@ public final class BridgeServer {
         Peer peer = peers.get(player);
         if (peer != null) invalidate(peer);
     }
-    public void close() { checkThread(); peers.clear(); }
+    /** One bounded notification per opted-in live session, before the host loses send authority. */
+    public void shutdown(BiConsumer<UUID, byte[]> send) {
+        checkThread();
+        Objects.requireNonNull(send);
+        if (closed) return;
+        closed = true;
+        try {
+            for (var entry : peers.entrySet()) {
+                Peer peer = entry.getValue();
+                if ((peer.capabilities & SESSION_CLOSE) == 0) continue;
+                byte[] frame = BridgeCodec.encode(new SessionClosed(peer.nonce, peer.epoch));
+                send.accept(entry.getKey(), frame);
+                replies++;
+                encodedReplyBytes += frame.length;
+            }
+        } finally {
+            peers.clear();
+        }
+    }
+
+    public void close() { checkThread(); closed = true; peers.clear(); }
     public Metrics metrics() {
         checkThread();
         return new Metrics(peers.size(), admitted, throttled, malformed, selectionReads, replies, encodedReplyBytes);

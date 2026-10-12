@@ -138,7 +138,32 @@ public final class NativeBridgeChecks {
             } else if (stage == 28 && acknowledged("rejoined")) {
                 call(null, "requestSelection"); stage = 26;
             } else if (stage == 26 && call(null, "selection") != null) {
-                verifySelection("READY"); waitFor("disconnect", 9);
+                verifySelection("READY"); rememberContext(); waitFor("bridgeoff", 29);
+            } else if (stage == 29 && acknowledged("bridgeoff")) {
+                contextStarted = System.nanoTime(); stage = 30;
+            } else if (stage == 30) {
+                check(System.nanoTime() - contextStarted < 5_000_000_000L, "Silent plugin stop retained state: " + status());
+                if (!status().equals("UNAVAILABLE")) return;
+                verifyCleared();
+                check((boolean) field(field(null, bridge, "CLIENT"), field(null, bridge, "CLIENT").getClass(), "channelWasAvailable"),
+                        "Plugin stop unexpectedly withdrew the remote channel");
+                check(adapter.connection() == previousConnection && adapter.world() == previousWorld
+                        && adapter.player() == previousPlayer, "Plugin stop changed gameplay context");
+                call(null, "requestSelection"); quietTicks = 30; stage = 31;
+            } else if (stage == 31 && --quietTicks <= 0) {
+                check(status().equals("UNAVAILABLE"), "Stopped service retried negotiation");
+                verifyCleared();
+                check(invoke(field(overlay, overlay.getClass(), "selectionManager"), "primaryRegionForAnalysis") != null,
+                        "Plugin stop broke CUI selection");
+                System.out.println("NATIVE PAPER CONTEXT PASS: negotiated plugin stop");
+                waitFor("bridgeon", 32);
+            } else if (stage == 32 && acknowledged("bridgeon")) {
+                quietTicks = 30; stage = 33;
+            } else if (stage == 33 && --quietTicks <= 0) {
+                check(status().equals("UNAVAILABLE"), "Silent restart reused an old session or retried discovery");
+                verifyCleared();
+                System.out.println("NATIVE PAPER CONTEXT PASS: quiet silent restart");
+                waitFor("disconnect", 9);
             }
         } catch (Throwable ex) {
             finished = true;
@@ -154,7 +179,8 @@ public final class NativeBridgeChecks {
 
     private void verifyCleared() throws Exception {
         Object state = field(null, bridge, "CLIENT");
-        check(call(null, "selection") == null && epoch() == null, "Unavailable context retained metadata/epoch");
+        check(call(null, "selection") == null && epoch() == null && field(state, state.getClass(), "nonce") == null,
+                "Unavailable context retained metadata/epoch/nonce");
         check(!(boolean) invoke(state, "pending") && (int) invoke(state, "capabilities") == 0,
                 "Unavailable context retained work/capabilities");
     }

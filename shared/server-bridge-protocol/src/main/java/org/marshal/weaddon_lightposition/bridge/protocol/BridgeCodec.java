@@ -46,6 +46,9 @@ public final class BridgeCodec {
                             .putInt(state.minY()).putInt(state.maxY()).put((byte) state.permissions());
                 }
             }
+            case SessionClosed value -> {
+                out.put((byte) 5); uuid(out, value.nonce()); uuid(out, value.epoch());
+            }
         }
         return Arrays.copyOf(out.array(), out.position());
     }
@@ -58,7 +61,7 @@ public final class BridgeCodec {
             if (in.getInt() != MAGIC || Byte.toUnsignedInt(in.get()) != ENVELOPE_VERSION)
                 throw new IllegalArgumentException("Unknown bridge envelope");
             int opcode = Byte.toUnsignedInt(in.get());
-            if (direction == Direction.TO_SERVER ? opcode != 1 && opcode != 3 : opcode != 2 && opcode != 4)
+            if (direction == Direction.TO_SERVER ? opcode != 1 && opcode != 3 : opcode != 2 && opcode != 4 && opcode != 5)
                 throw new IllegalArgumentException("Unknown or wrong-direction bridge opcode");
             BridgeMessage message = switch (opcode) {
                 case 1 -> new Hello(uuid(in), u16(in), u16(in), in.getInt());
@@ -66,6 +69,7 @@ public final class BridgeCodec {
                         u16(in), u16(in), in.getInt(), u16(in));
                 case 3 -> new SelectionRequest(uuid(in), in.getLong());
                 case 4 -> new SelectionReply(uuid(in), in.getLong(), selection(in));
+                case 5 -> new SessionClosed(uuid(in), uuid(in));
                 default -> throw new IllegalArgumentException("Unknown bridge opcode");
             };
             if (in.hasRemaining()) throw new IllegalArgumentException("Trailing bridge data");

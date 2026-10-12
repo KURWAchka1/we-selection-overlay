@@ -237,4 +237,60 @@ class BridgeClientTest {
         assertNull(client.poll(false, 0)); assertNull(client.poll(true, 1));
         assertEquals(BridgeClient.State.DISCONNECTED, client.state());
     }
+
+    @Test void negotiatedShutdownClearsCachedOrPendingStateAndNeverLoopsOnStaleAdvertisement() {
+        var serial = new AtomicLong();
+        var local = new BridgeClient(() -> new UUID(2, serial.incrementAndGet()));
+        for (boolean pending : new boolean[]{false, true}) {
+            local.connect(0);
+            Hello hello = (Hello) BridgeCodec.decode(local.poll(true, 0), BridgeCodec.Direction.TO_SERVER);
+            byte[] welcome = BridgeCodec.encode(new Welcome(hello.nonce(), epoch, WelcomeStatus.READY,
+                    MAJOR, MINOR, SUPPORTED_CAPABILITIES, 256));
+            local.receive(welcome); local.requestSelection(1);
+            byte[] reply = BridgeCodec.encode(new SelectionReply(epoch, 1,
+                    new SelectionState(SelectionStatus.READY, new Bounds(1, 2, 3, 4, 5, 6), -64, 319, 7)));
+            if (!pending) local.receive(reply);
+            byte[] closed = BridgeCodec.encode(new SessionClosed(hello.nonce(), epoch));
+            local.receive(closed);
+            assertEquals(BridgeClient.State.UNAVAILABLE, local.state());
+            assertNull(local.selection()); assertFalse(local.pending()); assertEquals(0, local.capabilities());
+            for (int i = 2; i < 10_000; i++) {
+                local.receive(welcome); local.receive(reply); local.receive(closed);
+                assertNull(local.poll(true, i)); assertNull(local.requestSelection(i));
+            }
+            local.poll(false, 10_000);
+            Hello renewed = (Hello) BridgeCodec.decode(local.poll(true, 10_001), BridgeCodec.Direction.TO_SERVER);
+            assertNotEquals(hello.nonce(), renewed.nonce());
+            local.receive(closed);
+            assertEquals(BridgeClient.State.NEGOTIATING, local.state());
+            local.receive(BridgeCodec.encode(new Welcome(renewed.nonce(), new UUID(3, serial.get() + 10),
+                    WelcomeStatus.READY, MAJOR, MINOR, SUPPORTED_CAPABILITIES, 256)));
+            local.receive(closed);
+            assertEquals(BridgeClient.State.READY, local.state());
+        }
+    }
+
+    @Test void unsolicitedWrongNonceWrongEpochAndNonNegotiatedShutdownAreIgnored() {
+        byte[] closed = BridgeCodec.encode(new SessionClosed(nonce, epoch));
+        client.receive(closed); assertEquals(BridgeClient.State.DISCONNECTED, client.state());
+        client.connect(0); client.poll(true, 0); client.receive(closed);
+        assertEquals(BridgeClient.State.NEGOTIATING, client.state());
+        for (int minor : new int[]{0, 1}) {
+            client.connect(0); client.poll(true, 0);
+            client.receive(BridgeCodec.encode(new Welcome(nonce, epoch, WelcomeStatus.READY, MAJOR, minor, SELECTION_READ, 256)));
+            client.receive(closed);
+            assertEquals(BridgeClient.State.READY, client.state(), "Server never negotiated close notifications");
+        }
+        client.connect(0); client.poll(true, 0);
+        client.receive(BridgeCodec.encode(new Welcome(nonce, epoch, WelcomeStatus.READY,
+                MAJOR, MINOR, SUPPORTED_CAPABILITIES, 256)));
+        client.requestSelection(1);
+        client.receive(BridgeCodec.encode(new SessionClosed(UUID.randomUUID(), epoch)));
+        client.receive(BridgeCodec.encode(new SessionClosed(nonce, UUID.randomUUID())));
+        assertEquals(BridgeClient.State.READY, client.state()); assertTrue(client.pending());
+        client.receive(closed);
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state()); assertFalse(client.pending());
+        client.disconnect(); client.receive(closed);
+        assertEquals(BridgeClient.State.DISCONNECTED, client.state());
+    }
 }
