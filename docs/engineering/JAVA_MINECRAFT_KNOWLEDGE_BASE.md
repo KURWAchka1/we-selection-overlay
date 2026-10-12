@@ -32,6 +32,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Tick attribution and admission research](BRIDGE_TICK_ATTRIBUTION_RESEARCH_2026-10-12.md) | Complete public-event/JFR markers, observed GC overlap, deterministic starvation counterexample and bounded fair-dispatch proposal |
 | [Bounded fair dispatch](BRIDGE_FAIR_DISPATCH_2026-10-12.md) | Deferred metadata/control service, adversarial order/offset regression, real queue/latency checks and remaining cost gates |
 | [Mixed gameplay load](BRIDGE_GAMEPLAY_LOAD_2026-10-12.md) | Frozen-world comparisons with moving non-consumers, live entities and exact WorldEdit work; method and evidence limits |
+| [Active lifecycle load](BRIDGE_ACTIVE_LIFECYCLE_2026-10-12.md) | Observed queued wire requests before revocation/disconnect/disable, repeated recovery during active load, test-client state guard and evidence limits |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

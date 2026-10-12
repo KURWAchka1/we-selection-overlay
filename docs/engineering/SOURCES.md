@@ -521,6 +521,25 @@ No client class, packet decoder or server internals were copied into production.
 The [mixed-gameplay method and evidence](BRIDGE_GAMEPLAY_LOAD_2026-10-12.md)
 distinguishes sent packets, server-observed moves, exact block edits and timing.
 
+## S48 Queued Lifecycle Faults And Test-Client States
+
+Checked **2026-10-12**, Paper **1.21.11-132 / c5eb079**. Public
+[PermissionAttachment.setPermission](https://jd.papermc.io/paper/1.21.11/org/bukkit/permissions/PermissionAttachment.html)
+and [Player.kick(Component)](https://jd.papermc.io/paper/1.21.11/org/bukkit/entity/Player.html)
+support actual permission changes and disconnects. Existing public plugin-manager
+disable/enable operations provide dependency/companion faults. The opt-in fixture
+observes our own pending frame through reflection before these calls; no request
+is injected and no production reflection, timer or fault API is added.
+
+Pinned [minecraft-protocol 1.68.0 play-state source](https://raw.githubusercontent.com/PrismarineJS/node-minecraft-protocol/1.68.0/src/client/play.js)
+distinguishes configuration from play. Its [public client API](https://raw.githubusercontent.com/PrismarineJS/node-minecraft-protocol/1.68.0/docs/API.md)
+documents `client.state`, per-packet events and `playerJoin`. Our test client now
+requires both a received play-login packet and current play state before movement.
+Inspection found the previous reconnect timer could send movement before play;
+the failed run's decoder error alone does not establish its exact wire cause.
+Guard/negative tests and subsequent real repeats are recorded in the
+[active-lifecycle evidence](BRIDGE_ACTIVE_LIFECYCLE_2026-10-12.md).
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

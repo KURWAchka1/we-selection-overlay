@@ -8,15 +8,17 @@ param(
     [switch]$TickTimeline,
     [switch]$FairDispatch,
     [switch]$GameplayLoad,
+    [switch]$LifecycleLoad,
     [switch]$AcceptEula
 )
 $ErrorActionPreference = 'Stop'
 if (!$AcceptEula) { throw 'Owner acceptance of https://www.minecraft.net/eula is required' }
-if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $GameplayLoad).Where({ $_ }).Count -gt 1) { throw 'Choose one workload mode: frozen baseline, restart load, tick timeline, fair dispatch or gameplay' }
+if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $GameplayLoad, $LifecycleLoad).Where({ $_ }).Count -gt 1) { throw 'Choose one workload mode: frozen baseline, restart load, tick timeline, fair dispatch, gameplay or active lifecycle' }
 if ($GameplayLoad -and ($Players -lt 4 -or $Samples % 20 -ne 0)) { throw 'Gameplay requires at least 4 players and a sample count divisible by 20' }
+if ($LifecycleLoad -and ($Players -ne 32 -or $Samples % 20 -ne 0)) { throw 'Active lifecycle requires 32 players and a sample count divisible by 20' }
 $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root 'build/bridge-paper-proof'
-$server = Join-Path $root $(if ($ControlledBaseline) { 'build/bridge-baseline-proof' } elseif ($RestartLoad) { 'build/bridge-restart-load-proof' } elseif ($TickTimeline) { 'build/bridge-tick-timeline-proof' } elseif ($FairDispatch) { 'build/bridge-fair-dispatch-proof' } elseif ($GameplayLoad) { 'build/bridge-gameplay-proof' } else { 'build/bridge-load-proof' })
+$server = Join-Path $root $(if ($ControlledBaseline) { 'build/bridge-baseline-proof' } elseif ($RestartLoad) { 'build/bridge-restart-load-proof' } elseif ($TickTimeline) { 'build/bridge-tick-timeline-proof' } elseif ($FairDispatch) { 'build/bridge-fair-dispatch-proof' } elseif ($GameplayLoad) { 'build/bridge-gameplay-proof' } elseif ($LifecycleLoad) { 'build/bridge-active-lifecycle-proof' } else { 'build/bridge-load-proof' })
 foreach ($file in @((Join-Path $Java21 'bin/java.exe'), (Join-Path $source 'server.jar'),
         (Join-Path $source 'plugins/worldedit.jar'), (Join-Path $root 'build/bridge-wire-deps/package.json'))) {
     if (!(Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing verified fixture dependency: $file" }
@@ -42,6 +44,7 @@ try {
         Set-Content -LiteralPath (Join-Path $server 'server.properties') -Encoding ASCII
     'eula=true' | Set-Content -LiteralPath (Join-Path $server 'eula.txt') -Encoding ASCII
     $mode = if ($ControlledBaseline) { 'baseline' } elseif ($RestartLoad) { 'restart' } elseif ($TickTimeline) { 'timeline' } elseif ($FairDispatch) { 'fair' } elseif ($GameplayLoad) { 'gameplay' } else { 'load' }
-    & node (Join-Path $PSScriptRoot 'server-bridge-test/paper-load-proof.mjs') $Java21 $server $Players $Samples $Repetitions $mode
+    $runner = if ($LifecycleLoad) { 'server-bridge-test/paper-active-lifecycle-proof.mjs' } else { 'server-bridge-test/paper-load-proof.mjs' }
+    & node (Join-Path $PSScriptRoot $runner) $Java21 $server $Players $Samples $Repetitions $mode
     if ($LASTEXITCODE -ne 0) { throw "Paper load proof failed; inspect $server" }
 } finally { Pop-Location; $env:JAVA_HOME = $previousJava }

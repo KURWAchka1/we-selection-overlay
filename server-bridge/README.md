@@ -51,8 +51,8 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-31 harness self-tests (owned-process shutdown, frozen-world safety, wire
-helpers and mixed-workload validation); they run without Minecraft windows or third-party Node packages.
+36 harness self-tests (owned-process shutdown, frozen-world safety, wire
+helpers, mixed-workload and active-lifecycle validation); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
 the cursor, accept an EULA or prove a dedicated-server login.
@@ -156,8 +156,8 @@ node tools/server-bridge-test/analyze-load-proof.mjs restart
 This uses `build/bridge-restart-load-proof/` and performs three 32-peer restart
 cycles per installed run after flood traffic has settled. Each cycle checks one
 close/hint/hello per peer, fresh epochs, rejection of stale epochs, explicit own
-metadata and quiet counters. `-RestartLoad`, `-ControlledBaseline` and
-`-TickTimeline` and `-FairDispatch` are mutually exclusive. The [executed 32-player report](../docs/engineering/BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md)
+metadata and quiet counters. `-RestartLoad`, `-ControlledBaseline`,
+`-TickTimeline`, `-FairDispatch`, `-GameplayLoad` and `-LifecycleLoad` are mutually exclusive. The [executed 32-player report](../docs/engineering/BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md)
 records successful control/admission checks and unaccepted performance outliers.
 This is not saturated-restart or native-gameplay acceptance.
 
@@ -225,6 +225,24 @@ replies. Requires at least four players and samples divisible by 20. Fixture
 world mutations are deliberately test-only; the companion stays read-only.
 See the [predeclared method and results](../docs/engineering/BRIDGE_GAMEPLAY_LOAD_2026-10-12.md)
 before interpreting this bounded scenario as ordinary production gameplay.
+
+For lifecycle faults while gameplay and request flood remain active:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Players 32 -Samples 200 -Repetitions 2 -LifecycleLoad -AcceptEula
+node tools/server-bridge-test/analyze-active-lifecycle.mjs
+```
+
+This uses `build/bridge-active-lifecycle-proof/`, not production worlds or earlier
+baseline recordings. The separate console-only fixture observes a real queued
+request before revocation, disconnect, companion disable or WorldEdit disable.
+Three restarts happen during each run's continuing consumer workload. Four actors
+never negotiate; all actors move, entities tick and fixed WorldEdit batches run
+until WorldEdit disables. Reconnect movement waits for play readiness. Lifecycle
+and whole-window gates have negative self-tests; failed raw data is retained.
+The [active-lifecycle report](../docs/engineering/BRIDGE_ACTIVE_LIFECYCLE_2026-10-12.md)
+distinguishes headless functional evidence from native recovery, production
+performance, ungraceful loss, heavy transfers and supported hot reload.
 
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge

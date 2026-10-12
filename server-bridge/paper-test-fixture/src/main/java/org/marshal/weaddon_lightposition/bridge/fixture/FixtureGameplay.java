@@ -28,7 +28,7 @@ final class FixtureGameplay implements Listener {
     private final int[] moves = new int[32], entityStartTicks = new int[16];
     private World world;
     private CuboidRegion editRegion;
-    private boolean active, measuring, dirt;
+    private boolean active, measuring, dirt, editsEnabled = true;
     private int ticks, batches, changedBlocks, invalidMoves;
 
     FixtureGameplay(JavaPlugin plugin) { this.plugin = plugin; }
@@ -40,10 +40,7 @@ final class FixtureGameplay implements Listener {
         for (var player : plugin.getServer().getOnlinePlayers()) {
             if (!player.getName().matches("WesoLoad[0-9]{2}") || player.isOp())
                 throw new IllegalStateException("Gameplay requires non-OP fixture identities");
-            int index = Integer.parseInt(player.getName().substring(8));
-            player.setAllowFlight(true); player.setFlying(true); player.setGravity(false);
-            if (!player.teleport(new Location(world, 16, 80 + index % 2, 16)))
-                throw new IllegalStateException("Gameplay teleport cancelled");
+            preparePlayer(player);
         }
         var adapted = BukkitAdapter.adapt(world);
         editRegion = new CuboidRegion(adapted, BlockVector3.at(4, 66, 4), BlockVector3.at(11, 73, 11));
@@ -71,6 +68,15 @@ final class FixtureGameplay implements Listener {
 
     boolean active() { return active; }
 
+    void preparePlayer(org.bukkit.entity.Player player) {
+        int index = Integer.parseInt(player.getName().substring(8));
+        player.setAllowFlight(true); player.setFlying(true); player.setGravity(false);
+        if (!player.teleport(new Location(world, 16, 80 + index % 2, 16)))
+            throw new IllegalStateException("Gameplay teleport cancelled");
+    }
+
+    void pauseEdits() { editsEnabled = false; }
+
     void beginWindow() {
         if (!active || measuring) throw new IllegalStateException("Invalid gameplay window start");
         measuring = true;
@@ -81,7 +87,7 @@ final class FixtureGameplay implements Listener {
 
     void tick() {
         if (!active) return;
-        if (++ticks % 20 != 0) return;
+        if (++ticks % 20 != 0 || !editsEnabled) return;
         dirt = !dirt;
         try (var edit = WorldEdit.getInstance().newEditSession(BukkitAdapter.adapt(world))) {
             int changed = edit.setBlocks(editRegion, Objects.requireNonNull(dirt ? BlockTypes.DIRT : BlockTypes.STONE).getDefaultState());
@@ -111,6 +117,7 @@ final class FixtureGameplay implements Listener {
         measuring = false;
         var data = new JsonObject();
         data.addProperty("version", 1); data.addProperty("ticks", ticks);
+        data.addProperty("editsEnabled", editsEnabled);
         data.addProperty("editBatches", batches); data.addProperty("changedBlocks", changedBlocks);
         data.addProperty("invalidMoves", invalidMoves);
         data.add("acceptedMoves", new Gson().toJsonTree(Arrays.copyOf(moves, players)));

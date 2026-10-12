@@ -61,6 +61,14 @@ comparisons. Work/progress/queue/cleanup gates pass without changing production
 code. No tick exceeded 50 ms in this bounded run, but paired timing varies and
 dispatch slices exceed their soft target. This is not representative production
 cost acceptance, native gameplay or sustained-restart coverage.
+The subsequent [active-lifecycle cycle](BRIDGE_ACTIVE_LIFECYCLE_2026-10-12.md)
+observes real queued wire input before faults and passes 3,200 measured ticks,
+queued revocation/disconnect, six concurrent graceful recoveries, independent CUI
+and dependency fail-closed cleanup under ongoing headless gameplay/flood. A test-
+client pre-play movement race is fixed and the failed attempt retained. This
+closes those exact functional scenarios, not native saturated recovery, heavy
+streaming, hot reload or production cost gates. Cumulative slices again exceed
+their soft target; no production change or performance acceptance is claimed.
 
 ## Evidence Record
 

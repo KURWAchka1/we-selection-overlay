@@ -24,6 +24,7 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
     private final Map<UUID, PermissionAttachment> grants = new HashMap<>();
     private FixtureMeasurements measurements;
     private FixtureGameplay gameplay;
+    private FixtureQueuedFaults queuedFaults;
 
     @Override public void onEnable() {
         if (!Boolean.getBoolean("weso.bridge.fixture") || getServer().getOnlineMode()
@@ -36,6 +37,10 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(this, this);
         gameplay = new FixtureGameplay(this);
         getServer().getPluginManager().registerEvents(gameplay, this);
+        queuedFaults = new FixtureQueuedFaults(this, gameplay, name -> grants.get(
+                Objects.requireNonNull(getServer().getPlayerExact(name)).getUniqueId())
+                .setPermission("weso.bridge.selection", false));
+        getServer().getPluginManager().registerEvents(queuedFaults, this);
         measurements = new FixtureMeasurements(this, gameplay);
         getServer().getPluginManager().registerEvents(measurements, this);
     }
@@ -55,6 +60,7 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         for (String node : new String[]{"pos", "expand", "contract", "shift"})
             attachment.setPermission("worldedit.selection." + node, allowed);
         seed(player.getName());
+        if (gameplay.active() && player.getName().matches("WesoLoad[0-9]{2}")) gameplay.preparePlayer(player);
         getLogger().info("WESO_FIXTURE_JOIN " + player.getName());
     }
 
@@ -109,8 +115,18 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
             getLogger().info("WESO_FIXTURE_OK control baseline");
             return true;
         }
+        if (args[0].equals("channels") || args[0].equals("bridgeactive")) {
+            verifyBridgeResources(args[0].equals("bridgeactive"));
+            getLogger().info("WESO_FIXTURE_OK " + args[0] + " " + args[1]);
+            return true;
+        }
         var player = getServer().getPlayerExact(args[1]);
         if (player == null || !grants.containsKey(player.getUniqueId())) return true;
+        if (args[0].startsWith("queued-")) {
+            queuedFaults.arm(args[0].substring(7), args[1]);
+            getLogger().info("WESO_FIXTURE_OK " + args[0] + " " + args[1]);
+            return true;
+        }
         switch (args[0]) {
             case "revoke" -> grants.get(player.getUniqueId()).setPermission("weso.bridge.selection", false);
             case "grant" -> grants.get(player.getUniqueId()).setPermission("weso.bridge.selection", true);
@@ -134,8 +150,6 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
                     Objects.requireNonNull(getServer().getPluginManager().getPlugin("WorldEdit")));
             case "bridgeoff" -> getServer().getPluginManager().disablePlugin(bridgePlugin());
             case "bridgeon" -> getServer().getPluginManager().enablePlugin(bridgePlugin());
-            case "channels" -> verifyBridgeResources(false);
-            case "bridgeactive" -> verifyBridgeResources(true);
             default -> { return true; }
         }
         getLogger().info("WESO_FIXTURE_OK " + args[0] + " " + args[1]);
