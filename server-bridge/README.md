@@ -18,8 +18,9 @@ clients to include the new transport. Do not replace or move the `1.8.0` tag.
   client metadata, grants and pending requests are discarded without polling.
 - Separate opt-in 22-byte startup hint: one fresh negotiation after graceful
   close, with no automatic metadata read, permission polling or retry loop.
-- No recurring server tasks, workers, block reads, clipboard scans, command
-  simulation, mutations or automatic selection subscriptions.
+- One pending frame per connection, fair deferred dispatch and a single owned
+  synchronous task only while the queue is nonempty. No idle polling tasks,
+  workers, block reads, clipboard scans, simulation, mutations or subscriptions.
 
 The sole implemented data capability is **selection metadata read**, not remote
 selection editing. Bounds do not describe non-cuboid geometry; CUI remains its
@@ -50,7 +51,7 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-17 harness self-tests (owned-process shutdown, frozen-world safety and wire
+25 harness self-tests (owned-process shutdown, frozen-world safety and wire
 helpers); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
@@ -156,7 +157,7 @@ This uses `build/bridge-restart-load-proof/` and performs three 32-peer restart
 cycles per installed run after flood traffic has settled. Each cycle checks one
 close/hint/hello per peer, fresh epochs, rejection of stale epochs, explicit own
 metadata and quiet counters. `-RestartLoad`, `-ControlledBaseline` and
-`-TickTimeline` are mutually exclusive. The [executed 32-player report](../docs/engineering/BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md)
+`-TickTimeline` and `-FairDispatch` are mutually exclusive. The [executed 32-player report](../docs/engineering/BRIDGE_32_PLAYER_RESTART_LOAD_2026-10-12.md)
 records successful control/admission checks and unaccepted performance outliers.
 This is not saturated-restart or native-gameplay acceptance.
 
@@ -189,10 +190,24 @@ coverage before reporting five candidates per window and actual GC pause
 overlap. Public tick brackets are narrower than Paper's reported duration;
 inferred full intervals and sparse profiles are not exact causal accounting.
 The [research report](../docs/engineering/BRIDGE_TICK_ATTRIBUTION_RESEARCH_2026-10-12.md)
-records 4,800 markers, measurement limits and a reproduced adversarial admission
+records 4,800 markers, measurement limits and the earlier adversarial admission
 failure. The offline driver also runs four actual-recording tests and the
-deterministic admission probe on both JVMs. A successful probe process means
-the experiment executed, **not** that all sender-order fairness checks passed.
+deterministic admission probe on both JVMs. The updated probe now asserts all
+ordinary replies, bounded wait and aggregate admission for twelve order/offset
+cases per JVM; the historical failed results remain in that research report.
+
+To exercise the fair dispatcher through 32 real loopback connections:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Players 32 -Samples 200 -Repetitions 2 -FairDispatch -AcceptEula
+node tools/server-bridge-test/analyze-load-proof.mjs fair
+```
+
+This writes under `build/bridge-fair-dispatch-proof/`, preserving the earlier
+fixtures. It adds ordinary-first/ordinary-last timer workloads, reply latency,
+queue/expiry/task checks and disconnect cleanup. Separate TCP sockets cannot
+guarantee application arrival order; the deterministic probe supplies that check.
+See [fair-dispatch evidence and limits](../docs/engineering/BRIDGE_FAIR_DISPATCH_2026-10-12.md).
 
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge
@@ -221,13 +236,23 @@ before distributing this as a supported companion.
 
 Frames are at most 256 bytes in this stage. Default request admission is 4/s
 per connection (burst 8) and 100/s globally (burst 100), with at most 1024 tracked
-connections. These conservative prototype defaults are **not measured tick-time
-budgets**; the later heavy stages require the global scheduler in the design.
-The current first-arrival admission can starve an ordinary requester when many
-individually conforming senders exhaust the global bucket first. Fair service
-is a release blocker; bounded per-actor dispatch is still a proposal, not a fix.
+connections. Per-player metering happens at ingress; global tokens are spent
+only at fair dispatch, before decoding or WorldEdit access. An occupied player
+slot cannot be replaced or moved ahead by additional requests. At defaults the
+queue retains at most 256 KiB of frame payloads, plus bounded object/map overhead.
+Decoded/served work remains limited to 100 frames/s with burst 100; ingress frame
+copies have separate per-player/storage bounds, not that global dispatch rate.
+
+One owning-thread slice per tick visits at most 8 slots with a cooperative 0.5 ms
+target. A frame waiting 5 seconds is ineligible for service and is discarded when
+visited. These are experimental defaults, not guaranteed CPU cost or a hard
+wall-clock reclamation deadline during a stalled server. Existing clients keep
+their 10-second timeout; there is no new busy opcode, retry loop or promise of
+all-player replies at arbitrary saturation. The reproduced 31-sender starvation
+case now passes; representative busy-server cost acceptance remains open.
 Malformed/oversized/wrong-direction messages never reach WorldEdit. Authorization
-is rechecked before serving even a cached result; identity comes from the actual
+is rechecked at service time, before cached replies and after a host read;
+identity comes from the actual
 player connection, not a payload UUID. Duplicate request IDs return the original
 read result, not a promise of a refreshed selection.
 
@@ -235,8 +260,9 @@ The [restart regression](../docs/engineering/BRIDGE_RESTART_RECOVERY_2026-10-12.
 verifies graceful disable/re-enable on both native 1.21.11 loaders without
 reconnecting. An already-online listener receives one optional hint per enable;
 only a previously negotiated close arms one fresh handshake. Denied clients do
-not retry. There are no additional server tasks, listeners or retained recovery
-maps; startup work is O(online players), with separate hint byte counters.
+not retry. The hint itself adds no tasks, listeners or retained recovery maps;
+renewed hellos use the same pending-frame dispatcher. Startup work is
+O(online players), with separate hint byte counters.
 Crowded restarts can exhaust the existing admission budget and fall back to CUI;
 missed signals, ungraceful loss and backend switches are not solved by a heartbeat.
 

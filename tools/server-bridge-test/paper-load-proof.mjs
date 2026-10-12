@@ -13,11 +13,11 @@ import { observeOwnedServer } from './owned-server.mjs';
 import { recordLoadWindow } from './load-window.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode = 'load'] = process.argv.slice(2);
-assert(['load', 'baseline', 'restart', 'timeline'].includes(mode));
+assert(['load', 'baseline', 'restart', 'timeline', 'fair'].includes(mode));
 const baselineOnly = ['baseline', 'timeline'].includes(mode);
 const restartLoad = mode === 'restart';
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory);
-const directoryName = { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof' }[mode];
+const directoryName = { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof', fair: 'bridge-fair-dispatch-proof' }[mode];
 assert.equal(relative(root, serverDir), join('build', directoryName), 'Never operate a user server');
 const frozen = baselineOnly ? new FrozenFixtureWorld(serverDir) : null;
 let worldDigest;
@@ -55,7 +55,8 @@ async function freePort() {
   await new Promise((accept, reject) => probe.close(error => error ? reject(error) : accept()));
 }
 function delta(after, before) {
-  return Object.fromEntries(Object.keys(after).map(k => [k, after[k] - before[k]]));
+  const gauges = new Set(['connections', 'pending', 'peakPending', 'maxWaitNanos', 'maxSliceNanos', 'dispatchTasks']);
+  return Object.fromEntries(Object.keys(after).filter(k => !gauges.has(k)).map(k => [k, after[k] - before[k]]));
 }
 async function run(installed, round, prepare = false) {
   await freePort();
@@ -69,7 +70,7 @@ async function run(installed, round, prepare = false) {
   mkdirSync(config, { recursive: true });
   writeFileSync(join(config, 'config.yml'), 'limits:\n  max-connections: 1024\n  global-requests-per-second: 100\n  global-burst: 100\n  player-requests-per-second: 4\n  player-burst: 8\n');
   const output = createWriteStream(join(serverDir, `${runName}.log`));
-  const lines = [], peers = [], pending = { out: '', err: '' };
+  const lines = [], peers = [], pending = { out: '', err: '' }, ordinaryLatencies = [];
   let exited = false, phase = 'none', timer, disconnecting = false;
   const jfrName = `${runName}.jfr`;
   rmSync(join(serverDir, jfrName), { force: true });
@@ -103,14 +104,18 @@ async function run(installed, round, prepare = false) {
     if (!installed) return null;
     const start = lines.length;
     java.stdin.write('wesobridge\n');
-    await waitFor(() => lines.slice(start).some(s => s.includes('Restart hints=')), 'bridge counters');
+    await waitFor(() => lines.slice(start).some(s => s.includes('Queue pending=')), 'bridge counters');
     const a = lines.slice(start).find(s => s.includes('connections='));
     const b = lines.slice(start).find(s => s.includes('Selection metadata reads='));
     const c = lines.slice(start).find(s => s.includes('Restart hints='));
+    const q = lines.slice(start).find(s => s.includes('Queue pending='));
     const number = (line, key) => Number(line.match(new RegExp(`${key}=(\\d+)`))[1]);
     return { connections: number(a, 'connections'), admitted: number(a, 'admitted'), throttled: number(a, 'throttled'),
       malformed: number(a, 'malformed'), reads: number(b, 'reads'), replies: number(b, 'replies'), bytes: number(b, 'reply bytes'),
-      restartHints: number(c, 'hints'), hintBytes: number(c, 'bytes') };
+      restartHints: number(c, 'hints'), hintBytes: number(c, 'bytes'), pending: number(q, 'pending'),
+      peakPending: number(q, 'peak'), queued: number(q, 'queued'), expired: number(q, 'expired'),
+      cancelled: number(q, 'cancelled'), maxWaitNanos: number(q, 'max wait nanos'),
+      maxSliceNanos: number(q, 'max slice nanos'), dispatchTasks: number(q, 'dispatch tasks') };
   }
   async function consoleAction(action) {
     const start = lines.length;
@@ -166,6 +171,7 @@ async function run(installed, round, prepare = false) {
   async function measure(label) {
     await delay(5000);
     const before = await counters();
+    const latencyBefore = ordinaryLatencies.length;
     const sentBefore = peers.map(p => p.sent), repliesBefore = peers.map(p => p.replies);
     const path = join(serverDir, 'plugins/WesoBridgeTestFixture', `load-${label}.json`);
     rmSync(path, { force: true });
@@ -173,10 +179,15 @@ async function run(installed, round, prepare = false) {
     java.stdin.write(`wesofixture measure ${label}\n`);
     await waitFor(() => lines.slice(start).some(s => s.includes(`WESO_MEASURE_DONE ${label}`)), label, samples * 100 + 30000);
     const data = JSON.parse(readFileSync(path, 'utf8'));
-    if (mode === 'timeline') assert.equal(data.tickTimelineVersion, 1, 'Fixture has no per-tick markers');
+    if (mode === 'timeline' || mode === 'fair') assert.equal(data.tickTimelineVersion, 1, 'Fixture has no per-tick markers');
     const after = await counters();
     data.bridge = installed ? delta(after, before) : null;
     data.connections = after?.connections ?? 0;
+    if (installed) data.queueAfter = { pending: after.pending, peak: after.peakPending, expired: after.expired,
+      maxWaitNanos: after.maxWaitNanos, maxSliceNanos: after.maxSliceNanos, tasks: after.dispatchTasks };
+    const latencies = ordinaryLatencies.slice(latencyBefore).sort((a, b) => a - b);
+    data.ordinaryReplyLatencies = { count: latencies.length, maxMillis: latencies.at(-1) ?? 0,
+      p95Millis: latencies[Math.ceil(latencies.length * .95) - 1] ?? 0 };
     data.sent = peers.map((p, i) => p.sent - sentBefore[i]);
     data.received = peers.map((p, i) => p.replies - repliesBefore[i]);
     const runDirectory = join(serverDir, 'measurements', runName);
@@ -196,7 +207,7 @@ async function run(installed, round, prepare = false) {
       const client = minecraft.createClient({ host: '127.0.0.1', port: 25579, username: name,
         auth: 'offline', version: '1.21.11', profilesFolder: false, clientSettings: { viewDistance: 2 }, disableChatSigning: true });
       const peer = { client, name, index, errors: [], ended: false, sent: 0, replies: 0, welcome: null, id: 0, next: 0,
-        hints: [], closed: 0, restartArmed: false, restartHellos: 0, expectedNonce: null };
+        hints: [], closed: 0, restartArmed: false, restartHellos: 0, expectedNonce: null, sentTimes: new Map() };
       peers.push(peer);
       client.on('error', error => peer.errors.push(error.message));
       client.on('end', () => { peer.ended = true; });
@@ -237,6 +248,11 @@ async function run(installed, round, prepare = false) {
             assert.deepEqual(value.bounds, [x, 64, 20, x + 5, 70, 27], 'Cross-player data disclosure');
             assert.equal(value.minY, -64); assert.equal(value.maxY, 319); assert.equal(value.permissions, 7);
             assert(value.id > peer.lastReplyId); peer.lastReplyId = value.id; peer.replies++;
+            if (peer.index === 0 && peer.sentTimes.has(value.id.toString())) {
+              ordinaryLatencies.push(performance.now() - peer.sentTimes.get(value.id.toString()));
+              assert(ordinaryLatencies.length <= 8192, 'Unbounded fixture latency samples');
+              for (const id of peer.sentTimes.keys()) if (BigInt(id) <= value.id) peer.sentTimes.delete(id);
+            }
           }
         } catch (error) { peer.errors.push(error.stack); }
       });
@@ -261,18 +277,26 @@ async function run(installed, round, prepare = false) {
       await measure('idle');
       timer = setInterval(() => {
         const now = performance.now();
-        for (const peer of peers) {
+        const order = phase === 'ordered-last' ? [...peers.slice(1), peers[0]] : peers;
+        for (const peer of order) {
           if (phase === 'none' || (phase === 'one' && peer.index !== 0) || now < peer.next) continue;
           const flood = phase === 'flood' && peer.index !== 0;
-          peer.next = now + (flood ? 50 : 500);
+          const ordered = phase.startsWith('ordered-') && peer.index !== 0;
+          peer.next = now + (flood ? 50 : ordered ? 250 : 500);
           for (let count = 0; count < (flood ? 4 : 1); count++) {
             try {
               peer.client.write('custom_payload', { channel, data: request(peer.welcome.epoch, ++peer.id) }); peer.sent++;
+              if (peer.index === 0) {
+                peer.sentTimes.set(String(peer.id), performance.now());
+                assert(peer.sentTimes.size <= 32, 'Ordinary requests never completed');
+              }
             } catch (error) { peer.errors.push(error.stack); phase = 'none'; }
           }
         }
       }, 25);
-      for (const name of ['one', 'many', 'flood']) { phase = name; await measure(name); }
+      for (const name of ['one', 'many', 'flood', ...(mode === 'fair' ? ['ordered-first', 'ordered-last'] : [])]) {
+        phase = name; await measure(name);
+      }
       phase = 'none';
       if (restartLoad) {
         await delay(1500);
@@ -286,7 +310,9 @@ async function run(installed, round, prepare = false) {
       while (!peers.every(p => p.ended) && Date.now() < deadline) await delay(25);
       assert(peers.every(p => p.ended));
       await delay(300);
-      assert.equal((await counters()).connections, 0);
+      const disconnected = await counters();
+      assert.equal(disconnected.connections, 0);
+      assert.equal(disconnected.pending, 0); assert.equal(disconnected.dispatchTasks, 0);
       checks.push(`${runName}: ${players}-way ownership, bounded traffic, legitimate progress, idle recovery, disconnect cleanup`);
     }
     assert.equal(hash(join(serverDir, 'companion.jar')), companionHash, 'Candidate changed during test');

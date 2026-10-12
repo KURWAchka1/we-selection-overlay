@@ -33,8 +33,14 @@ class BridgeServerTest {
         return new BridgeServer(host, limits, time::get, () -> new UUID(8, epochIds.incrementAndGet()));
     }
     private BridgeMessage exchange(BridgeServer target, UUID player, BridgeMessage message) {
-        byte[] reply = target.receive(player, BridgeCodec.encode(message));
+        byte[] reply = receive(target, player, BridgeCodec.encode(message));
         return reply == null ? null : BridgeCodec.decode(reply, BridgeCodec.Direction.TO_CLIENT);
+    }
+    private byte[] receive(BridgeServer target, UUID player, byte[] frame) {
+        AtomicReference<byte[]> response = new AtomicReference<>();
+        target.enqueue(player, frame);
+        target.drain((id, reply) -> { assertEquals(player, id); response.set(reply); });
+        return response.get();
     }
     private Welcome hello(UUID player) {
         return (Welcome) exchange(server, player, new Hello(nonce, 1, 0, 1));
@@ -101,7 +107,8 @@ class BridgeServerTest {
         assertNotNull(exchange(limited, second, new Hello(nonce, 1, 0, 1)));
         assertNull(exchange(limited, player, new Hello(nonce, 1, 0, 1)));
         assertEquals(2, limited.metrics().admitted());
-        assertEquals(1, limited.metrics().throttled());
+        assertEquals(0, limited.metrics().throttled());
+        assertEquals(1, limited.pendingCount());
         time.addAndGet(500_000_000L);
         assertNotNull(exchange(limited, player, new Hello(nonce, 1, 0, 1)));
         assertEquals(0, reads);
@@ -109,7 +116,7 @@ class BridgeServerTest {
 
     @Test void spamIsBoundedBeforeParsingAndDoesNotUseOtherPlayersEntireBudget() {
         allowed.add(player); allowed.add(second);
-        for (int i = 0; i < 10_000; i++) server.receive(player, new byte[30]);
+        for (int i = 0; i < 10_000; i++) receive(server, player, new byte[30]);
         assertEquals(8, server.metrics().admitted());
         assertEquals(8, server.metrics().malformed());
         assertEquals(9992, server.metrics().throttled());
@@ -119,14 +126,14 @@ class BridgeServerTest {
 
     @Test void peersAndInvalidFramesHaveBoundedStorage() {
         BridgeServer limited = server(new BridgeServer.Limits(1, 10, 10, 4, 4));
-        limited.receive(player, new byte[256]);
-        limited.receive(second, new byte[256]);
+        receive(limited, player, new byte[256]);
+        receive(limited, second, new byte[256]);
         assertEquals(1, limited.metrics().connections());
-        limited.receive(second, new byte[257]);
+        receive(limited, second, new byte[257]);
         assertEquals(1, limited.metrics().connections());
         assertEquals(0, limited.metrics().selectionReads());
         limited.disconnect(player);
-        limited.receive(second, new byte[256]);
+        receive(limited, second, new byte[256]);
         assertEquals(1, limited.metrics().connections());
     }
 
@@ -160,12 +167,13 @@ class BridgeServerTest {
         byte[] invalid = new byte[30];
         for (int id = 1; id <= 2048; id++) {
             UUID connection = new UUID(9, id);
-            for (int packet = 0; packet < 16; packet++) assertNull(target.receive(connection, invalid));
+            for (int packet = 0; packet < 16; packet++) assertNull(receive(target, connection, invalid));
         }
         assertEquals(1024, target.metrics().connections());
         assertEquals(100, target.metrics().admitted());
         assertEquals(100, target.metrics().malformed());
-        assertEquals(32_768 - 100, target.metrics().throttled());
+        assertEquals(32_768, target.metrics().throttled() + target.queueMetrics().queued());
+        assertTrue(target.pendingCount() <= 1024);
         assertEquals(0, reads);
         target.close();
         assertEquals(0, target.metrics().connections());
@@ -242,7 +250,7 @@ class BridgeServerTest {
         assertEquals(WelcomeStatus.DENIED, closeOnly.status());
         var sent = new HashMap<UUID, BridgeMessage>();
         server.shutdown((id, bytes) -> {
-            assertNull(server.receive(id, BridgeCodec.encode(new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES))));
+            assertFalse(server.enqueue(id, BridgeCodec.encode(new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES))));
             sent.put(id, BridgeCodec.decode(bytes, BridgeCodec.Direction.TO_CLIENT));
         });
         assertEquals(Map.of(optedIn, new SessionClosed(nonce, modern.epoch())), sent);

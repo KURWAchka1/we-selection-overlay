@@ -47,7 +47,12 @@ installed maxima overlap GC pauses, but it does not explain old outliers or
 close busy-server cost acceptance. A deterministic 31-sender ordering reproduces
 **0/60 ordinary replies** on both JVMs while aggregate bounds hold: fair service
 is an explicitly failed gate, not implied by previous network progress tests.
-Bounded fair dispatch remains a proposal; no production behavior changed.
+That historical cycle changed no production behavior. The subsequent
+[fair-dispatch cycle](BRIDGE_FAIR_DISPATCH_2026-10-12.md) implements one bounded
+pending slot per actor, with global tokens spent at fair service rather than
+arrival. The reproduced counterexample and additional order/offset cases now
+pass on both JVMs. This closes that specific failure, not arbitrary saturation,
+heavy-feature scheduling or representative busy-server cost acceptance.
 Published release JARs and the 1.8.0 tag remain unchanged.
 
 ## Evidence Record
@@ -72,8 +77,8 @@ Profile and artifact reports may contain private data; inspect before publicatio
   mismatched totals, oversized declared output and decompression bombs.
 - Test fair admission, stalled consumers, credit exhaustion, quota recovery,
   timeout cleanup and aggregate memory bounds with many connections.
-- Repeat adversarial arrival order/offsets. The current metadata token buckets
-  can starve an ordinary sender; require bounded queue age and control progress,
+- Repeat adversarial arrival order/offsets. Token buckets alone previously
+  starved an ordinary sender; require bounded queue age and control progress,
   not merely a successful aggregate-limit check or a favorable sender order.
 
 ## Gate 1: Dedicated-Server Transport Proof

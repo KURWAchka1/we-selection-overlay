@@ -33,6 +33,34 @@ test('missing workload and starvation never validate', () => {
   assert.throws(() => validateLoadWindow(data, options), /no reply/);
 });
 
+test('ordered progress requires bounded latency, reply coverage and service for every actor', () => {
+  for (const label of ['ordered-first', 'ordered-last']) {
+    const data = window(label);
+    data.ordinaryReplyLatencies = { count: 95, maxMillis: 300, p95Millis: 250 };
+    data.queueAfter = { pending: 1, tasks: 1, expired: 0 };
+    validateLoadWindow(data, options);
+    for (const mutate of [d => d.ordinaryReplyLatencies.maxMillis = 2001,
+      d => d.ordinaryReplyLatencies.maxMillis = NaN, d => d.ordinaryReplyLatencies.count--,
+      d => d.received[1] = 0]) {
+      const changed = structuredClone(data); mutate(changed);
+      assert.throws(() => validateLoadWindow(changed, options));
+    }
+  }
+});
+
+test('queues must remain bounded, not expire live traffic, and release their task while idle', () => {
+  const data = window(); data.queueAfter = { pending: 1, tasks: 1, expired: 0 };
+  validateLoadWindow(data, options);
+  for (const [key, value] of [['pending', 3], ['pending', -1], ['tasks', 2], ['expired', 1]]) {
+    const changed = structuredClone(data); changed.queueAfter[key] = value;
+    assert.throws(() => validateLoadWindow(changed, options));
+  }
+  data.label = 'recovery'; data.bridge = { admitted: 0, reads: 0, bytes: 0, replies: 0, malformed: 0 };
+  assert.throws(() => validateLoadWindow(data, options));
+  data.queueAfter.pending = 0; assert.throws(() => validateLoadWindow(data, options));
+  data.queueAfter.tasks = 0; validateLoadWindow(data, options);
+});
+
 test('idle transfers, missing flood pressure and excess admissions fail', () => {
   assert.throws(() => validateLoadWindow(window('idle'), options));
   for (const [key, value] of [['admitted', 651], ['malformed', 1], ['throttled', 0]]) {

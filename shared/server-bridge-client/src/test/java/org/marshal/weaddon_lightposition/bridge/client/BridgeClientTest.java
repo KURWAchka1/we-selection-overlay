@@ -2,6 +2,7 @@ package org.marshal.weaddon_lightposition.bridge.client;
 
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeCodec;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeRestartHint;
@@ -13,6 +14,13 @@ import static org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.*;
 class BridgeClientTest {
     private final UUID player = new UUID(1, 1), nonce = new UUID(2, 2), epoch = new UUID(3, 3);
     private final BridgeClient client = new BridgeClient(() -> nonce);
+
+    private byte[] exchange(BridgeServer server, UUID id, byte[] frame) {
+        var reply = new AtomicReference<byte[]>();
+        server.enqueue(id, frame);
+        server.drain((player, bytes) -> { assertEquals(id, player); reply.set(bytes); });
+        return reply.get();
+    }
 
     @Test void restartHintRenewsOnceAfterCloseAndCannotResurrectOldSession() {
         var serial = new AtomicLong();
@@ -97,9 +105,9 @@ class BridgeClientTest {
         };
         var old = new BridgeServer(allowed, BridgeServer.Limits.defaults(), () -> 0, () -> epoch);
         local.connect(0);
-        byte[] oldWelcome = old.receive(player, local.poll(true, 0));
+        byte[] oldWelcome = exchange(old, player, local.poll(true, 0));
         local.receive(oldWelcome);
-        byte[] oldReply = old.receive(player, local.requestSelection(0));
+        byte[] oldReply = exchange(old, player, local.requestSelection(0));
         local.receive(oldReply);
         old.shutdown((id, frame) -> local.receive(frame));
         var replacement = new BridgeServer(new BridgeServer.Host() {
@@ -110,7 +118,7 @@ class BridgeClientTest {
         local.receiveRestartHint(hint, 1);
         local.receive(oldWelcome); local.receive(oldReply);
         assertEquals(BridgeClient.State.DISCOVERING, local.state());
-        local.receive(replacement.receive(player, local.poll(true, 1)));
+        local.receive(exchange(replacement, player, local.poll(true, 1)));
         assertEquals(BridgeClient.State.DENIED, local.state());
         assertNull(local.selection()); assertFalse(local.pending()); assertEquals(0, local.capabilities());
         for (int i = 0; i < 10_000; i++) {
@@ -130,9 +138,9 @@ class BridgeClientTest {
             public SelectionState readSelection(UUID id) { fail("Recovery must not read metadata"); return null; }
         }, new BridgeServer.Limits(1, 1, 1, 1, 1), () -> 0, () -> new UUID(3, 4));
         UUID other = new UUID(5, 1);
-        assertNotNull(replacement.receive(other, BridgeCodec.encode(new Hello(new UUID(5, 2), 1, 1, 3))));
+        assertNotNull(exchange(replacement, other, BridgeCodec.encode(new Hello(new UUID(5, 2), 1, 1, 3))));
         client.receiveRestartHint(BridgeRestartHint.encode(new UUID(4, 1)), 1);
-        assertNull(replacement.receive(player, client.poll(true, 1)), "Recovery bypassed bounded admission");
+        assertNull(exchange(replacement, player, client.poll(true, 1)), "Recovery bypassed bounded admission");
         replacement.disconnect(other);
         client.poll(true, BridgeClient.TIMEOUT_NANOS + 1);
         for (int i = 0; i < 10_000; i++) {
@@ -149,6 +157,41 @@ class BridgeClientTest {
         client.connect(0); assertNotNull(client.poll(true, 0));
         client.receive(BridgeCodec.encode(new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 0, 1, 256)));
         assertEquals(BridgeClient.State.READY, client.state());
+    }
+
+    @Test void delayedQueueRepliesCompleteExistingClientWithoutRetriesOrProtocolChanges() {
+        var time = new AtomicLong();
+        var reads = new AtomicLong();
+        var server = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { return true; }
+            public SelectionState readSelection(UUID id) { reads.incrementAndGet(); return SelectionState.unavailable(SelectionStatus.EMPTY); }
+        }, BridgeServer.Limits.defaults(), time::get, () -> epoch);
+        client.connect(0);
+        assertTrue(server.enqueue(player, client.poll(true, 0)));
+        time.set(500_000_000L); assertNull(client.poll(true, time.get()));
+        assertEquals(BridgeClient.State.NEGOTIATING, client.state());
+        server.drain((id, frame) -> client.receive(frame));
+        assertEquals(BridgeClient.State.READY, client.state()); assertEquals(0, reads.get());
+        assertTrue(server.enqueue(player, client.requestSelection(time.get())));
+        time.addAndGet(500_000_000L); assertNull(client.poll(true, time.get())); assertTrue(client.pending());
+        server.drain((id, frame) -> client.receive(frame));
+        assertFalse(client.pending()); assertEquals(SelectionStatus.EMPTY, client.selection().status());
+        assertEquals(1, reads.get()); assertEquals(0, server.pendingCount());
+    }
+
+    @Test void expiredQueuedNegotiationUsesExistingTimeoutWithoutImplicitRetry() {
+        var time = new AtomicLong();
+        var server = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { fail("Expired hello authorization"); return false; }
+            public SelectionState readSelection(UUID id) { fail("Expired read"); return null; }
+        }, BridgeServer.Limits.defaults(), time::get, UUID::randomUUID);
+        client.connect(0); assertTrue(server.enqueue(player, client.poll(true, 0)));
+        time.set(5_000_000_000L); server.drain((id, frame) -> fail("Expired welcome"));
+        assertEquals(1, server.queueMetrics().expired()); assertEquals(0, server.pendingCount());
+        assertNull(client.poll(true, BridgeClient.TIMEOUT_NANOS));
+        assertEquals(BridgeClient.State.UNAVAILABLE, client.state());
+        for (int i = 0; i < 10_000; i++) assertNull(client.poll(true, BridgeClient.TIMEOUT_NANOS + i));
+        assertEquals(0, server.metrics().admitted());
     }
 
     @Test void absenceTimeoutAndDisconnectSendNoRepeatedHello() {
@@ -256,22 +299,22 @@ class BridgeClientTest {
             }
         }, BridgeServer.Limits.defaults(), System::nanoTime, () -> new UUID(3, epochs.incrementAndGet()));
         local.connect(0);
-        byte[] oldWelcome = server.receive(player, local.poll(true, 0));
+        byte[] oldWelcome = exchange(server, player, local.poll(true, 0));
         local.receive(oldWelcome);
-        byte[] oldReply = server.receive(player, local.requestSelection(1));
+        byte[] oldReply = exchange(server, player, local.requestSelection(1));
         server.resetContext(player);
         local.connect(2);
         assertFalse(local.pending()); assertNull(local.selection()); assertEquals(0, local.capabilities());
         byte[] hello = local.poll(true, 2);
         local.receive(oldWelcome); local.receive(oldReply);
         assertEquals(BridgeClient.State.NEGOTIATING, local.state());
-        local.receive(server.receive(player, hello));
+        local.receive(exchange(server, player, hello));
         assertEquals(BridgeClient.State.READY, local.state());
         assertEquals(1, reads.get(), "Renewal must not read selection");
         byte[] request = local.requestSelection(3);
         local.receive(oldReply);
         assertTrue(local.pending()); assertNull(local.selection());
-        local.receive(server.receive(player, request));
+        local.receive(exchange(server, player, request));
         assertFalse(local.pending()); assertEquals(SelectionStatus.EMPTY, local.selection().status());
         for (int i = 0; i < 100_000; i++) assertNull(local.poll(true, i + 4));
         assertEquals(2, reads.get());
@@ -308,10 +351,11 @@ class BridgeClientTest {
             }
         }, BridgeServer.Limits.defaults(), time::get, () -> epoch);
         client.connect(0);
-        client.receive(server.receive(player, client.poll(true, 0)));
+        client.receive(exchange(server, player, client.poll(true, 0)));
         assertEquals(BridgeClient.State.READY, client.state());
         assertEquals(0, reads.get());
-        client.receive(server.receive(player, client.requestSelection(0)));
+        client.receive(exchange(server, player, client.requestSelection(0)));
+
         assertEquals(new Bounds(-16, -64, 1, 31, 10, 33), client.selection().bounds());
         for (int i = 0; i < 100_000; i++) assertNull(client.poll(true, time.addAndGet(50_000_000L)));
         assertEquals(1, reads.get());

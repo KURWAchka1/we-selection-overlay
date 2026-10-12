@@ -1,5 +1,6 @@
 # Conservative transport admission defaults, not measured performance guarantees.
-# There are no preview workers, subscriptions or recurring tasks in this stage.
+# No preview workers or subscriptions. One owning-thread dispatch task exists
+# only while a bounded queue is nonempty; decoding/reads share the global budget.
 limits:
   max-connections: 1024
   global-requests-per-second: 100

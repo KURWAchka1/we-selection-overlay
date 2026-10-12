@@ -21,6 +21,7 @@ import org.bukkit.event.player.PlayerUnregisterChannelEvent;
 import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
+import org.bukkit.scheduler.BukkitTask;
 
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeCodec;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeRestartHint;
@@ -30,6 +31,7 @@ import static org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.*;
 
 public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Listener, PluginMessageListener {
     private BridgeServer bridge;
+    private BukkitTask drainTask;
     private long lastFailureLog;
     private boolean warnedThread;
     private long restartHints;
@@ -63,7 +65,7 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
         getServer().getMessenger().registerIncomingPluginChannel(this, BridgeCodec.CHANNEL, this);
         getServer().getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("wesobridge")).setExecutor(this);
-        getLogger().info("Experimental read-only bridge enabled. No block scanning or background tasks.");
+        getLogger().info("Experimental read-only bridge enabled. Bounded fair dispatch; no idle tasks or block scans.");
         announceRestart();
     }
 
@@ -84,6 +86,7 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
     }
 
     @Override public void onDisable() {
+        stopDrain();
         getServer().getMessenger().unregisterIncomingPluginChannel(this);
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
         if (bridge != null) { bridge.close(); bridge = null; }
@@ -99,34 +102,57 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
             return;
         }
         if (!player.isOnline() || !player.getListeningPluginChannels().contains(BridgeCodec.CHANNEL)) return;
-        byte[] reply = bridge.receive(player.getUniqueId(), message);
-        if (reply != null) player.sendPluginMessage(this, BridgeCodec.CHANNEL, reply);
+        if (bridge.enqueue(player.getUniqueId(), message) && drainTask == null)
+            drainTask = getServer().getScheduler().runTaskTimer(this, this::drainRequests, 1L, 1L);
+    }
+
+    private void drainRequests() {
+        try {
+            if (bridge != null) bridge.drain(this::sendReply);
+        } finally {
+            stopDrainIfIdle();
+        }
+    }
+
+    private void stopDrainIfIdle() {
+        if (bridge == null || bridge.pendingCount() == 0) stopDrain();
+    }
+
+    private void stopDrain() {
+        if (drainTask != null) { drainTask.cancel(); drainTask = null; }
     }
 
     @EventHandler public void onQuit(PlayerQuitEvent event) {
         if (bridge != null) bridge.disconnect(event.getPlayer().getUniqueId());
+        stopDrainIfIdle();
     }
 
     @EventHandler public void onWorldChange(PlayerChangedWorldEvent event) {
         if (bridge != null) bridge.resetContext(event.getPlayer().getUniqueId());
+        stopDrainIfIdle();
     }
 
     @EventHandler public void onRespawn(PlayerRespawnEvent event) {
         if (bridge != null) bridge.resetContext(event.getPlayer().getUniqueId());
+        stopDrainIfIdle();
     }
 
     @EventHandler public void onChannelUnregister(PlayerUnregisterChannelEvent event) {
         if (bridge != null && BridgeCodec.CHANNEL.equals(event.getChannel()))
             bridge.resetContext(event.getPlayer().getUniqueId());
+        stopDrainIfIdle();
     }
 
     @EventHandler public void onDependencyDisable(PluginDisableEvent event) {
-        if (event.getPlugin() == this && bridge != null) bridge.shutdown(this::sendSessionClosed);
+        if (event.getPlugin() == this && bridge != null) {
+            stopDrain();
+            bridge.shutdown(this::sendReply);
+        }
         if (event.getPlugin().getName().equals("WorldEdit"))
             getServer().getPluginManager().disablePlugin(this);
     }
 
-    private void sendSessionClosed(UUID id, byte[] frame) {
+    private void sendReply(UUID id, byte[] frame) {
         Player player = getServer().getPlayer(id);
         if (player == null || !player.isOnline() || !player.getListeningPluginChannels().contains(BridgeCodec.CHANNEL)) return;
         try {
@@ -145,6 +171,10 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
         sender.sendMessage("Selection metadata reads=" + m.selectionReads() + ", replies=" + m.replies()
                 + ", reply bytes=" + m.encodedReplyBytes() + ". No block scans, subscriptions or mutations.");
         sender.sendMessage("Restart hints=" + restartHints + ", hint bytes=" + restartHints * BridgeRestartHint.FRAME_BYTES + ". Lifecycle only.");
+        BridgeServer.QueueMetrics q = bridge.queueMetrics();
+        sender.sendMessage("Queue pending=" + q.pending() + ", peak=" + q.peakPending() + ", queued=" + q.queued()
+                + ", expired=" + q.expired() + ", cancelled=" + q.cancelled() + ", max wait nanos=" + q.maxWaitNanos()
+                + ", max slice nanos=" + q.maxSliceNanos() + ", dispatch tasks=" + (drainTask == null ? 0 : 1));
         return true;
     }
 

@@ -146,15 +146,29 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
                 || !messenger.getOutgoingChannels(plugin).equals(expectedOutgoing)
                 || messenger.getIncomingChannelRegistrations(plugin).size() != (active ? 1 : 0)
                 || listeners != (active ? 5 : 0)
-                || getServer().getScheduler().getPendingTasks().stream().anyMatch(task -> task.getOwner() == plugin)
                 || getServer().getScheduler().getActiveWorkers().stream().anyMatch(worker -> worker.getOwner() == plugin))
             throw new IllegalStateException("Bridge resource ownership mismatch: active=" + active + ", listeners=" + listeners);
         // Inspect our own field only in this opt-in test fixture, never in production.
         try {
             var field = plugin.getClass().getDeclaredField("bridge");
             field.setAccessible(true);
-            if ((field.get(plugin) != null) != active)
+            Object core = field.get(plugin);
+            if ((core != null) != active)
                 throw new IllegalStateException("Bridge retained/missed core ownership");
+            var taskField = plugin.getClass().getDeclaredField("drainTask");
+            taskField.setAccessible(true);
+            var dispatch = (org.bukkit.scheduler.BukkitTask) taskField.get(plugin);
+            int pending = core == null ? 0 : (int) core.getClass().getMethod("pendingCount").invoke(core);
+            var tasks = getServer().getScheduler().getPendingTasks().stream()
+                    .filter(task -> task.getOwner() == plugin).toList();
+            if ((pending > 0) != (dispatch != null)
+                    || tasks.size() != (dispatch == null ? 0 : 1)
+                    || dispatch != null && (!active || dispatch.isCancelled() || !dispatch.isSync()
+                    || dispatch.getOwner() != plugin || tasks.getFirst().getTaskId() != dispatch.getTaskId()))
+                throw new IllegalStateException("Bridge dispatch ownership mismatch: active=" + active
+                        + ", pending=" + pending + ", tasks=" + tasks.size());
+            getLogger().info("WESO_FIXTURE_RESOURCES active=" + active + ", pending=" + pending
+                    + ", dispatchTasks=" + tasks.size());
         } catch (ReflectiveOperationException ex) {
             throw new IllegalStateException("Fixture no longer matches companion field", ex);
         }

@@ -472,9 +472,28 @@ later option only after measurement. No network scheduler source was copied.
 The public [BukkitScheduler 1.21.11](https://jd.papermc.io/paper/1.21.11/org/bukkit/scheduler/BukkitScheduler.html)
 provides owning-thread task scheduling, but by itself supplies neither fairness
 nor cost guarantees. The [31-sender deterministic counterexample](BRIDGE_TICK_ATTRIBUTION_RESEARCH_2026-10-12.md#adversarial-admission-ordering)
-reproduces the current core's progress failure on Java 21/25. A future scheduler
+reproduces the pre-dispatch core's progress failure on Java 21/25. A future scheduler
 must independently prove deadlines, authority/duplicate semantics, cleanup,
 aggregate memory/CPU/bytes and zero idle work before any production claim.
+
+## S46 Owning-Thread Fair Dispatch
+
+Checked **2026-10-12**, Paper **1.21.11-132 / c5eb079**. The public
+[BukkitScheduler.runTaskTimer](https://jd.papermc.io/paper/1.21.11/org/bukkit/scheduler/BukkitScheduler.html#runTaskTimer(org.bukkit.plugin.Plugin,java.lang.Runnable,long,long))
+provides synchronous repeating execution after a tick delay; the separate
+asynchronous methods explicitly prohibit unsafely accessing Bukkit APIs.
+[BukkitTask](https://jd.papermc.io/paper/1.21.11/org/bukkit/scheduler/BukkitTask.html)
+exposes cancellation of the owned task. Our Paper adapter schedules at delay 1,
+period 1 only when work first queues, retains one handle, and cancels it on idle
+and teardown. It does not use scheduler internals, worker threads or world polls.
+
+Unique actor slots, FIFO service, global tokens at dispatch, soft 0.5 ms slices
+and a 5-second service-eligibility deadline are **our experimental policy**, not
+guarantees supplied by those APIs or RFC 8290. A single external call can exceed
+the soft target. Queue payload bounds exclude object/map overhead; ingress-copy
+metering differs from global decode/read metering. See the
+[fair-dispatch report](BRIDGE_FAIR_DISPATCH_2026-10-12.md) for deterministic,
+real-network and native evidence. No broader performance support is inferred.
 
 ## Local Evidence And Refresh Rules
 

@@ -64,7 +64,8 @@ No block content, world name, player ID, inventories, entities or clipboard is s
 The platform supplies the actual connection player to the server core. No field
 allows selecting another actor or world. Require the opt-in bridge permission
 and a relevant WorldEdit selection grant before negotiating/serving data.
-Permissions are rechecked even before duplicate-read caching is used.
+Permissions are rechecked at service time, even before duplicate-read caching
+is used, and after a host read before publishing its result.
 Either an authorization check or the host read returning DENIED invalidates the
 server epoch. Restored permission requires a new hello/context negotiation.
 
@@ -77,6 +78,15 @@ are positive, increasing i64 values within the epoch. The server only caches the
 last reply: the same ID returns its original result; older IDs are dropped.
 The client has at most one pending read and accepts only its matching ID/epoch.
 A timed-out read is not retried, and its late result cannot complete a newer one.
+
+The server now accepts at most one pending frame per connection for deferred
+owning-thread service; additional frames cannot replace it or reorder that actor.
+Global admission applies before decoding at dispatch, not before queuing.
+The 5-second server service-eligibility deadline is shorter than the existing
+10-second client timeout. Expired/rejected frames receive no invented busy
+response or retry instruction. Cleanup occurs on bounded visits or immediately
+on context/connection/host teardown; a server stall can delay reclamation.
+Deferred replies retain the same nonce/epoch/request correlation and wire bytes.
 Native clients bind that state to connection, world **and local-player instance**.
 Replacing the player on a same-world respawn renews discovery with a fresh nonce,
 without automatically reading selection metadata. Incoming frames and explicit
@@ -100,7 +110,8 @@ On graceful Paper disable, send the notification from `PluginDisableEvent`
 **before** the plugin loses send authority, never from `onDisable`. Send only
 to negotiated live sessions, at most one 38-byte frame per bounded core peer;
 then close the core terminally and release its records. No tasks, subscriptions,
-WorldEdit reads or retained recovery registry are introduced. `onDisable` still
+WorldEdit reads or retained recovery registry are introduced by notification;
+the pending-frame dispatch task is cancelled first. `onDisable` still
 unregisters channels and clears resources if early notification is unavailable.
 
 This does not detect an ungraceful loss without a wire signal or a channel flap
@@ -117,6 +128,7 @@ already-online player advertising this optional channel. Initial joins use the
 normal hello; there are no registration-triggered replies, per-player recovery
 records, tasks, permission probes or WorldEdit reads. Work is O(online players)
 once per enable, not per tick; hint counts/bytes are separate diagnostics.
+Any resulting hello uses the same bounded metadata/control dispatcher.
 Legacy and ordinary clients not advertising the channel receive no hint.
 
 Only a matching negotiated SessionClosed arms recovery. In UNAVAILABLE the
@@ -141,8 +153,9 @@ claim general native hot-reload support or retry on every tick.
 See the earlier [channel/reconnect evidence](BRIDGE_CHANNEL_AND_BASELINE_2026-10-12.md)
 for the separate advertisement-based path.
 
-Handlers are owned by their platform game thread. Cheap frame/admission checks
-precede application decoding and session access. Invalid or throttled traffic is
+Handlers and the pending-frame dispatcher are owned by their platform game
+thread. Cheap frame/per-player checks precede queuing; the aggregate service
+budget precedes application decoding and session access. Invalid or throttled traffic is
 dropped without per-packet logging; quotas apply globally as well as per player.
 No unsolicited selection stream, background polling, mutation acknowledgment or
 clipboard/command-preview operation exists in this schema.

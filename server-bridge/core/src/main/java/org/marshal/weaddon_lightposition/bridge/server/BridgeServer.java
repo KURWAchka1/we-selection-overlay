@@ -1,6 +1,7 @@
 package org.marshal.weaddon_lightposition.bridge.server;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -13,7 +14,7 @@ import org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage;
 
 import static org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.*;
 
-/** Owned by the platform's game thread. No tasks, workers or world/block reads. */
+/** Owning-thread metadata service. Host drains bounded slices only while work exists. */
 public final class BridgeServer {
     public interface Host {
         boolean mayReadSelection(UUID connectionPlayer);
@@ -33,51 +34,122 @@ public final class BridgeServer {
     public record Metrics(int connections, long admitted, long throttled, long malformed,
                           long selectionReads, long replies, long encodedReplyBytes) { }
 
+    public record DispatchLimits(int maxPerSlice, long sliceNanos, long maxPendingNanos) {
+        public DispatchLimits {
+            if (maxPerSlice < 1 || maxPerSlice > 256 || sliceNanos < 50_000 || sliceNanos > 10_000_000
+                    || maxPendingNanos < 1_000_000 || maxPendingNanos > 9_000_000_000L)
+                throw new IllegalArgumentException("Invalid dispatch limits");
+        }
+        public static DispatchLimits defaults() { return new DispatchLimits(8, 500_000, 5_000_000_000L); }
+    }
+
+    public record QueueMetrics(int pending, int peakPending, long queued, long expired,
+                               long cancelled, long maxWaitNanos, long maxSliceNanos) { }
+
     private static final class Peer {
         final TokenBucket rate;
         UUID nonce, epoch;
         int capabilities;
         long lastRequest;
         SelectionReply lastReply;
+        byte[] pending;
+        long queuedAt;
         Peer(TokenBucket rate) { this.rate = rate; }
     }
 
     private final Host host;
     private final Thread owner = Thread.currentThread();
     private final Limits limits;
+    private final DispatchLimits dispatchLimits;
     private final LongSupplier clock;
     private final Supplier<UUID> epochs;
     private final TokenBucket aggregate;
     private final Map<UUID, Peer> peers = new HashMap<>();
+    private final LinkedHashMap<UUID, Peer> pending = new LinkedHashMap<>();
     private long admitted, throttled, malformed, selectionReads, replies, encodedReplyBytes;
+    private long queued, expired, cancelled, maxWaitNanos, maxSliceNanos;
+    private int peakPending;
+    private boolean draining;
     private boolean closed;
 
     public BridgeServer(Host host, Limits limits, LongSupplier clock, Supplier<UUID> epochs) {
+        this(host, limits, DispatchLimits.defaults(), clock, epochs);
+    }
+
+    public BridgeServer(Host host, Limits limits, DispatchLimits dispatchLimits,
+                        LongSupplier clock, Supplier<UUID> epochs) {
         this.host = Objects.requireNonNull(host);
         this.limits = Objects.requireNonNull(limits);
+        this.dispatchLimits = Objects.requireNonNull(dispatchLimits);
         this.clock = Objects.requireNonNull(clock);
         this.epochs = Objects.requireNonNull(epochs);
         aggregate = new TokenBucket(limits.globalPerSecond(), limits.globalBurst(), clock.getAsLong());
     }
 
     /** Caller supplies identity from the actual connection, never from a payload. */
-    public byte[] receive(UUID player, byte[] frame) {
+    public boolean enqueue(UUID player, byte[] frame) {
         checkThread();
         Objects.requireNonNull(player);
-        if (closed) return null;
+        if (closed) return false;
         if (frame == null || frame.length < BridgeCodec.MIN_FRAME_BYTES || frame.length > BridgeCodec.MAX_FRAME_BYTES) {
             malformed++;
-            return null;
+            return false;
         }
         long now = clock.getAsLong();
         Peer peer = peers.get(player);
         if (peer == null) {
-            if (peers.size() >= limits.maxConnections()) { throttled++; return null; }
+            if (peers.size() >= limits.maxConnections()) { throttled++; return false; }
             peer = new Peer(new TokenBucket(limits.playerPerSecond(), limits.playerBurst(), now));
             peers.put(player, peer);
         }
-        if (!peer.rate.take(now) || !aggregate.take(now)) { throttled++; return null; }
-        admitted++;
+        // Input stays cheap: no decoding/session access, one defensive frame copy per peer.
+        if (!peer.rate.take(now) || peer.pending != null) { throttled++; return false; }
+        peer.pending = frame.clone();
+        peer.queuedAt = now;
+        pending.put(player, peer);
+        queued++;
+        peakPending = Math.max(peakPending, pending.size());
+        return true;
+    }
+
+    /** Host invokes once per tick at most; slice limits cannot preempt an individual host call. */
+    public int drain(BiConsumer<UUID, byte[]> send) {
+        checkThread();
+        Objects.requireNonNull(send);
+        if (closed) return 0;
+        if (draining) throw new IllegalStateException("Recursive bridge drain");
+        if (pending.isEmpty()) return 0;
+        draining = true;
+        long started = clock.getAsLong();
+        int visited = 0;
+        try {
+            while (!closed && !pending.isEmpty() && visited < dispatchLimits.maxPerSlice()) {
+                long now = clock.getAsLong();
+                if (visited > 0 && now - started >= dispatchLimits.sliceNanos()) break;
+                var entry = pending.entrySet().iterator().next();
+                UUID player = entry.getKey();
+                Peer peer = entry.getValue();
+                long wait = Math.max(0, now - peer.queuedAt);
+                boolean stale = wait >= dispatchLimits.maxPendingNanos();
+                if (!stale && !aggregate.take(now)) break;
+                pending.remove(player);
+                byte[] frame = peer.pending;
+                peer.pending = null;
+                visited++;
+                maxWaitNanos = Math.max(maxWaitNanos, wait);
+                if (stale) { expired++; continue; }
+                admitted++;
+                byte[] reply = process(player, peer, frame);
+                if (reply != null && !closed && peers.get(player) == peer) send.accept(player, reply);
+            }
+            return visited;
+        } finally {
+            maxSliceNanos = Math.max(maxSliceNanos, Math.max(0, clock.getAsLong() - started));
+            draining = false;
+        }
+    }
+
+    private byte[] process(UUID player, Peer peer, byte[] frame) {
         BridgeMessage message;
         try { message = BridgeCodec.decode(frame, BridgeCodec.Direction.TO_SERVER); }
         catch (IllegalArgumentException ex) { malformed++; return null; }
@@ -99,7 +171,9 @@ public final class BridgeServer {
             invalidate(peer);
             return new Welcome(hello.nonce(), NO_EPOCH, WelcomeStatus.INCOMPATIBLE, MAJOR, minor, 0, BridgeCodec.MAX_FRAME_BYTES);
         }
-        int allowed = host.mayReadSelection(player) ? hello.capabilities() & SUPPORTED_CAPABILITIES : 0;
+        boolean authorized = host.mayReadSelection(player);
+        if (closed || peers.get(player) != peer) return null;
+        int allowed = authorized ? hello.capabilities() & SUPPORTED_CAPABILITIES : 0;
         if (minor < 1) allowed &= ~SESSION_CLOSE;
         if ((allowed & SELECTION_READ) == 0) {
             invalidate(peer);
@@ -119,7 +193,9 @@ public final class BridgeServer {
     private SelectionReply selection(UUID player, Peer peer, SelectionRequest request) {
         if (peer.epoch == null || !peer.epoch.equals(request.epoch()) || (peer.capabilities & SELECTION_READ) == 0)
             return null;
-        if (!host.mayReadSelection(player)) {
+        boolean authorized = host.mayReadSelection(player);
+        if (closed || peers.get(player) != peer || !request.epoch().equals(peer.epoch)) return null;
+        if (!authorized) {
             SelectionReply denied = new SelectionReply(peer.epoch, request.requestId(), SelectionState.unavailable(SelectionStatus.DENIED));
             invalidate(peer);
             return denied;
@@ -128,6 +204,11 @@ public final class BridgeServer {
         if (request.requestId() == peer.lastRequest) return peer.lastReply;
         selectionReads++;
         SelectionState state = Objects.requireNonNull(host.readSelection(player));
+        if (closed || peers.get(player) != peer || !request.epoch().equals(peer.epoch)) return null;
+        // A host callback may revoke permission or invalidate context during the read.
+        authorized = host.mayReadSelection(player);
+        if (closed || peers.get(player) != peer || !request.epoch().equals(peer.epoch)) return null;
+        if (!authorized) state = SelectionState.unavailable(SelectionStatus.DENIED);
         SelectionReply reply = new SelectionReply(peer.epoch, request.requestId(), state);
         if (state.status() == SelectionStatus.DENIED) {
             invalidate(peer);
@@ -147,10 +228,16 @@ public final class BridgeServer {
         if (Thread.currentThread() != owner) throw new IllegalStateException("Bridge server used outside its owning thread");
     }
 
-    public void disconnect(UUID player) { checkThread(); peers.remove(player); }
+    private void cancelPending(UUID player) {
+        Peer peer = pending.remove(player);
+        if (peer != null) { peer.pending = null; cancelled++; }
+    }
+
+    public void disconnect(UUID player) { checkThread(); cancelPending(player); peers.remove(player); }
     /** Drop session data without resetting the budget of a still-open connection. */
     public void resetContext(UUID player) {
         checkThread();
+        cancelPending(player);
         Peer peer = peers.get(player);
         if (peer != null) invalidate(peer);
     }
@@ -170,13 +257,25 @@ public final class BridgeServer {
                 encodedReplyBytes += frame.length;
             }
         } finally {
+            clearPending();
             peers.clear();
         }
     }
 
-    public void close() { checkThread(); closed = true; peers.clear(); }
+    private void clearPending() {
+        cancelled += pending.size();
+        for (Peer peer : pending.values()) peer.pending = null;
+        pending.clear();
+    }
+
+    public void close() { checkThread(); closed = true; clearPending(); peers.clear(); }
     public Metrics metrics() {
         checkThread();
         return new Metrics(peers.size(), admitted, throttled, malformed, selectionReads, replies, encodedReplyBytes);
+    }
+    public int pendingCount() { checkThread(); return pending.size(); }
+    public QueueMetrics queueMetrics() {
+        checkThread();
+        return new QueueMetrics(pending.size(), peakPending, queued, expired, cancelled, maxWaitNanos, maxSliceNanos);
     }
 }

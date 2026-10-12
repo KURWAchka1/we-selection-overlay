@@ -118,6 +118,32 @@ IDs return their prior result within a bounded per-connection window.
 
 ## Thread Ownership And Scheduling
 
+### Implemented Metadata Foundation
+
+The experimental Paper core now retains at most one defensively copied frame
+per actual connection. Ingress checks length, bounded peer state and per-player
+rate, without decoding or reading WorldEdit. An occupied slot preserves its
+first request and place. The oldest distinct actor is visited first; after its
+slot is removed, new work can join only at the tail. Global frame tokens are
+spent here, not at ingress. This prevents another actor's arrival order from
+consuming all service eligibility before the ordinary actor can queue.
+
+Default service is at most 8 visits per owning-thread tick slice, with a soft
+0.5 ms target and a 5-second service-eligibility deadline. One public synchronous
+Paper task exists only while pending work exists. Cancellation clears owned
+buffers/tasks on context loss, disconnect and disable. Permissions and context
+are checked at actual service/publication time, including cached results.
+See [implemented evidence](BRIDGE_FAIR_DISPATCH_2026-10-12.md) and
+[public scheduling sources](SOURCES.md#s46-owning-thread-fair-dispatch).
+
+This is fixed metadata/control service, not a measured CPU-share scheduler for
+clipboard capture or simulation. No network deficit/CoDel implementation was
+copied. The per-player ingress-copy bound and aggregate decode/read bound are
+different; a queued frame is not a guaranteed reply. The remaining stages below
+must establish their own revisions, cancellation, resource costs and deadlines.
+
+### Future Heavy Stages
+
 | Stage | Owner | Allowed work |
 | --- | --- | --- |
 | Decode | Transport/codec thread | Validate lengths/opcodes; bounded primitive decoding, no live world calls |

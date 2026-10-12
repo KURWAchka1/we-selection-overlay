@@ -79,6 +79,17 @@ does not**. Coverage is 50 pure tests per JVM, 23 general Node checks and four
 actual-recording JFR checks per JVM. No client/companion behavior or protocol is
 changed, and the bounded round-robin alternative is still a research proposal.
 
+The subsequent [bounded fair-dispatch cycle](BRIDGE_FAIR_DISPATCH_2026-10-12.md)
+implements that narrower metadata/control prototype in the experimental server
+only. It replaces first-arrival global admission with one queued frame per
+connection and fair owning-thread service. Deferred authority/context checks,
+timeout compatibility, storage/age bounds and cleanup have dedicated tests.
+Coverage is 68 pure tests per JVM, 25 Node checks, four JFR checks per JVM,
+17 real wire groups, six actual native connections, two fair 32-player load
+cycles and a separate three-cycle 32-peer restart regression. The latter
+reproduced and corrected an obsolete zero-active-task fixture assumption.
+Historical reports above describe their original candidates, not current code.
+
 Pure Java 21 messages, bounded codec, client state machine and owning-thread
 server service; optional native transports in all six runtimes; Paper 1.21.11
 host using official WorldEdit 7.4.2 public session APIs. Only hello/capabilities,
@@ -86,7 +97,9 @@ negotiated lifecycle notification and explicit **read-only selection
 bounds/height/grants** are implemented.
 See [wire schema](SERVER_BRIDGE_PROTOCOL.md) and [build instructions](../../server-bridge/README.md).
 
-No server polling tasks, workers, block/chunk reads, clipboard subscriptions,
+There are no idle/session-polling tasks. A single owned synchronous dispatch
+task runs only while pending frames exist, and is cancelled on idle or teardown.
+No workers, block/chunk reads, clipboard subscriptions,
 simulations, history edits or selection commits exist in this foundation.
 There is no UI/provider switch to remote editing yet. CUI is a separate channel;
 ordinary local sources and rendering remain unchanged. Bounds are not exact
@@ -177,9 +190,9 @@ server versions or modpacks. Only Paper 1.21.11 has a host adapter; 26.x hosts, 
 hosts, FAWE, Folia, proxies and translators remain unimplemented/unverified.
 No advertised compatibility matrix is widened by this work.
 
-The next foundation experiment is bounded fair dispatch for metadata/control
-traffic, followed by measured cost acceptance; first-arrival token admission is
-not a starvation-free service policy. The next feature after these gates is a
+Bounded fair dispatch for metadata/control is now implemented and tested within
+the scope recorded above; measured busy-server cost acceptance remains open.
+The next feature after these gates is a
 revision-safe remote selection transaction/source integrated with the existing
 editor. Clipboard streaming and read-only command simulation follow with
 aggregate budgets and authorization.

@@ -72,7 +72,7 @@ async function consoleAction(action, player) {
 async function metrics() {
   const start = lines.length;
   java.stdin.write('wesobridge\n');
-  await waitFor(() => lines.slice(start).some(s => /Restart hints=/.test(s)), 'diagnostic counters');
+  await waitFor(() => lines.slice(start).some(s => /Queue pending=/.test(s)), 'diagnostic counters');
   const a = lines.slice(start).find(s => /connections=/.test(s));
   const b = lines.slice(start).find(s => /Selection metadata reads=/.test(s));
   const c = lines.slice(start).find(s => /Restart hints=/.test(s));

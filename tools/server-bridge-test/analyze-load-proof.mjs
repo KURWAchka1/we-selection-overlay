@@ -5,8 +5,8 @@ import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '../..');
 const mode = process.argv[2] ?? 'load';
-assert(['load', 'baseline', 'restart', 'timeline'].includes(mode));
-const directory = join(root, 'build', { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof' }[mode]);
+assert(['load', 'baseline', 'restart', 'timeline', 'fair'].includes(mode));
+const directory = join(root, 'build', { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof', fair: 'bridge-fair-dispatch-proof' }[mode]);
 const proof = JSON.parse(readFileSync(join(directory, 'load-proof.json'), 'utf8'));
 assert.equal(proof.mode ?? 'load', mode);
 const runs = [...new Set(proof.results.map(result => result.run))];
@@ -25,7 +25,7 @@ for (const run of runs) {
     assert(Number.isInteger(window.window) && window.window >= 0 && window.window < windows.length);
     profiles.push({ run, label: windows[window.window].label, ...window });
   }
-  if (mode === 'timeline') {
+  if (mode === 'timeline' || mode === 'fair') {
     assert(windows.every(w => w.tickTimelineVersion === 1));
     const result = spawnSync(join(proof.javaHome, 'bin/java.exe'), ['-Xmx256m', '-XX:ActiveProcessorCount=2',
       join(import.meta.dirname, 'JfrTickTimeline.java'), join(directory, `${run}.jfr`),
@@ -47,7 +47,9 @@ const rows = proof.results.map(row => ({ run: row.run, phase: row.label,
   ownerMiBPerSecond: row.ownerAllocatedBytes / 1024 / 1024 / (row.wallMillis / 1000),
   reads: row.bridge?.reads ?? 0, throttled: row.bridge?.throttled ?? 0, replyBytes: row.bridge?.bytes ?? 0,
   chunkLoads: row.chunkLoads, generatedChunks: row.generatedChunks,
-  gcCount: row.gcCount, gcMillis: row.gcMillis }));
+  gcCount: row.gcCount, gcMillis: row.gcMillis,
+  ...(row.queueAfter ? { queueAfter: row.queueAfter } : {}),
+  ...(row.ordinaryReplyLatencies ? { ordinaryReplyLatencies: row.ordinaryReplyLatencies } : {}) }));
 const report = { checkedAt: proof.checkedAt, mode, worldDigest: proof.worldDigest, rows, profiles, tickOutliers,
   warning: 'Local stationary headless workloads on a shared laptop. Sampled allocation weights are estimates, not exact call costs. Frozen baseline worlds reduce confounds but do not establish production performance acceptance or native-client lifecycle behavior.' };
 writeFileSync(join(directory, 'load-analysis.json'), JSON.stringify(report, null, 2));
