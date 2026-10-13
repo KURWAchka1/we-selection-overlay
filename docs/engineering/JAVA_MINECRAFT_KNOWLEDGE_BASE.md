@@ -11,11 +11,14 @@ optional WorldEdit server companion, not a generic Java tutorial.
 - **Proposal** means a design awaiting a prototype and measurements.
 - **Unverified** means we must not advertise support yet.
 
-An experimental **metadata transport foundation** and **Paper 1.21.11 cuboid
-editing** are implemented; see the [foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
-and [remote-editing scope/tests](BRIDGE_REMOTE_SELECTION_2026-10-13.md). The editing
-consumer exists only in development Fabric/NeoForge 1.21.11 clients. Clipboard
-synchronization, command simulation and other dedicated hosts remain unimplemented.
+An experimental **metadata transport foundation** and **Paper cuboid editing**
+are implemented; see the [foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
+and [remote-editing scope/tests](BRIDGE_REMOTE_SELECTION_2026-10-13.md). Development
+Fabric/NeoForge consumers now cover all six runtime adapters. The additional
+[26.x native gesture proof](BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) is limited to
+exact Paper/WorldEdit pairs: 26.1.2/7.4.3 and 26.2/7.4.5. It does not extend the
+1.21.11 lifecycle/fault/load evidence to those hosts. Clipboard synchronization,
+command simulation and other dedicated hosts remain unimplemented.
 Published client 1.8.0 is unchanged and has no bridge protocol support.
 Existing CUI-only servers must keep working without installing a companion.
 
@@ -40,6 +43,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Remote cuboid editing](BRIDGE_REMOTE_SELECTION_2026-10-13.md) | Minor-2 capture/commit, live authority, single-use revisions, cached native source, real Paper/native evidence and fresh-start boundary |
 | [Edit network faults and concurrent load](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md) | Native RTT/late-ack/revocation checks, 32-actor edit pressure, raw/JFR reconciliation and remaining production gates |
 | [Native remote gestures](BRIDGE_NATIVE_GESTURES_2026-10-13.md) | Real callback/hit-test coverage, all faces/corners, cancellation, radial XYZ Move, server authority and native screenshots |
+| [26.x remote editing](BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) | Exact host tuples, four native connections, shared remote source, screenshots and remaining cross-version gates |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

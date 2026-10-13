@@ -43,10 +43,9 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
     @Override public void onEnable() {
         var worldEdit = getServer().getPluginManager().getPlugin("WorldEdit");
         String worldEditVersion = worldEdit == null ? "" : worldEdit.getPluginMeta().getVersion();
-        if (!Bukkit.getMinecraftVersion().equals("1.21.11") || worldEdit == null || !worldEdit.isEnabled()
-                || !worldEdit.getName().equals("WorldEdit")
-                || !(worldEditVersion.equals("7.4.2") || worldEditVersion.startsWith("7.4.2+"))) {
-            getLogger().severe("This experimental host targets Paper 1.21.11 with official WorldEdit 7.4.2 only.");
+        if (worldEdit == null || !PaperHostCompatibility.supports(Bukkit.getMinecraftVersion(),
+                worldEdit.getName(), worldEditVersion, worldEdit.isEnabled())) {
+            getLogger().severe("This experimental host requires an exact Paper/official WorldEdit tuple: 1.21.11/7.4.2, 26.1.2/7.4.3 or 26.2/7.4.5.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }

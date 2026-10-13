@@ -39,9 +39,15 @@ public final class NativeBridgeChecks {
     private int tapTicks;
     private long quietRequest;
 
+    static Class<?> runtimeClass(String suffix) throws ClassNotFoundException {
+        String runtime = System.getProperty("weso.native.runtime", "mc1_21_11");
+        if (!java.util.Set.of("mc1_21_11", "mc26_1", "mc26_2").contains(runtime)) throw new IllegalArgumentException("Unknown native runtime");
+        return Class.forName("org.marshal.weaddon_lightposition.runtime." + runtime + "." + suffix);
+    }
+
     public NativeBridgeChecks(Adapter adapter) {
         this.adapter = adapter;
-        try { bridge = Class.forName("org.marshal.weaddon_lightposition.runtime.mc1_21_11.client.bridge.NativeServerBridge"); }
+        try { bridge = runtimeClass("client.bridge.NativeServerBridge"); }
         catch (ClassNotFoundException ex) { throw new AssertionError(ex); }
         faults = scenario.startsWith("fault-") ? new NativeEditFaultChecks(adapter, bridge) : null;
         gestures = scenario.equals("gestures") ? new NativeEditGestureChecks(adapter, bridge) : null;
@@ -54,7 +60,7 @@ public final class NativeBridgeChecks {
         try {
             check(System.nanoTime() - deadline < 0, "Timeout at stage " + stage + ", status=" + status());
             adapter.configure();
-            if (editor == null) editor = Class.forName("org.marshal.weaddon_lightposition.runtime.mc1_21_11.client.selection.SelectionEditController").getMethod("instance").invoke(null);
+            if (editor == null) editor = runtimeClass("client.selection.SelectionEditController").getMethod("instance").invoke(null);
             editor.getClass().getMethod("configure", boolean.class, int.class, int.class).invoke(editor, exercisingEditing, 1, 8);
             if (exercisingEditing) adapter.focusForEditing(true);
             if (stage == 9) {

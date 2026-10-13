@@ -12,8 +12,8 @@ clients to include the new transport. Do not replace or move the `1.8.0` tag.
   absent/denied/incompatible states. Normal `worldedit:cui` is untouched.
 - Explicit read-only requests for the requesting player's selection bounds,
   inclusive world height and expand/contract/shift permission bits.
-- Separately authorized minor-2 cuboid capture/commit on Paper 1.21.11, reused
-  by the existing development Fabric/NeoForge 1.21.11 selection editor. Dragging
+- Separately authorized minor-2 cuboid capture/commit on exact Paper 1.21.11,
+  26.1.2 and 26.2 hosts, reused by all six development client adapters. Dragging
   remains local; confirmation sends one bounded transaction, cancellation none.
 - Owning-thread enforcement, per-connection and aggregate admission limits,
   bounded connection state, duplicate-read caching and context cleanup.
@@ -29,8 +29,9 @@ Implemented capabilities are **selection metadata read** and separately granted
 **cuboid selection editing**, not world editing. Bounds do not describe non-cuboid
 geometry; CUI remains its source. Integrated singleplayer keeps its local source;
 other previews, isolation and UI are not rerouted through this prototype.
-Clipboard synchronization, command previews, 26.x remote editing and dedicated
-Fabric/NeoForge server hosts remain planned. See the [remote-editing evidence](../docs/engineering/BRIDGE_REMOTE_SELECTION_2026-10-13.md).
+Clipboard synchronization, command previews and dedicated Fabric/NeoForge server
+hosts remain planned. See the [initial remote-editing evidence](../docs/engineering/BRIDGE_REMOTE_SELECTION_2026-10-13.md)
+and the narrower [26.x native results](../docs/engineering/BRIDGE_26X_REMOTE_EDITING_2026-10-13.md).
 
 ## Layout
 
@@ -45,8 +46,8 @@ Fabric/NeoForge server hosts remain planned. See the [remote-editing evidence](.
 Client-native files live in each runtime's `client/bridge` package. Maintain the
 Fabric 26.2 adapters and run `node tools/sync-server-bridge.mjs` from the root to
 update the other adapters; `--check` detects drift without rewriting them. The
-generator preserves the 1.21.11-only editing consumer; 26.x requests metadata/close
-only. Application protocol/state logic is not duplicated.
+generator maintains the editing transport and remote source on all six adapters,
+including the mapped 1.21.11 boundary. Application protocol/state logic is not duplicated.
 
 ## Build And Test
 
@@ -57,7 +58,7 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-63 harness self-tests (owned-process shutdown, frozen-world safety, wire
+67 harness self-tests (owned-process shutdown, frozen-world safety, exact tuples, wire
 helpers, mixed-workload and active-lifecycle validation); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
@@ -78,10 +79,10 @@ testing tools and client code are not bundled.
 
 ## Controlled Server Proof
 
-The initial host refuses Minecraft versions other than **1.21.11** and WorldEdit
-versions other than official **7.4.2** (including its `+build` suffix). This is
-a guard against accidental unverified deployment, not evidence that the target
-already passed a live test. No FAWE, Folia, proxy or translator support is claimed.
+The host permits only these enabled official WorldEdit/Minecraft pairs (including
+WorldEdit's `+build` suffix): **1.21.11 / 7.4.2**, **26.1.2 / 7.4.3** and
+**26.2 / 7.4.5**. Other pairs fail closed. This guard is not a claim that every
+scenario passed on all hosts. No FAWE, Folia, proxy or translator support is claimed.
 
 The real Paper/application-wire check has passed with headless protocol clients;
 this does not establish Fabric/NeoForge native joins. To repeat it, obtain the
@@ -140,8 +141,22 @@ fixture uses a fresh loopback Paper process per loader and the guarded private
 desktop under `build/bridge-native-gesture-proof/`. It covers all faces/corners,
 free-corner release, cancellation and real radial XYZ Move; actual server bounds
 and counters must match. Fresh native screenshots are captured for review. This
-does not establish manual hardware ergonomics, frame-time acceptance or 26.x
-remote editing. See [executed results](../docs/engineering/BRIDGE_NATIVE_GESTURES_2026-10-13.md).
+does not establish manual hardware ergonomics or frame-time acceptance.
+See [executed 1.21.11 results](../docs/engineering/BRIDGE_NATIVE_GESTURES_2026-10-13.md).
+
+The same guarded gesture suite additionally passes both loaders on exact 26.1.2
+and 26.2 hosts. Cache the checksum-pinned Paper/WorldEdit artifacts listed in the
+[26.x report](../docs/engineering/BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) under
+`build/bridge-server-downloads/`, then select the exact Minecraft version:
+
+```powershell
+.\tools\test-native-paper-bridge.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Minecraft 26.1.2 -ModVersion 1.8.0-bridge-dev -EditGestures -AcceptEula
+.\tools\test-native-paper-bridge.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Minecraft 26.2 -ModVersion 1.8.0-bridge-dev -EditGestures -AcceptEula
+```
+
+Each tuple uses a separate ignored `build/bridge-native-gesture-proof/<version>/`
+server. The 26.x launcher currently rejects non-gesture native modes; denial,
+absence, lifecycle, network-fault and load evidence is not inherited from 1.21.11.
 
 The extended wire fixture also exercises actual same-world death/respawn,
 same-process reconnect, bridge channel unregister/register and WorldEdit disable.

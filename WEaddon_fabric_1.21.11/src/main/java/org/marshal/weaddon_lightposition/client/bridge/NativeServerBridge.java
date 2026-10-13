@@ -9,7 +9,7 @@ import org.marshal.weaddon_lightposition.bridge.client.BridgeClient;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.SelectionState;
 import org.slf4j.LoggerFactory;
 
-/** Optional read-only transport. Existing CUI/local sources remain independent. */
+/** Optional negotiated transport. Existing CUI/local sources remain independent. */
 public final class NativeServerBridge {
     private static final BridgeClient CLIENT = new BridgeClient(org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.SUPPORTED_CAPABILITIES);
     private static final org.marshal.weaddon_lightposition.bridge.client.BridgeEditExchange EDIT = new org.marshal.weaddon_lightposition.bridge.client.BridgeEditExchange(CLIENT);

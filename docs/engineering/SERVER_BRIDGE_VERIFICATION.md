@@ -88,6 +88,15 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [26.x remote editing cycle](BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) ports the
+existing consumer to all four 26.x adapters and passes 28 native gesture cases
+per loader on exact Paper 26.1.2/WorldEdit 7.4.3 and Paper 26.2/WorldEdit 7.4.5
+hosts. Server bounds, 92 applied commits, cancellation and quiet cache checks
+reconcile; eight fresh screenshots are inspected. This closes those exact
+gesture/version scenarios, not 26.x denial/absence, respawn/restart, delayed
+acknowledgment, concurrent-load or production cost gates. Historical references
+to untested 26.x consumers below describe the earlier cycles, not this later one.
+
 The [native remote gesture cycle](BRIDGE_NATIVE_GESTURES_2026-10-13.md) passes
 28 actual input/controller cases on each 1.21.11 loader, repeated after frame-
 camera and screenshot checks are added. Actual WorldEdit bounds and server

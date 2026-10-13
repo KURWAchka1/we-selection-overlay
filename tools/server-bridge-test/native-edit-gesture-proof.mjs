@@ -9,10 +9,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { captureProcess } from './native-process.mjs';
 import { observeOwnedServer } from './owned-server.mjs';
 import { initialBounds, verifyGestureResult, verifyGestureMatrix } from './gesture-evidence.mjs';
+import { gestureTuple } from './gesture-tuples.mjs';
 
-const [javaHome, directory, modVersion, powershell] = process.argv.slice(2);
+const [javaHome, directory, modVersion, powershell, minecraft = '1.21.11'] = process.argv.slice(2);
+const tuple = gestureTuple(minecraft);
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory);
-assert.equal(relative(root, serverDir), join('build', 'bridge-native-gesture-proof'));
+assert.equal(relative(root, serverDir), join('build', 'bridge-native-gesture-proof', ...(minecraft === '1.21.11' ? [] : [minecraft])));
 assert(process.env.WESO_TEST_DESKTOP?.startsWith('WesoTest-'));
 assert.match(modVersion, /^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$/);
 const properties = readFileSync(join(serverDir, 'server.properties'), 'utf8');
@@ -21,8 +23,8 @@ assert.match(readFileSync(join(serverDir, 'eula.txt'), 'utf8'), /^eula=true\s*$/
 const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
 const hashes = { paper: hash(join(serverDir, 'server.jar')), worldedit: hash(join(serverDir, 'plugins/worldedit.jar')),
   companion: hash(join(serverDir, 'companion.jar')), fixture: hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar')) };
-assert.equal(hashes.paper, '5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba');
-assert.equal(hashes.worldedit, '0ee152b1be5dfb51500505e2bf5a8c9d66f09c7fa484bf9aea384d7e7b459b06');
+assert.equal(hashes.paper, tuple.paperSha256);
+assert.equal(createHash(tuple.worldeditAlgorithm).update(readFileSync(join(serverDir, 'plugins/worldedit.jar'))).digest('hex'), tuple.worldeditHash);
 const artifacts = Object.fromEntries(['fabric', 'neoforge'].map(loader => [loader,
   join(root, `WEaddon_${loader}_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${modVersion}-${loader}-1.21.11-26.2.jar`)]));
 for (const [loader, file] of Object.entries(artifacts)) hashes[loader] = hash(file);
@@ -45,6 +47,7 @@ async function startServer(loader) {
   if (child.pid) setPriority(child.pid, constants.priority.PRIORITY_BELOW_NORMAL);
   await waitFor(() => server.lines.some(s => /Done \(/.test(s)), 'Paper startup');
   assert(!server.lines.some(s => /Error occurred while enabling/.test(s)));
+  assert(!server.lines.some(s => s.includes('[WorldEditSelectionOverlayBridge]') && /Disabling|ERROR/.test(s)), 'Bridge failed closed at startup');
 }
 async function stopServer() { if (server) { try { await server.lifecycle.stop({ graceMillis: 20000 }); } finally { if (server.exited) await server.drained; } } }
 async function action(name) {
@@ -65,7 +68,7 @@ async function runClient(loader) {
   const started = Date.now();
   const baseline = await metrics(); assert.equal(baseline.connections, 0);
   const control = join(serverDir, `${loader}-gestures-control.txt`); writeFileSync(control, '');
-  const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-File', join(root, 'tools/test-command-matrix.ps1'), '-Java21', javaHome, '-Java25', javaHome, '-Only', `${loader}-1.21.11`, '-ModVersion', modVersion, '-NativeBridgeScenario', 'gestures', '-NativeBridgeControl', control, '-DesktopWorker'], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-File', join(root, 'tools/test-command-matrix.ps1'), '-Java21', javaHome, '-Java25', javaHome, '-Only', `${loader}-${tuple.family}`, '-ModVersion', modVersion, '-NativeBridgeScenario', 'gestures', '-NativeBridgeControl', control, '-NativeBridgeMinecraft', minecraft, '-DesktopWorker'], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   client = captureProcess(child, join(serverDir, `${loader}-gestures.log`));
   let lineIndex = 0, caseBaseline = baseline, result;
   const cases = [], end = Date.now() + 420000;
@@ -111,7 +114,9 @@ async function runClient(loader) {
   const final = await metrics(); assert.equal(final.connections, 0); assert.equal(final.pending, 0); assert.equal(final.tasks, 0);
   assert.equal(final.commits - baseline.commits, 23); assert.equal(final.applied - baseline.applied, 23); assert.equal(final.captures - baseline.captures, 29);
   assert.equal(hash(artifacts[loader]), hashes[loader]); assert.equal(hash(join(serverDir, 'companion.jar')), hashes.companion);
-  const screenshotRoot = join(root, loader === 'fabric' ? 'WEaddon_fabric_1.21.11' : 'WEaddon_neoforge_universal_1.21.11-26.2', 'run-native-bridge-gestures/screenshots');
+  const fabricModule = tuple.family === '26.1' ? 'WEaddon_lightposition' : `WEaddon_fabric_${tuple.family}`;
+  const runDirectory = 'run-native-bridge-gestures' + (minecraft === '1.21.11' ? '' : `-${tuple.family}`);
+  const screenshotRoot = join(root, loader === 'fabric' ? fabricModule : 'WEaddon_neoforge_universal_1.21.11-26.2', runDirectory, 'screenshots');
   const screenshots = readdirSync(screenshotRoot).filter(name => name.endsWith('.png') && statSync(join(screenshotRoot, name)).mtimeMs >= started).sort().map(name => {
     const file = join(screenshotRoot, name), bytes = readFileSync(file);
     assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
@@ -123,9 +128,11 @@ async function runClient(loader) {
 }
 try {
   for (const loader of ['fabric', 'neoforge']) { await startServer(loader); await runClient(loader); await stopServer(); }
-  writeFileSync(proof, JSON.stringify({ checkedAt: new Date().toISOString(), baseline: 'e5aa9aa', minecraft: '1.21.11', modVersion, hashes,
+  const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true });
+  assert.equal(revision.status, 0);
+  writeFileSync(proof, JSON.stringify({ checkedAt: new Date().toISOString(), baseline: revision.stdout.trim(), minecraft, tuple, modVersion, hashes,
     input: 'In-JVM pinned Minecraft callbacks; private desktop and cursor agent; no system input', evidence }, null, 2));
-  console.log('NATIVE EDIT GESTURE MATRIX PASS: both guarded clients, 56 cases');
+  console.log(`NATIVE EDIT GESTURE MATRIX PASS: ${minecraft}, both guarded clients, 56 cases`);
 } catch (error) { writeFileSync(failure, JSON.stringify({ checkedAt: new Date().toISOString(), error: String(error), hashes, evidence }, null, 2)); console.error(error); process.exitCode = 1; }
 finally {
   try {

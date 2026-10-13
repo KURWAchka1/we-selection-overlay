@@ -5,6 +5,7 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$')][string]$ModVersion = '1.8.0',
     [ValidateSet('allowed', 'denied', 'absent', 'fault-slow', 'fault-late', 'fault-revoked', 'gestures')][string]$NativeBridgeScenario,
     [string]$NativeBridgeControl,
+    [ValidateSet('1.21.11', '26.1.2', '26.2')][string]$NativeBridgeMinecraft = '1.21.11',
     [switch]$DesktopWorker
 )
 
@@ -13,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 if (!$DesktopWorker) {
     & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
     $parameters = @{Java21=$Java21; Java25=$Java25; Only=$Only; ModVersion=$ModVersion; DesktopWorker=$true}
-    if ($NativeBridgeScenario) { $parameters.NativeBridgeScenario=$NativeBridgeScenario; $parameters.NativeBridgeControl=$NativeBridgeControl }
+    if ($NativeBridgeScenario) { $parameters.NativeBridgeScenario=$NativeBridgeScenario; $parameters.NativeBridgeControl=$NativeBridgeControl; $parameters.NativeBridgeMinecraft=$NativeBridgeMinecraft }
     Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters $parameters
     return
 }
@@ -22,22 +23,29 @@ $root = Split-Path -Parent $PSScriptRoot
 $logs = Join-Path $root 'build/command-validation'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
 if ($NativeBridgeScenario) {
-    if ($Only.Count -ne 1 -or $Only[0] -notin @('fabric-1.21.11', 'neoforge-1.21.11')) { throw 'Native Paper proof requires exactly one 1.21.11 client' }
+    $family = if ($NativeBridgeMinecraft -eq '26.1.2') { '26.1' } else { $NativeBridgeMinecraft }
+    if ($Only.Count -ne 1 -or $Only[0] -notin @("fabric-$family", "neoforge-$family")) { throw 'Native Paper proof requires one version-matched client' }
+    if ($family -ne '1.21.11' -and $NativeBridgeScenario -ne 'gestures') { throw '26.x native proof currently supports gestures only' }
     $control = [IO.Path]::GetFullPath($NativeBridgeControl)
     $directory = if ($NativeBridgeScenario.StartsWith('fault-')) { 'build/bridge-native-fault-proof' } elseif ($NativeBridgeScenario -eq 'gestures') { 'build/bridge-native-gesture-proof' } else { 'build/bridge-native-proof' }
     $allowed = [IO.Path]::GetFullPath((Join-Path $root $directory)) + [IO.Path]::DirectorySeparatorChar
     if (!$control.StartsWith($allowed, [StringComparison]::OrdinalIgnoreCase) -or !(Test-Path -LiteralPath $control -PathType Leaf)) { throw 'Missing isolated native bridge control file' }
     $loader = if ($Only[0].StartsWith('fabric-')) { 'fabric' } else { 'neoforge' }
     Assert-WesoTestArtifact -Loader $loader -ModVersion $ModVersion
-    $module = if ($loader -eq 'fabric') { 'WEaddon_fabric_1.21.11' } else { 'WEaddon_neoforge_universal_1.21.11-26.2' }
+    $module = if ($loader -ne 'fabric') { 'WEaddon_neoforge_universal_1.21.11-26.2' } elseif ($family -eq '26.1') { 'WEaddon_lightposition' } else { "WEaddon_fabric_$family" }
     $task = if ($loader -eq 'fabric') { 'testNativePaperBridge' } else { 'runNativePaperBridge' }
     $previousJava = $env:JAVA_HOME
-    $env:JAVA_HOME = $Java21
+    $env:JAVA_HOME = if ($family -eq '1.21.11') { $Java21 } else { $Java25 }
     Push-Location (Join-Path $root $module)
     try {
         Assert-WesoTestDesktop
         $log = Join-Path $logs "$($Only[0])-bridge-$NativeBridgeScenario.log"
-        & .\gradlew.bat -I '../tools/native-paper-bridge.init.gradle' $task "-Pmod_version=$ModVersion" "-Pbridge_scenario=$NativeBridgeScenario" "-Pbridge_control=$control" --offline --no-daemon --max-workers=2 --console=plain 2>&1 | Tee-Object -FilePath $log
+        $nativeArgs = @()
+        if ($family -ne '1.21.11') {
+            if ($loader -eq 'fabric') { $nativeArgs += "-Pminecraft_version=$NativeBridgeMinecraft" }
+            else { $nativeArgs += @("-Pneo_version=$(if ($family -eq '26.1') { '26.1.2.75' } else { '26.2.0.67' })", '-Psmoke_java_version=25') }
+        }
+        & .\gradlew.bat -I '../tools/native-paper-bridge.init.gradle' $task @nativeArgs "-Pmod_version=$ModVersion" "-Pbridge_scenario=$NativeBridgeScenario" "-Pbridge_control=$control" --offline --no-daemon --max-workers=2 --console=plain 2>&1 | Tee-Object -FilePath $log
         if ($LASTEXITCODE -ne 0) { throw 'Native Paper client failed' }
         $result = [IO.File]::ReadAllText($log)
         foreach ($marker in @('CURSOR ISOLATION GUARD PASS:', 'NATIVE PAPER CUI PASS:', "NATIVE PAPER BRIDGE PASS: $NativeBridgeScenario")) {

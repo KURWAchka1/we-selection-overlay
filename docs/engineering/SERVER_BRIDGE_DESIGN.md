@@ -1,8 +1,11 @@
 # Optional Server Bridge: Engineering Design
 
 Status: **long-term design, not a frozen wire specification**. A bounded,
-metadata transport foundation and narrow Paper/1.21.11 cuboid editing are
-implemented. Streaming/simulation, other hosts and broader editing remain proposals.
+metadata transport foundation and narrow Paper cuboid editing are implemented.
+Development consumers cover all six adapters; the exact 26.1.2 and 26.2 host
+[gesture checks](BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) do not establish broader
+version/lifecycle/performance support. Streaming/simulation, other server hosts
+and broader editing remain proposals.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).

@@ -14,6 +14,7 @@ const targets = [
 const payload = await fs.readFile(path.join(root, canonical, java, 'bridge/BridgePayload.java'), 'utf8');
 const restartPayload = await fs.readFile(path.join(root, canonical, java, 'bridge/BridgeRestartPayload.java'), 'utf8');
 const transport = await fs.readFile(path.join(root, canonical, java, 'bridge/NativeServerBridge.java'), 'utf8');
+const remoteSource = await fs.readFile(path.join(root, canonical, java, 'selection/RemoteSelectionEditSource.java'), 'utf8');
 const fabricHooks = `        PayloadTypeRegistry.clientboundPlay().register(BridgePayload.TYPE, BridgePayload.CODEC);
         PayloadTypeRegistry.serverboundPlay().register(BridgePayload.TYPE, BridgePayload.CODEC);
         ClientPlayNetworking.registerGlobalReceiver(BridgePayload.TYPE, (payload, context) -> receive(context.client(), payload));
@@ -50,34 +51,6 @@ async function update(file, expected) {
   await fs.writeFile(file, expected.replaceAll('\r\n', '\n'));
 }
 
-// Only 1.21.11 has a verified remote editing consumer; 26.x stays metadata-only.
-function editingTransport(code) {
-  const protocol = 'org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage';
-  code = code.replace(/(    public static SelectionState selection\(\) \{ return CLIENT.selection\(\); \})\r?\n\r?\n/, '$1\n');
-  code = replaceRequired(code, 'new BridgeClient();', `new BridgeClient(${protocol}.SUPPORTED_CAPABILITIES);`, 'edit capabilities');
-  code = replaceRequired(code, '    private static final boolean PROBE',
-    `    private static final org.marshal.weaddon_lightposition.bridge.client.BridgeEditExchange EDIT = new org.marshal.weaddon_lightposition.bridge.client.BridgeEditExchange(CLIENT);\n    private static long editGeneration;\n    private static final boolean PROBE`, 'edit exchange');
-  code = replaceRequired(code, '    public static void requestSelection()', `    public static java.util.UUID editContext() {
-        var client = Minecraft.getInstance();
-        return sameContext(client) && canSend(client) && (CLIENT.capabilities() & ${protocol}.SELECTION_EDIT) != 0 ? CLIENT.epoch() : null;
-    }
-    public static long editGeneration() { return editGeneration; }
-    public static void cuiChanged() { editGeneration++; }
-    public static void readEdit(java.util.function.Consumer<${protocol}.EditSnapshot> result) {
-        EDIT.read(System.nanoTime(), NativeServerBridge::send, result);
-    }
-    public static void commitEdit(java.util.UUID revision, ${protocol}.Bounds bounds,
-            java.util.function.Consumer<${protocol}.EditCommitReply> result) {
-        EDIT.commit(revision, bounds, System.nanoTime(), NativeServerBridge::send, result);
-    }
-
-    public static void requestSelection()`, 'edit entry points');
-  code = replaceRequired(code, '        send(CLIENT.poll(canSend(client), now));',
-    '        send(CLIENT.poll(canSend(client), now));\n        EDIT.complete();', 'edit timeout');
-  code = replaceRequired(code, 'CLIENT.receive(payload.bytes());', 'CLIENT.receive(payload.bytes());\n        EDIT.complete();', 'edit reply');
-  return replaceRequired(code, '        probeRequested = false; probeReported = false;',
-    '        editGeneration++; EDIT.complete();\n        probeRequested = false; probeReported = false;', 'edit context reset');
-}
 
 function yarnPayload(frame) {
   return frame.replace('net.minecraft.network.codec.StreamCodec', 'net.minecraft.network.codec.PacketCodec')
@@ -90,7 +63,6 @@ function yarnPayload(frame) {
 
 for (const [module, version, neo] of targets) {
   let native = transport;
-  if (version === 'yarn' || version === '1.21.11') native = editingTransport(native);
   let frame = payload;
   if (neo) {
     native = native.replace(/^import net\.fabricmc\..*;\r?\n/gm, '')
@@ -114,6 +86,9 @@ for (const [module, version, neo] of targets) {
   await update(path.join(destination, 'BridgePayload.java'), frame);
   await update(path.join(destination, 'BridgeRestartPayload.java'), version === 'yarn' ? yarnPayload(restartPayload) : restartPayload);
   await update(path.join(destination, 'NativeServerBridge.java'), native);
+  await update(path.join(root, module, java, 'selection/RemoteSelectionEditSource.java'), version === 'yarn'
+    ? remoteSource.replaceAll('net.minecraft.client.Minecraft', 'net.minecraft.client.MinecraftClient').replaceAll('Minecraft client', 'MinecraftClient client')
+    : remoteSource);
 
   const gradlePath = path.join(root, module, 'build.gradle');
   let gradle = await fs.readFile(gradlePath, 'utf8');

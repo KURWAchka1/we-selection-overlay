@@ -28,7 +28,7 @@ public final class NativeEditGestureChecks {
         try {
             check(System.nanoTime() - deadline < 0, "Timeout at stage=" + stage + " case=" + index);
             adapter.configure();
-            if (editor == null) editor = Class.forName("org.marshal.weaddon_lightposition.runtime.mc1_21_11.client.selection.SelectionEditController").getMethod("instance").invoke(null);
+            if (editor == null) editor = NativeBridgeChecks.runtimeClass("client.selection.SelectionEditController").getMethod("instance").invoke(null);
             invoke(editor, "configure", enabled, 1, 8);
             if (enabled) adapter.focusForEditing(focused);
             if (stage == 90) {

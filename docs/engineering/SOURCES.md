@@ -683,6 +683,39 @@ The fixture does not reuse the client draft as its authority observation.
 Existing cursor guards and server shutdown observer remain mandatory.
 See [executed gesture evidence and limitations](BRIDGE_NATIVE_GESTURES_2026-10-13.md).
 
+## S55 Exact 26.x Bridge Tuples
+
+Checked **2026-10-13**. Paper's [download service contract](https://docs.papermc.io/misc/downloads-service/)
+requires an identifying User-Agent and distinguishes stable builds. Its official
+v3 responses select [26.1.2 build 74](https://fill.papermc.io/v3/projects/paper/versions/26.1.2/builds/74)
+and [26.2 build 133](https://fill.papermc.io/v3/projects/paper/versions/26.2/builds/133).
+Downloaded bootstrap JARs match the returned SHA-256 values. The exact `26.1`
+lookup returns `version_not_found`; it is not silently replaced by a newer server.
+The new native matrix deliberately uses **26.1.2**, not a claim about 26.1/26.1.1.
+
+Official WorldEdit [7.4.3](https://github.com/EngineHub/WorldEdit/releases/tag/7.4.3)
+and [7.4.5](https://github.com/EngineHub/WorldEdit/releases/tag/7.4.5) tags identify
+the tested distributions. Their [7.4.3 LocalSession](https://github.com/EngineHub/WorldEdit/blob/7.4.3/worldedit-core/src/main/java/com/sk89q/worldedit/LocalSession.java)
+and [7.4.5 LocalSession](https://github.com/EngineHub/WorldEdit/blob/7.4.5/worldedit-core/src/main/java/com/sk89q/worldedit/LocalSession.java)
+retain the public own-player session/selector contracts used here. The publisher's
+Modrinth version records (`yDUBafTJ`, `F5ea2ov3`) provide exact Bukkit files,
+game versions and SHA-512 digests, checked before launch. Tuple/digest pins are
+stored in [gesture-tuples.mjs](../../tools/server-bridge-test/gesture-tuples.mjs).
+
+Current [Fabric networking documentation](https://docs.fabricmc.net/develop/networking)
+uses `clientboundPlay/serverboundPlay`; [NeoForge payload documentation](https://docs.neoforged.net/docs/networking/payload/)
+documents optional payloads and owner-thread handling. Mutable documentation is
+not a substitute for the resolved **0.145.1+26.1 / 0.158.0+26.2** and
+**26.1.2.75 / 26.2.0.67** APIs. Versioned Fabric Javadoc lookups failed in this
+cycle; compiled adapters and real round trips are the version-specific checks.
+
+Resolved Mojang/NeoForge Minecraft source JARs show `isWindowActive()` delegates
+to `Window.isFocused()` in 26.1.2/26.2; the private `Window.onFocus(long, boolean)`
+callback owns that state. Stock Fabric has no `Minecraft.setWindowActive`.
+Only the test adapters invoke the pinned callback in-JVM. 26.2 moves screen
+access to `Minecraft.gui`; separate compiled test adapters preserve that boundary.
+No production private callback/reflection API or operating-system input is added.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

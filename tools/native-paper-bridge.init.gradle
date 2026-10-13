@@ -2,6 +2,8 @@
 allprojects {
     afterEvaluate {
         def fabric = project.name != 'WEaddon_neoforge_universal_1.21.11-26.2'
+        def family = fabric ? (minecraft_version == '1.21.11' ? '1.21.11' : minecraft_version.startsWith('26.1') ? '26.1' : '26.2') : neo_version.startsWith('21.') ? '1.21.11' : neo_version.startsWith('26.1') ? '26.1' : '26.2'
+        def runtime = family == '1.21.11' ? 'mc1_21_11' : family == '26.1' ? 'mc26_1' : 'mc26_2'
         def guard = file('../tools/test-desktop/agent/build/libs/cursor-isolation-agent.jar')
         def root = file('../tools/server-bridge-test/native')
         def scenario = findProperty('bridge_scenario')
@@ -10,34 +12,39 @@ allprojects {
         def username = scenario == 'denied' ? 'WesoDenied' : 'WesoAllowed'
         def artifact = file("../WEaddon_${fabric ? 'fabric' : 'neoforge'}_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-${fabric ? 'fabric' : 'neoforge'}-1.21.11-26.2.jar")
         def tests = sourceSets.create('nativeBridgeTest') {
-            java.srcDirs(new File(root, 'common'), new File(root, fabric ? 'fabric' : 'neo'))
+            java.srcDirs(new File(root, 'common'), new File(root, fabric ? (family == '1.21.11' ? 'fabric' : family == '26.1' ? 'fabric26' : 'fabric262') : family == '1.21.11' ? 'neo' : family == '26.1' ? 'neo26' : 'neo262'))
             resources.srcDir(new File(root, fabric ? 'fabric-resources' : 'neo-resources'))
             compileClasspath += sourceSets.main.compileClasspath
         }
         if (!fabric) neoForge.addModdingDependenciesTo(tests)
+        tasks.named('compileNativeBridgeTestJava') { options.release = family == '1.21.11' ? 21 : 25 }
         def testJar = tasks.register('nativeBridgeTestJar', Jar) {
             from(tests.output)
             archiveClassifier = 'native-bridge-test-only'
         }
-        def jvm = ['-Xmx1536m', '-XX:ActiveProcessorCount=2', "-javaagent:${guard.absolutePath}", "-Dweso.native.scenario=${scenario}", "-Dweso.native.control=${control}"]
+        def jvm = ['-Xmx1536m', '-XX:ActiveProcessorCount=2', "-javaagent:${guard.absolutePath}", "-Dweso.native.scenario=${scenario}", "-Dweso.native.control=${control}", "-Dweso.native.runtime=${runtime}"]
+        def runDirectory = "run-native-bridge-${scenario}" + (family == '1.21.11' ? '' : "-${family}")
         def args = ['--quickPlayMultiplayer', '127.0.0.1:25579', '--username', username, '--width', '1280', '--height', '720']
         def checkGuard = {
             if (!System.getenv('WESO_TEST_DESKTOP')?.startsWith('WesoTest-') || !guard.isFile() || !artifact.isFile()) throw new GradleException('Private desktop, cursor agent and exact client artifact required')
         }
         if (fabric) {
-            def remapType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.RemapJarTask')
-            def remapped = tasks.register('remapNativeBridgeTestJar', remapType) {
-                inputFile = testJar.flatMap { it.archiveFile }
-                archiveClassifier = 'native-bridge-test-remapped'
-                addNestedDependencies = false
+            def runtimeTestJar = testJar
+            if (family == '1.21.11') {
+                def remapType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.RemapJarTask')
+                runtimeTestJar = tasks.register('remapNativeBridgeTestJar', remapType) {
+                    inputFile = testJar.flatMap { it.archiveFile }
+                    archiveClassifier = 'native-bridge-test-remapped'
+                    addNestedDependencies = false
+                }
             }
             def modsConfig = configurations.create('nativeBridgeProductionMods')
             dependencies.add(modsConfig.name, "net.fabricmc.fabric-api:fabric-api:${fabric_version}")
             def taskType = buildscript.classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')
             tasks.register('testNativePaperBridge', taskType) {
-                dependsOn(remapped)
-                mods.setFrom(modsConfig, remapped, artifact)
-                runDir = file("run-native-bridge-${scenario}")
+                dependsOn(runtimeTestJar)
+                mods.setFrom(modsConfig, runtimeTestJar, artifact)
+                runDir = file(runDirectory)
                 jvmArgs.addAll(jvm)
                 programArgs.addAll(args)
                 doFirst(checkGuard)
@@ -46,7 +53,7 @@ allprojects {
             dependencies.add('localRuntime', files(testJar))
             neoForge.runs.create('nativePaperBridge') {
                 client()
-                gameDirectory = file("run-native-bridge-${scenario}")
+                gameDirectory = file(runDirectory)
                 jvmArguments.addAll(jvm)
                 programArguments.addAll(args)
             }
