@@ -12,6 +12,11 @@ Tuple: Paper **1.21.11-132 / c5eb079**, official WorldEdit **7.4.2**, Fabric
 and **25.0.2+10**. Node **24.21.0**, test-only minecraft-protocol **1.68.0**.
 Other host/version support is not implied.
 
+The subsequent [native gesture cycle](BRIDGE_NATIVE_GESTURES_2026-10-13.md)
+adds bounded real callback/handle/cancellation coverage and native screenshots.
+The remaining-gates list below is this fault/load stage's historical boundary,
+not a claim that the later named gesture checks are still missing.
+
 ## Native Network Faults
 
 Each of the following passes on both actual Fabric and NeoForge 1.21.11 clients,

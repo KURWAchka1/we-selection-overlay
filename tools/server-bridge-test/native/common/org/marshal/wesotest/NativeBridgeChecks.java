@@ -18,12 +18,14 @@ public final class NativeBridgeChecks {
         boolean respawnIfDead();
         void reconnect();
         void stop();
+        default NativeGestureInput gestureInput() { throw new UnsupportedOperationException("Gesture adapter required"); }
     }
     private final Adapter adapter;
     private final String scenario = System.getProperty("weso.native.scenario");
     private final Path control = Path.of(System.getProperty("weso.native.control"));
     private final Class<?> bridge;
     private final NativeEditFaultChecks faults;
+    private final NativeEditGestureChecks gestures;
     private final long deadline = System.nanoTime() + 180_000_000_000L;
     private int stage, quietTicks;
     private Object overlay;
@@ -42,9 +44,11 @@ public final class NativeBridgeChecks {
         try { bridge = Class.forName("org.marshal.weaddon_lightposition.runtime.mc1_21_11.client.bridge.NativeServerBridge"); }
         catch (ClassNotFoundException ex) { throw new AssertionError(ex); }
         faults = scenario.startsWith("fault-") ? new NativeEditFaultChecks(adapter, bridge) : null;
+        gestures = scenario.equals("gestures") ? new NativeEditGestureChecks(adapter, bridge) : null;
     }
 
     public void tick() {
+        if (gestures != null) { gestures.tick(); return; }
         if (faults != null) { faults.tick(); return; }
         if (finished) return;
         try {

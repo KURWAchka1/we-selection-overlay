@@ -664,6 +664,25 @@ percentiles are recomputed. This prevents a copied success flag or stale summary
 from becoming cost evidence. Two same-policy functional runs are still not an
 absent/installed causal performance comparison; see the [executed report](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md).
 
+## S54 Native Gesture Callbacks And Authority Checks
+
+Checked **2026-10-13**, Minecraft **1.21.11**, the same Paper/WorldEdit tuple as
+S52. Fabric's pinned [Mouse mapping reference](https://maven.fabricmc.net/docs/yarn-1.21.11+build.4/net/minecraft/client/Mouse.html)
+and [Keyboard mapping reference](https://maven.fabricmc.net/docs/yarn-1.21.11+build.4/net/minecraft/client/Keyboard.html)
+give exact callback signatures/intermediary names. The test-only production-
+namespace Fabric adapter uses those names; the compiled NeoForge adapter uses
+the corresponding Mojang-mapped methods already used by the local test harness.
+Reflection here is exclusively a native input test boundary, not a supported
+Minecraft public API or precedent for production server/reflection integration.
+Callbacks run on the game's owning thread without OS input or window activation.
+
+The pinned [WorldEdit LocalSession](https://github.com/EngineHub/WorldEdit/blob/eb8e82c3d8843bed3f71e82ea974122415645178/worldedit-core/src/main/java/com/sk89q/worldedit/LocalSession.java)
+and [Region](https://github.com/EngineHub/WorldEdit/blob/eb8e82c3d8843bed3f71e82ea974122415645178/worldedit-core/src/main/java/com/sk89q/worldedit/regions/Region.java)
+provide the independent fixture's actual selection and minimum/maximum points.
+The fixture does not reuse the client draft as its authority observation.
+Existing cursor guards and server shutdown observer remain mandatory.
+See [executed gesture evidence and limitations](BRIDGE_NATIVE_GESTURES_2026-10-13.md).
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

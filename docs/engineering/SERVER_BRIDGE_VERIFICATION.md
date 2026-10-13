@@ -88,6 +88,14 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [native remote gesture cycle](BRIDGE_NATIVE_GESTURES_2026-10-13.md) passes
+28 actual input/controller cases on each 1.21.11 loader, repeated after frame-
+camera and screenshot checks are added. Actual WorldEdit bounds and server
+counters agree for all faces/corners, free-corner release, cancellation and
+radial XYZ Move. Four native screenshots are inspected. This closes those
+bounded callback scenarios, not manual hardware ergonomics, every close-range
+view, frame-time/server-cost acceptance or other remote client versions.
+
 The [edit fault/load cycle](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md) adds six
 guarded native slow/late-ack/pre-delivery-revocation cases and two fresh-JVM
 32-actor edit workloads. All 1,240 sustained commits have canonical replies;
@@ -102,7 +110,8 @@ The [2026-10-13 remote cuboid stage](BRIDGE_REMOTE_SELECTION_2026-10-13.md) pass
 G-driven resize, native remote-source shift, canonical CUI, cancellation and
 quiet cache reads. Capture/commit use the existing fair bounded queue. Dedicated
 queue/revocation/expiry/replay tests do not establish edit-load performance.
-Physical mouse dragging on a remote host, high-RTT/faulted edits, other hosts,
+The later fault/load and native gesture reports close their named cases;
+manual hardware ergonomics, arbitrary network/backend faults, other hosts,
 26.x remote consumers and protection-plugin combinations remain open. Same-JVM
 plugin re-enable intentionally withholds editing after the classloader closes;
 fresh full startup is required. Published 1.8.0 is unchanged.

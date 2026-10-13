@@ -18,6 +18,28 @@ public final class FabricNativeBridgeTest implements ClientModInitializer {
             @Override public Object game() { return client(); }
             @Override public void focusForEditing(boolean focused) { client().onWindowFocusChanged(focused); }
             @Override public void editKey(Object key, boolean held) { ((KeyBinding) key).setPressed(held); }
+            @Override public NativeGestureInput gestureInput() {
+                return new NativeGestureInput() {
+                    public void key(int code, int action) { NativeGestureInput.callback(client().keyboard, "method_1466", new Class<?>[]{long.class, int.class, net.minecraft.client.input.KeyInput.class}, client().getWindow().getHandle(), action, new net.minecraft.client.input.KeyInput(code, 0, 0)); }
+                    public void button(int action) { NativeGestureInput.callback(client().mouse, "method_1601", new Class<?>[]{long.class, net.minecraft.client.input.MouseInput.class, int.class}, client().getWindow().getHandle(), new net.minecraft.client.input.MouseInput(0, 0), action); }
+                    public void cursor(double x, double y) { NativeGestureInput.callback(client().mouse, "method_1600", new Class<?>[]{long.class, double.class, double.class}, client().getWindow().getHandle(), x, y); }
+                    public void scroll(double amount) { NativeGestureInput.callback(client().mouse, "method_1598", new Class<?>[]{long.class, double.class, double.class}, client().getWindow().getHandle(), 0.0, amount); }
+                    public void aim(double x, double y, double z) {
+                        var eye = client().player.getEyePos(); double dx = x - eye.x, dy = y - eye.y, dz = z - eye.z;
+                        client().player.setYaw((float) Math.toDegrees(Math.atan2(-dx, dz)));
+                        client().player.setPitch((float) -Math.toDegrees(Math.atan2(dy, Math.hypot(dx, dz))));
+                    }
+                    public int width() { return client().getWindow().getWidth(); }
+                    public int height() { return client().getWindow().getHeight(); }
+                    public double yaw() { return client().player.getYaw(); }
+                    public double pitch() { return client().player.getPitch(); }
+                    public boolean grabbed() { return client().mouse.isCursorLocked(); }
+                    public boolean attacking() { return client().options.attackKey.isPressed() || client().mouse.wasLeftButtonClicked(); }
+                    public boolean screenOpen() { return client().currentScreen != null; }
+                    public void chat(boolean open) { client().setScreen(open ? new net.minecraft.client.gui.screen.ChatScreen("", false) : null); }
+                    public void grab() { client().mouse.lockCursor(); }
+                };
+            }
             @Override public boolean respawnIfDead() {
                 if (!client().player.isDead()) return false;
                 client().player.requestRespawn(); client().setScreen(null); return true;

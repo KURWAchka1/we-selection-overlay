@@ -20,6 +20,28 @@ public final class NeoNativeBridgeTest {
             @Override public Object game() { return client(); }
             @Override public void focusForEditing(boolean focused) { client().setWindowActive(focused); }
             @Override public void editKey(Object key, boolean held) { ((KeyMapping) key).setDown(held); }
+            @Override public NativeGestureInput gestureInput() {
+                return new NativeGestureInput() {
+                    public void key(int code, int action) { NativeGestureInput.callback(client().keyboardHandler, "keyPress", new Class<?>[]{long.class, int.class, net.minecraft.client.input.KeyEvent.class}, client().getWindow().handle(), action, new net.minecraft.client.input.KeyEvent(code, 0, 0)); }
+                    public void button(int action) { NativeGestureInput.callback(client().mouseHandler, "onButton", new Class<?>[]{long.class, net.minecraft.client.input.MouseButtonInfo.class, int.class}, client().getWindow().handle(), new net.minecraft.client.input.MouseButtonInfo(0, 0), action); }
+                    public void cursor(double x, double y) { NativeGestureInput.callback(client().mouseHandler, "onMove", new Class<?>[]{long.class, double.class, double.class}, client().getWindow().handle(), x, y); }
+                    public void scroll(double amount) { NativeGestureInput.callback(client().mouseHandler, "onScroll", new Class<?>[]{long.class, double.class, double.class}, client().getWindow().handle(), 0.0, amount); }
+                    public void aim(double x, double y, double z) {
+                        var eye = client().player.getEyePosition(); double dx = x - eye.x, dy = y - eye.y, dz = z - eye.z;
+                        client().player.setYRot((float) Math.toDegrees(Math.atan2(-dx, dz)));
+                        client().player.setXRot((float) -Math.toDegrees(Math.atan2(dy, Math.hypot(dx, dz))));
+                    }
+                    public int width() { return client().getWindow().getScreenWidth(); }
+                    public int height() { return client().getWindow().getScreenHeight(); }
+                    public double yaw() { return client().player.getYRot(); }
+                    public double pitch() { return client().player.getXRot(); }
+                    public boolean grabbed() { return client().mouseHandler.isMouseGrabbed(); }
+                    public boolean attacking() { return client().options.keyAttack.isDown() || client().mouseHandler.isLeftPressed(); }
+                    public boolean screenOpen() { return client().screen != null; }
+                    public void chat(boolean open) { client().setScreen(open ? new net.minecraft.client.gui.screens.ChatScreen("", false) : null); }
+                    public void grab() { client().mouseHandler.grabMouse(); }
+                };
+            }
             @Override public boolean respawnIfDead() {
                 if (!client().player.isDeadOrDying()) return false;
                 client().player.respawn(); client().setScreen(null); return true;

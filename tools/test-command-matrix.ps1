@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Java25,
     [ValidateSet('fabric-1.21.11', 'fabric-26.1', 'fabric-26.2', 'neoforge-1.21.11', 'neoforge-26.1', 'neoforge-26.2')][string[]]$Only = @(),
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$')][string]$ModVersion = '1.8.0',
-    [ValidateSet('allowed', 'denied', 'absent', 'fault-slow', 'fault-late', 'fault-revoked')][string]$NativeBridgeScenario,
+    [ValidateSet('allowed', 'denied', 'absent', 'fault-slow', 'fault-late', 'fault-revoked', 'gestures')][string]$NativeBridgeScenario,
     [string]$NativeBridgeControl,
     [switch]$DesktopWorker
 )
@@ -24,7 +24,7 @@ New-Item -ItemType Directory -Force -Path $logs | Out-Null
 if ($NativeBridgeScenario) {
     if ($Only.Count -ne 1 -or $Only[0] -notin @('fabric-1.21.11', 'neoforge-1.21.11')) { throw 'Native Paper proof requires exactly one 1.21.11 client' }
     $control = [IO.Path]::GetFullPath($NativeBridgeControl)
-    $directory = if ($NativeBridgeScenario.StartsWith('fault-')) { 'build/bridge-native-fault-proof' } else { 'build/bridge-native-proof' }
+    $directory = if ($NativeBridgeScenario.StartsWith('fault-')) { 'build/bridge-native-fault-proof' } elseif ($NativeBridgeScenario -eq 'gestures') { 'build/bridge-native-gesture-proof' } else { 'build/bridge-native-proof' }
     $allowed = [IO.Path]::GetFullPath((Join-Path $root $directory)) + [IO.Path]::DirectorySeparatorChar
     if (!$control.StartsWith($allowed, [StringComparison]::OrdinalIgnoreCase) -or !(Test-Path -LiteralPath $control -PathType Leaf)) { throw 'Missing isolated native bridge control file' }
     $loader = if ($Only[0].StartsWith('fabric-')) { 'fabric' } else { 'neoforge' }

@@ -3,20 +3,22 @@ param(
     [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$')][string]$ModVersion = '1.8.0-bridge-dev',
     [switch]$AcceptEula,
     [switch]$EditFaults,
+    [switch]$EditGestures,
     [switch]$DesktopWorker
 )
 $ErrorActionPreference = 'Stop'
 if (!$AcceptEula) { throw 'Owner acceptance of https://www.minecraft.net/eula is required' }
+if ($EditFaults -and $EditGestures) { throw 'Choose one isolated edit proof mode' }
 . (Join-Path $PSScriptRoot 'test-desktop.ps1')
 if (!$DesktopWorker) {
     & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
-    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; ModVersion=$ModVersion; AcceptEula=$true; EditFaults=$EditFaults.IsPresent; DesktopWorker=$true}
+    Invoke-WesoDesktopTest -Script $PSCommandPath -Parameters @{Java21=$Java21; ModVersion=$ModVersion; AcceptEula=$true; EditFaults=$EditFaults.IsPresent; EditGestures=$EditGestures.IsPresent; DesktopWorker=$true}
     return
 }
 Assert-WesoTestDesktop
 $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root 'build/bridge-paper-proof'
-$server = Join-Path $root $(if ($EditFaults) { 'build/bridge-native-fault-proof' } else { 'build/bridge-native-proof' })
+$server = Join-Path $root $(if ($EditFaults) { 'build/bridge-native-fault-proof' } elseif ($EditGestures) { 'build/bridge-native-gesture-proof' } else { 'build/bridge-native-proof' })
 foreach ($loader in @('fabric', 'neoforge')) { Assert-WesoTestArtifact -Loader $loader -ModVersion $ModVersion }
 foreach ($file in @('server.jar', 'plugins/worldedit.jar')) {
     if (!(Test-Path -LiteralPath (Join-Path $source $file) -PathType Leaf)) { throw "Missing pinned Paper dependency: $file" }
@@ -42,7 +44,7 @@ try {
     $properties = if ($EditFaults) { 'fault-server.properties' } else { 'server.properties' }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "server-bridge-test/$properties") -Destination (Join-Path $server 'server.properties')
     'eula=true' | Set-Content -LiteralPath (Join-Path $server 'eula.txt') -Encoding ASCII
-    $proof = if ($EditFaults) { 'native-edit-fault-proof.mjs' } else { 'native-paper-proof.mjs' }
+    $proof = if ($EditFaults) { 'native-edit-fault-proof.mjs' } elseif ($EditGestures) { 'native-edit-gesture-proof.mjs' } else { 'native-paper-proof.mjs' }
     & node (Join-Path $PSScriptRoot "server-bridge-test/$proof") $Java21 $server $ModVersion (Get-Process -Id $PID).Path
-    if ($LASTEXITCODE -ne 0) { throw 'Native Paper proof failed; see build/bridge-native-proof/' }
+    if ($LASTEXITCODE -ne 0) { throw "Native Paper proof failed; see $server" }
 } finally { Pop-Location; $env:JAVA_HOME = $previousJava }

@@ -44,6 +44,13 @@ pressure without changing production behavior. Its 2,400 matched JFR ticks and
 1,240 acknowledged active commits close only the named functional gates, not
 representative performance or other hosts. Necessary client changes remain in scope.
 
+The subsequent [native remote gesture cycle](BRIDGE_NATIVE_GESTURES_2026-10-13.md)
+passes all faces/corners, free-corner release, five cancellation boundaries and
+real radial XYZ Move on both native 1.21.11 loaders, repeated with frame-camera
+checks and inspected screenshots. Actual WorldEdit bounds/counters reconcile;
+these bounded callback tests do not establish manual hardware ergonomics or
+broader host/version/performance support.
+
 **Current scope update, 2026-10-13:** the [remote cuboid editing stage](BRIDGE_REMOTE_SELECTION_2026-10-13.md)
 adds separately authorized minor-2 capture/commit on fresh Paper 1.21.11 startup
 and remote sources in development Fabric/NeoForge 1.21.11 clients. It reuses the

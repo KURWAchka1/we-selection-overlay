@@ -6,7 +6,7 @@ allprojects {
         def root = file('../tools/server-bridge-test/native')
         def scenario = findProperty('bridge_scenario')
         def control = findProperty('bridge_control')
-        if (!(scenario in ['allowed', 'denied', 'absent', 'fault-slow', 'fault-late', 'fault-revoked']) || !control) throw new GradleException('Use the guarded native Paper wrapper')
+        if (!(scenario in ['allowed', 'denied', 'absent', 'fault-slow', 'fault-late', 'fault-revoked', 'gestures']) || !control) throw new GradleException('Use the guarded native Paper wrapper')
         def username = scenario == 'denied' ? 'WesoDenied' : 'WesoAllowed'
         def artifact = file("../WEaddon_${fabric ? 'fabric' : 'neoforge'}_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${mod_version}-${fabric ? 'fabric' : 'neoforge'}-1.21.11-26.2.jar")
         def tests = sourceSets.create('nativeBridgeTest') {

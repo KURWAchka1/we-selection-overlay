@@ -8,6 +8,9 @@ Published 1.8.0 artifacts/tag are unchanged. This is not a companion release.
 The later [network-fault and concurrent-load cycle](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md)
 adds the named native latency/late-ack/revocation and 32-actor editing checks;
 the original remaining-gates list below describes this stage's baseline.
+The later [native gesture cycle](BRIDGE_NATIVE_GESTURES_2026-10-13.md) covers
+the actual callback/hit-test path and inspected native screenshots on both
+1.21.11 loaders; it remains distinct from manual hardware ergonomics.
 
 ## Implemented Scope
 

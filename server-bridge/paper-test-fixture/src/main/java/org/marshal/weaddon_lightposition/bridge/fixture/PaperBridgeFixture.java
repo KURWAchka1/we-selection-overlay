@@ -131,6 +131,21 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
             return true;
         }
         switch (args[0]) {
+            case "edit-pose" -> {
+                player.setGameMode(org.bukkit.GameMode.CREATIVE);
+                player.setAllowFlight(true); player.setFlying(true); player.setGravity(false);
+                if (!player.teleport(new org.bukkit.Location(player.getWorld(), 25, 78, 40)))
+                    throw new IllegalStateException("Gesture fixture teleport cancelled");
+            }
+            case "edit-bounds" -> {
+                var actor = BukkitAdapter.adapt(player);
+                try {
+                    var region = WorldEdit.getInstance().getSessionManager().get(actor).getSelection(actor.getWorld());
+                    var low = region.getMinimumPoint(); var high = region.getMaximumPoint();
+                    getLogger().info("WESO_FIXTURE_BOUNDS " + player.getName() + " " + low.x() + "," + low.y() + "," + low.z()
+                            + "," + high.x() + "," + high.y() + "," + high.z());
+                } catch (com.sk89q.worldedit.IncompleteRegionException ex) { throw new IllegalStateException("Missing gesture selection", ex); }
+            }
             case "editgrant", "editrevoke" -> grants.get(player.getUniqueId()).setPermission("weso.bridge.selection.edit", args[0].equals("editgrant"));
             case "expandonly", "contractonly", "shiftonly", "allgrants" -> {
                 for (String node : new String[]{"expand", "contract", "shift"})

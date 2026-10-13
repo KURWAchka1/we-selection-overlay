@@ -39,6 +39,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Matched profiler control](BRIDGE_MATCHED_CONTROL_2026-10-13.md) | Same profiler policy in absent/installed gameplay runs, longer windows, raw-evidence reconciliation and independent-replication limits |
 | [Remote cuboid editing](BRIDGE_REMOTE_SELECTION_2026-10-13.md) | Minor-2 capture/commit, live authority, single-use revisions, cached native source, real Paper/native evidence and fresh-start boundary |
 | [Edit network faults and concurrent load](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md) | Native RTT/late-ack/revocation checks, 32-actor edit pressure, raw/JFR reconciliation and remaining production gates |
+| [Native remote gestures](BRIDGE_NATIVE_GESTURES_2026-10-13.md) | Real callback/hit-test coverage, all faces/corners, cancellation, radial XYZ Move, server authority and native screenshots |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

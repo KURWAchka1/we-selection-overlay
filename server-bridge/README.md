@@ -57,7 +57,7 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-55 harness self-tests (owned-process shutdown, frozen-world safety, wire
+63 harness self-tests (owned-process shutdown, frozen-world safety, wire
 helpers, mixed-workload and active-lifecycle validation); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
@@ -128,6 +128,20 @@ before a delayed request reaches Paper. The relay is test-only, offline and
 uncompressed, not a production proxy or a TCP-loss emulator. The separate
 `build/bridge-edit-load-proof/` uses 32 headless clients, eight concurrent editors,
 read pressure and four non-consumers. See [results and limitations](../docs/engineering/BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md).
+
+For actual remote handle/input coverage on both native 1.21.11 clients:
+
+```powershell
+.\tools\test-native-paper-bridge.ps1 -Java21 'C:\path\to\jdk-21' -ModVersion 1.8.0-bridge-dev -EditGestures -AcceptEula
+```
+
+`-EditGestures` and `-EditFaults` are separate mutually exclusive modes. The gesture
+fixture uses a fresh loopback Paper process per loader and the guarded private
+desktop under `build/bridge-native-gesture-proof/`. It covers all faces/corners,
+free-corner release, cancellation and real radial XYZ Move; actual server bounds
+and counters must match. Fresh native screenshots are captured for review. This
+does not establish manual hardware ergonomics, frame-time acceptance or 26.x
+remote editing. See [executed results](../docs/engineering/BRIDGE_NATIVE_GESTURES_2026-10-13.md).
 
 The extended wire fixture also exercises actual same-world death/respawn,
 same-process reconnect, bridge channel unregister/register and WorldEdit disable.
