@@ -38,6 +38,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Method interval diagnostics](BRIDGE_SLICE_DIAGNOSTICS_2026-10-12.md) | Test-only method/JFR attribution, profiler interference, independent counter reconciliation and unchanged production artifacts |
 | [Matched profiler control](BRIDGE_MATCHED_CONTROL_2026-10-13.md) | Same profiler policy in absent/installed gameplay runs, longer windows, raw-evidence reconciliation and independent-replication limits |
 | [Remote cuboid editing](BRIDGE_REMOTE_SELECTION_2026-10-13.md) | Minor-2 capture/commit, live authority, single-use revisions, cached native source, real Paper/native evidence and fresh-start boundary |
+| [Edit network faults and concurrent load](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md) | Native RTT/late-ack/revocation checks, 32-actor edit pressure, raw/JFR reconciliation and remaining production gates |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |
@@ -61,7 +62,10 @@ The existing [release matrix](../../README.md#supported-release-targets) include
 26.1.1/26.1.2 checks; NeoForge 26.1/26.1.1 do not have the local WorldEdit support
 claimed for 26.1.2. A version-range declaration is not a substitute for testing.
 Distribution remains **one multi-version client JAR per loader**.
-Server companion packaging is a separate decision, not a reason to rebuild those JARs.
+Client source is **not frozen at 1.8.0**. Necessary client protocol/provider/UI
+changes must be implemented and tested alongside the companion. Preserve the
+already published artifacts/tag, not the development source: client changes ship
+in a separate fix/release rather than silently replacing an existing download.
 
 ## Actual Code Entry Points
 

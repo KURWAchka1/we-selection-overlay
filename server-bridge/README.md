@@ -57,7 +57,7 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-42 harness self-tests (owned-process shutdown, frozen-world safety, wire
+55 harness self-tests (owned-process shutdown, frozen-world safety, wire
 helpers, mixed-workload and active-lifecycle validation); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
@@ -112,6 +112,22 @@ This uses the guarded private-desktop/cursor-agent harness, no local WorldEdit,
 and a separate disposable loopback server under `build/bridge-native-proof/`.
 See [native results and limits](../docs/engineering/NATIVE_PAPER_REGRESSION_2026-10-11.md).
 It does not establish 26.x server hosts or performance under a busy-server load.
+
+For the separate real-client edit fault matrix and 32-actor edit-load proof:
+
+```powershell
+.\tools\test-native-paper-bridge.ps1 -Java21 'C:\path\to\jdk-21' -ModVersion 1.8.0-bridge-dev -EditFaults -AcceptEula
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Players 32 -Samples 400 -Repetitions 2 -EditLoad -AcceptEula
+node tools/server-bridge-test/analyze-edit-load-proof.mjs 'C:\path\to\jdk-21'
+```
+
+The guarded native fixture uses loopback ports 25579 (test relay) and 25580
+(Paper) under `build/bridge-native-fault-proof/`. It verifies 400 ms one-way
+delay, a commit acknowledgment arriving after timeout, and permission revoked
+before a delayed request reaches Paper. The relay is test-only, offline and
+uncompressed, not a production proxy or a TCP-loss emulator. The separate
+`build/bridge-edit-load-proof/` uses 32 headless clients, eight concurrent editors,
+read pressure and four non-consumers. See [results and limitations](../docs/engineering/BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md).
 
 The extended wire fixture also exercises actual same-world death/respawn,
 same-process reconnect, bridge channel unregister/register and WorldEdit disable.

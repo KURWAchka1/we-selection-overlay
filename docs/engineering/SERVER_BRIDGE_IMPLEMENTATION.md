@@ -38,6 +38,12 @@ does not replace the busy-server release gate or explain the earlier long tick.
 
 ## Implemented Boundary
 
+The [edit network-fault and concurrent-load cycle](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md)
+subsequently validates native delayed/late-ack/revoked commits and 32-actor edit
+pressure without changing production behavior. Its 2,400 matched JFR ticks and
+1,240 acknowledged active commits close only the named functional gates, not
+representative performance or other hosts. Necessary client changes remain in scope.
+
 **Current scope update, 2026-10-13:** the [remote cuboid editing stage](BRIDGE_REMOTE_SELECTION_2026-10-13.md)
 adds separately authorized minor-2 capture/commit on fresh Paper 1.21.11 startup
 and remote sources in development Fabric/NeoForge 1.21.11 clients. It reuses the

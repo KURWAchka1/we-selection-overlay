@@ -88,6 +88,15 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [edit fault/load cycle](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md) adds six
+guarded native slow/late-ack/pre-delivery-revocation cases and two fresh-JVM
+32-actor edit workloads. All 1,240 sustained commits have canonical replies;
+quiet captures/reads/transfers return to zero. Raw percentiles and 2,400 JFR
+tick markers reconcile. These close the named functional scenarios, not arbitrary
+Internet/proxy faults, live-block-edit gameplay, physical remote mouse gestures
+or representative cost acceptance. Client source changes remain required whenever
+needed; immutable published release artifacts are not a ban on client development.
+
 The [2026-10-13 remote cuboid stage](BRIDGE_REMOTE_SELECTION_2026-10-13.md) passes
 27 actual Paper wire groups and the six native 1.21.11 connections, including
 G-driven resize, native remote-source shift, canonical CUI, cancellation and

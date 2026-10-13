@@ -23,6 +23,7 @@ public final class NativeBridgeChecks {
     private final String scenario = System.getProperty("weso.native.scenario");
     private final Path control = Path.of(System.getProperty("weso.native.control"));
     private final Class<?> bridge;
+    private final NativeEditFaultChecks faults;
     private final long deadline = System.nanoTime() + 180_000_000_000L;
     private int stage, quietTicks;
     private Object overlay;
@@ -40,9 +41,11 @@ public final class NativeBridgeChecks {
         this.adapter = adapter;
         try { bridge = Class.forName("org.marshal.weaddon_lightposition.runtime.mc1_21_11.client.bridge.NativeServerBridge"); }
         catch (ClassNotFoundException ex) { throw new AssertionError(ex); }
+        faults = scenario.startsWith("fault-") ? new NativeEditFaultChecks(adapter, bridge) : null;
     }
 
     public void tick() {
+        if (faults != null) { faults.tick(); return; }
         if (finished) return;
         try {
             check(System.nanoTime() - deadline < 0, "Timeout at stage " + stage + ", status=" + status());

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, createWriteStream, existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createConnection } from 'node:net';
 import { setPriority, constants } from 'node:os';
 import { resolve, relative, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { observeOwnedServer } from './owned-server.mjs';
+import { captureProcess as capture } from './native-process.mjs';
 
 const [javaHome, serverDirectory, modVersion, powershell] = process.argv.slice(2);
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(serverDirectory);
@@ -41,24 +42,6 @@ async function waitFor(predicate, label, timeout = 180000) {
     assert(Date.now() < end, `Timeout: ${label}`);
     await delay(50);
   }
-}
-function capture(child, path) {
-  const log = createWriteStream(path), lines = [];
-  const drained = new Promise((resolve, reject) => { log.once('finish', resolve); log.once('error', reject); });
-  drained.catch(() => {});
-  const state = { child, lines, exited: false, code: null, log, drained };
-  for (const stream of [child.stdout, child.stderr]) {
-    let pending = '';
-    stream.on('data', bytes => {
-      log.write(bytes); pending += bytes.toString();
-      let end;
-      while ((end = pending.indexOf('\n')) >= 0) { lines.push(pending.slice(0, end).replace(/\r$/, '')); pending = pending.slice(end + 1); }
-    });
-    stream.on('end', () => { if (pending) lines.push(pending); });
-  }
-  child.on('error', ex => { lines.push(`LAUNCH ERROR: ${ex}`); state.exited = true; state.code = -1; });
-  child.on('close', code => { state.exited = true; state.code = code; log.end(); });
-  return state;
 }
 async function startServer(companion, label = 'absent') {
   assert.equal(hash(join(serverDir, 'companion.jar')), companionHash);

@@ -5,6 +5,10 @@ the accompanying commit contains this implementation. Companion **0.1.0-dev**,
 client **1.8.0-bridge-dev**, experimental application protocol **1.2**.
 Published 1.8.0 artifacts/tag are unchanged. This is not a companion release.
 
+The later [network-fault and concurrent-load cycle](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md)
+adds the named native latency/late-ack/revocation and 32-actor editing checks;
+the original remaining-gates list below describes this stage's baseline.
+
 ## Implemented Scope
 
 - Paper **1.21.11-132 / c5eb079** + official WorldEdit **7.4.2**.

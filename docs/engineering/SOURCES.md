@@ -635,6 +635,35 @@ and UNKNOWN/no-retry outcomes. Identical restored state on the same selector
 (ABA) is not historical change detection. See the [executed remote-editing report](BRIDGE_REMOTE_SELECTION_2026-10-13.md)
 for real/native evidence and remaining scope.
 
+## S53 Test-Only Network Faults And Evidence Reconciliation
+
+Checked **2026-10-13**, Node **24.21.0**, test-only minecraft-protocol **1.68.0**,
+Temurin **21.0.11+10 / 25.0.2+10**, unchanged Paper/WorldEdit tuple from S52.
+[RFC 9293](https://www.rfc-editor.org/rfc/rfc9293.html#section-2.2) specifies TCP's
+ordered reliable byte stream; read/write buffers are not application messages.
+Our latency relay therefore frames complete uncompressed Minecraft packets,
+preserves order for its delay case and separately labels deliberate application-
+acknowledgment withholding. It does not pretend that losing bytes is valid TCP
+message loss or establish compatibility with a production Minecraft proxy.
+
+The pinned [minecraft-protocol public API](https://github.com/PrismarineJS/node-minecraft-protocol/blob/1.68.0/docs/API.md)
+documents PLAY readiness and `createSerializer`; [its serializer source](https://github.com/PrismarineJS/node-minecraft-protocol/blob/1.68.0/src/transforms/serializer.js)
+selects the version/state/direction schema. Actual encoded custom-payload prefixes
+come from that schema, not guessed packet IDs. [Node 24 net](https://github.com/nodejs/node/blob/v24.x/doc/api/net.md)
+and [streams](https://github.com/nodejs/node/blob/v24.x/doc/api/stream.md) document
+write backpressure, pause/resume and drain. The fixture has one connection,
+bounded input/output storage and fail-closed framing; separate negative tests
+exercise fragmentation, overflow and unexpected extra connections. No production
+agent/interceptor, external service or new shipped dependency is introduced.
+
+The official [JFR command reference](https://docs.oracle.com/en/java/javase/21/docs/specs/man/jfr.html)
+supports structured `print --json --events` output. The edit analyzer checks
+recorded DataLoss, reuses the already-tested bounded tick reader and matches
+phase/sample IDs plus raw Paper values before writing its analysis. Exact
+percentiles are recomputed. This prevents a copied success flag or stale summary
+from becoming cost evidence. Two same-policy functional runs are still not an
+absent/installed causal performance comparison; see the [executed report](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md).
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.
