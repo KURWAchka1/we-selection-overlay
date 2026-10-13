@@ -16,6 +16,12 @@ export function request(epoch, id) {
   epoch.copy(body); body.writeBigInt64BE(BigInt(id), 16);
   return frame(3, body);
 }
+export function editRead(epoch, id) { return frame(6, request(epoch, id).subarray(6)); }
+export function editCommit(epoch, id, revision, bounds) {
+  assert.equal(revision.length, 16); assert.equal(bounds.length, 6);
+  const body = Buffer.alloc(64); request(epoch, id).subarray(6).copy(body); revision.copy(body, 24);
+  bounds.forEach((n, i) => body.writeInt32BE(n, 40 + i * 4)); return frame(8, body);
+}
 export function decode(bytes) {
   assert(bytes.length >= 6 && bytes.length <= 256);
   assert.equal(bytes.subarray(0, 5).toString('hex'), '5745534f01');
@@ -29,6 +35,21 @@ export function decode(bytes) {
     assert.equal(bytes.length, 38);
     assert(!bytes.subarray(22).equals(Buffer.alloc(16)), 'Session close has no epoch');
     return { opcode: 5, nonce: bytes.subarray(6, 22), epoch: bytes.subarray(22, 38) };
+  }
+  if (bytes[5] === 7 || bytes[5] === 9) {
+    const commit = bytes[5] === 9, offset = commit ? 31 : 30;
+    assert(bytes.length >= offset + 17);
+    const result = { opcode: bytes[5], epoch: bytes.subarray(6, 22), id: bytes.readBigInt64BE(22),
+      revision: bytes.subarray(offset, offset + 16), status: bytes[offset + 16] };
+    if (commit) { result.commitStatus = bytes[30]; assert(result.commitStatus <= 5); }
+    assert(result.status <= 4);
+    assert.equal(bytes.length, offset + 17 + (result.status === 0 ? 33 : 0));
+    assert.equal(result.revision.equals(Buffer.alloc(16)), result.status !== 0);
+    if (result.status === 0) {
+      result.bounds = Array.from({ length: 6 }, (_, i) => bytes.readInt32BE(offset + 17 + i * 4));
+      result.minY = bytes.readInt32BE(offset + 41); result.maxY = bytes.readInt32BE(offset + 45); result.permissions = bytes[offset + 49];
+    }
+    return result;
   }
   assert.equal(bytes[5], 4);
   assert(bytes.length >= 31);

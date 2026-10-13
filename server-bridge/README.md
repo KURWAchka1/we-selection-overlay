@@ -12,6 +12,9 @@ clients to include the new transport. Do not replace or move the `1.8.0` tag.
   absent/denied/incompatible states. Normal `worldedit:cui` is untouched.
 - Explicit read-only requests for the requesting player's selection bounds,
   inclusive world height and expand/contract/shift permission bits.
+- Separately authorized minor-2 cuboid capture/commit on Paper 1.21.11, reused
+  by the existing development Fabric/NeoForge 1.21.11 selection editor. Dragging
+  remains local; confirmation sends one bounded transaction, cancellation none.
 - Owning-thread enforcement, per-connection and aggregate admission limits,
   bounded connection state, duplicate-read caching and context cleanup.
 - Optional minor-1 session-close notification before graceful Paper disable;
@@ -20,13 +23,14 @@ clients to include the new transport. Do not replace or move the `1.8.0` tag.
   close, with no automatic metadata read, permission polling or retry loop.
 - One pending frame per connection, fair deferred dispatch and a single owned
   synchronous task only while the queue is nonempty. No idle polling tasks,
-  workers, block reads, clipboard scans, simulation, mutations or subscriptions.
+  workers, block reads, clipboard scans, simulation, world mutations or subscriptions.
 
-The sole implemented data capability is **selection metadata read**, not remote
-selection editing. Bounds do not describe non-cuboid geometry; CUI remains its
-source. Existing local previews, isolation, selection editing and UI are not
-rerouted through this prototype. Clipboard synchronization, command previews,
-selection commits and dedicated Fabric/NeoForge server hosts remain planned.
+Implemented capabilities are **selection metadata read** and separately granted
+**cuboid selection editing**, not world editing. Bounds do not describe non-cuboid
+geometry; CUI remains its source. Integrated singleplayer keeps its local source;
+other previews, isolation and UI are not rerouted through this prototype.
+Clipboard synchronization, command previews, 26.x remote editing and dedicated
+Fabric/NeoForge server hosts remain planned. See the [remote-editing evidence](../docs/engineering/BRIDGE_REMOTE_SELECTION_2026-10-13.md).
 
 ## Layout
 
@@ -40,7 +44,9 @@ selection commits and dedicated Fabric/NeoForge server hosts remain planned.
 
 Client-native files live in each runtime's `client/bridge` package. Maintain the
 Fabric 26.2 adapters and run `node tools/sync-server-bridge.mjs` from the root to
-update the other adapters; application protocol/state logic is not duplicated.
+update the other adapters; `--check` detects drift without rewriting them. The
+generator preserves the 1.21.11-only editing consumer; 26.x requests metadata/close
+only. Application protocol/state logic is not duplicated.
 
 ## Build And Test
 
@@ -51,7 +57,7 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-36 harness self-tests (owned-process shutdown, frozen-world safety, wire
+42 harness self-tests (owned-process shutdown, frozen-world safety, wire
 helpers, mixed-workload and active-lifecycle validation); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
@@ -66,8 +72,9 @@ Build only the companion:
 ```
 
 Artifact: `paper/build/libs/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar`.
-It contains only project-owned core/protocol classes, plugin metadata and the
-license. Paper, WorldEdit, testing tools and client code are not bundled.
+It contains only project-owned core/protocol classes, the three existing shared
+selection-domain classes, plugin metadata and the license. Paper, WorldEdit,
+testing tools and client code are not bundled.
 
 ## Controlled Server Proof
 
@@ -222,7 +229,7 @@ blocks through closed WorldEdit sessions every 20 ticks. Four clients never
 negotiate the bridge. All six phases run in both absent/installed comparisons;
 server movement and exact world-work counts are checked independently of bridge
 replies. Requires at least four players and samples divisible by 20. Fixture
-world mutations are deliberately test-only; the companion stays read-only.
+world mutations are deliberately test-only; the companion does not edit blocks.
 See the [predeclared method and results](../docs/engineering/BRIDGE_GAMEPLAY_LOAD_2026-10-12.md)
 before interpreting this bounded scenario as ordinary production gameplay.
 
@@ -286,6 +293,20 @@ through the server's permission manager, together with a relevant WorldEdit
 selection permission. Grant before joining, or reconnect after changing grants:
 discovery is one-shot, not a permission-polling loop. Never grant OP automatically
 for transport testing.
+
+For remote cuboid editing additionally grant `weso.bridge.selection.edit`
+(default false, including OP). Existing WorldEdit expand/contract/shift grants
+are checked against the actual proposed change, not a mode supplied by the client.
+Enable selection editing in the development client's settings, then use the
+existing G/drag/confirm/cancel controls. Client-side WorldEdit is not required for
+this remote path. Only the requesting player's cuboid metadata changes.
+The cache refreshes after CUI changes, not every render/controller tick.
+An unacknowledged commit is uncertain and is **never automatically retried**;
+inspect the canonical selection before trying another operation.
+
+Install/update the companion with a full server restart. After disabling this
+plugin instance, same-JVM re-enable offers metadata/close only, not editing:
+Paper has closed its classloader. Lifecycle fault tests are not hot-reload support.
 
 Without a consumer, only a hello/welcome is exchanged; no selection is read.
 For an opt-in diagnostic, start the development client with JVM argument

@@ -26,6 +26,9 @@ import org.bukkit.scheduler.BukkitTask;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeCodec;
 import org.marshal.weaddon_lightposition.bridge.protocol.BridgeRestartHint;
 import org.marshal.weaddon_lightposition.bridge.server.BridgeServer;
+import org.marshal.weaddon_lightposition.selection.CuboidDraft;
+import org.marshal.weaddon_lightposition.selection.SelectionEditSnapshot;
+import org.marshal.weaddon_lightposition.selection.worldedit.SelectionEditTransaction;
 
 import static org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.*;
 
@@ -35,6 +38,7 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
     private long lastFailureLog;
     private boolean warnedThread;
     private long restartHints;
+    private boolean selectionEditingAvailable = true;
 
     @Override public void onEnable() {
         var worldEdit = getServer().getPluginManager().getPlugin("WorldEdit");
@@ -65,7 +69,8 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
         getServer().getMessenger().registerIncomingPluginChannel(this, BridgeCodec.CHANNEL, this);
         getServer().getPluginManager().registerEvents(this, this);
         Objects.requireNonNull(getCommand("wesobridge")).setExecutor(this);
-        getLogger().info("Experimental read-only bridge enabled. Bounded fair dispatch; no idle tasks or block scans.");
+        getLogger().info("Experimental read-only bridge enabled; optional cuboid editing requires a separate grant. Bounded fair dispatch; no idle tasks or block scans.");
+        if (!selectionEditingAvailable) getLogger().warning("Cuboid editing requires a full server restart after companion disable; metadata/CUI fallback remains available.");
         announceRestart();
     }
 
@@ -86,6 +91,7 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
     }
 
     @Override public void onDisable() {
+        selectionEditingAvailable = false;
         stopDrain();
         getServer().getMessenger().unregisterIncomingPluginChannel(this);
         getServer().getMessenger().unregisterOutgoingPluginChannel(this);
@@ -166,11 +172,13 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
         if (!sender.hasPermission("weso.bridge.admin")) return true;
         if (bridge == null) { sender.sendMessage("WESO Bridge: disabled."); return true; }
         BridgeServer.Metrics m = bridge.metrics();
-        sender.sendMessage("WESO Bridge 0.1 (read-only transport): connections=" + m.connections()
+        sender.sendMessage("WESO Bridge 0.1 (optional selection transport): connections=" + m.connections()
                 + ", admitted=" + m.admitted() + ", throttled=" + m.throttled() + ", malformed=" + m.malformed());
         sender.sendMessage("Selection metadata reads=" + m.selectionReads() + ", replies=" + m.replies()
-                + ", reply bytes=" + m.encodedReplyBytes() + ". No block scans, subscriptions or mutations.");
+                + ", reply bytes=" + m.encodedReplyBytes() + ". No block scans/subscriptions; cuboid metadata edits require a separate grant.");
         sender.sendMessage("Restart hints=" + restartHints + ", hint bytes=" + restartHints * BridgeRestartHint.FRAME_BYTES + ". Lifecycle only.");
+        var edits = bridge.editMetrics();
+        sender.sendMessage("Cuboid captures=" + edits.captures() + ", commits=" + edits.commits() + ", applied=" + edits.applied());
         BridgeServer.QueueMetrics q = bridge.queueMetrics();
         sender.sendMessage("Queue pending=" + q.pending() + ", peak=" + q.peakPending() + ", queued=" + q.queued()
                 + ", expired=" + q.expired() + ", cancelled=" + q.cancelled() + ", max wait nanos=" + q.maxWaitNanos()
@@ -179,6 +187,63 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
     }
 
     private final class SelectionHost implements BridgeServer.Host {
+        @Override public boolean mayEditSelection(UUID id) {
+            Player player = getServer().getPlayer(id);
+            return selectionEditingAvailable && player != null && player.hasPermission("weso.bridge.selection.edit") && mayReadSelection(id);
+        }
+
+        private boolean editableContext(com.sk89q.worldedit.entity.Player actor) {
+            LocalSession session = WorldEdit.getInstance().getSessionManager().getIfPresent(actor);
+            return session != null && !session.hasWorldOverride() && actor.getWorld().equals(session.getSelectionWorld());
+        }
+
+        private BridgeServer.EditCapture captured(SelectionEditSnapshot snapshot) {
+            if (!snapshot.ready()) return BridgeServer.EditCapture.unavailable(switch (snapshot.reason()) {
+                case "permission" -> SelectionStatus.DENIED;
+                case "shape", "session" -> SelectionStatus.UNSUPPORTED;
+                case "selection", "stale" -> SelectionStatus.EMPTY;
+                default -> SelectionStatus.FAILED;
+            });
+            var b = snapshot.bounds();
+            int grants = (snapshot.expand() ? 1 : 0) | (snapshot.contract() ? 2 : 0) | (snapshot.shift() ? 4 : 0);
+            return new BridgeServer.EditCapture(snapshot, new SelectionState(SelectionStatus.READY,
+                    new Bounds(b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ()), snapshot.minY(), snapshot.maxY(), grants));
+        }
+
+        @Override public BridgeServer.EditCapture captureEdit(UUID id) {
+            if (!mayEditSelection(id)) return BridgeServer.EditCapture.unavailable(SelectionStatus.DENIED);
+            try {
+                var actor = BukkitAdapter.adapt(Objects.requireNonNull(getServer().getPlayer(id)));
+                if (!editableContext(actor)) return BridgeServer.EditCapture.unavailable(SelectionStatus.UNSUPPORTED);
+                return captured(SelectionEditTransaction.read(actor));
+            } catch (RuntimeException | LinkageError ex) {
+                logFailure(ex); return BridgeServer.EditCapture.unavailable(SelectionStatus.FAILED);
+            }
+        }
+
+        @Override public BridgeServer.EditOutcome applyEdit(UUID id, Object token, Bounds target) {
+            if (!mayEditSelection(id)) return new BridgeServer.EditOutcome(CommitStatus.DENIED, BridgeServer.EditCapture.unavailable(SelectionStatus.DENIED));
+            try {
+                var actor = BukkitAdapter.adapt(Objects.requireNonNull(getServer().getPlayer(id)));
+                if (!(token instanceof SelectionEditSnapshot original) || !editableContext(actor))
+                    return new BridgeServer.EditOutcome(CommitStatus.CONFLICT, BridgeServer.EditCapture.unavailable(SelectionStatus.UNSUPPORTED));
+                var draft = new CuboidDraft(target.minX(), target.minY(), target.minZ(), target.maxX(), target.maxY(), target.maxZ());
+                var result = SelectionEditTransaction.commitBounds(actor, original, draft);
+                CommitStatus status = result.ready() ? CommitStatus.APPLIED : switch (result.reason()) {
+                    case "stale", "selection" -> CommitStatus.CONFLICT;
+                    case "permission" -> CommitStatus.DENIED;
+                    case "shape", "session" -> CommitStatus.UNSUPPORTED;
+                    case "invalid" -> CommitStatus.INVALID;
+                    default -> CommitStatus.UNKNOWN;
+                };
+                return new BridgeServer.EditOutcome(status, captured(result));
+            } catch (RuntimeException | LinkageError ex) {
+                // Failure may follow mutation/CUI delivery; do not claim rollback or retry.
+                logFailure(ex);
+                return new BridgeServer.EditOutcome(CommitStatus.UNKNOWN, BridgeServer.EditCapture.unavailable(SelectionStatus.FAILED));
+            }
+        }
+
         @Override public boolean mayReadSelection(UUID id) {
             Player player = getServer().getPlayer(id);
             if (player == null || !player.isOnline() || !player.hasPermission("weso.bridge.selection")) return false;

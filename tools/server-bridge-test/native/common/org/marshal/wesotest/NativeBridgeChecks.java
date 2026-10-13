@@ -12,6 +12,9 @@ public final class NativeBridgeChecks {
         Object player();
         Object world();
         Object connection();
+        Object game();
+        void focusForEditing(boolean focused);
+        void editKey(Object key, boolean held);
         boolean respawnIfDead();
         void reconnect();
         void stop();
@@ -28,6 +31,10 @@ public final class NativeBridgeChecks {
     private Object previousPlayer, previousWorld, previousConnection, previousEpoch;
     private long contextStarted;
     private boolean respawnRequested;
+    private Object editor, editCallback;
+    private boolean exercisingEditing;
+    private int tapTicks;
+    private long quietRequest;
 
     public NativeBridgeChecks(Adapter adapter) {
         this.adapter = adapter;
@@ -40,6 +47,9 @@ public final class NativeBridgeChecks {
         try {
             check(System.nanoTime() - deadline < 0, "Timeout at stage " + stage + ", status=" + status());
             adapter.configure();
+            if (editor == null) editor = Class.forName("org.marshal.weaddon_lightposition.runtime.mc1_21_11.client.selection.SelectionEditController").getMethod("instance").invoke(null);
+            editor.getClass().getMethod("configure", boolean.class, int.class, int.class).invoke(editor, exercisingEditing, 1, 8);
+            if (exercisingEditing) adapter.focusForEditing(true);
             if (stage == 9) {
                 if (adapter.joined() || !status().equals("DISCONNECTED")) return;
                 check(call(null, "selection") == null, "Disconnect retained selection");
@@ -67,6 +77,53 @@ public final class NativeBridgeChecks {
                 else stage = 2;
             } else if (stage == 2 && call(null, "selection") != null) {
                 verifySelection("READY");
+                waitFor("editsetup", 40);
+            } else if (stage == 40 && acknowledged("editsetup")) {
+                check(call(null, "editContext") != null, "Server did not grant edit capability on fresh startup");
+                exercisingEditing = true; setEnum("mode", "RESIZE"); setEnum("selected", "UP"); stage = 41;
+            } else if (stage == 41) {
+                Object shown = field(editor, editor.getClass(), "shown");
+                if (shown == null || !(boolean) invoke(shown, "ready")) return;
+                check(field(editor, editor.getClass(), "source").getClass().getSimpleName().equals("RemoteSelectionEditSource"), "Wrong remote provider");
+                pressEdit(); stage = 42;
+            } else if (stage == 42 && --tapTicks <= 0) { releaseEdit(); stage = 43;
+            } else if (stage == 43 && (boolean) invoke(editor, "active")) {
+                check((boolean) editor.getClass().getMethod("scroll", double.class).invoke(editor, 1.0), "Native resize input was not consumed");
+                check((int) invoke(invoke(editor, "draft"), "maxY") == 71, "G resize draft differs");
+                pressEdit(); stage = 44;
+            } else if (stage == 44 && --tapTicks <= 0) { releaseEdit(); stage = 45;
+            } else if (stage == 45 && !(boolean) invoke(editor, "pending") && !(boolean) invoke(editor, "active")) {
+                Object state = field(null, bridge, "CLIENT"), reply = invoke(state, "editResult");
+                check(reply != null && invoke(reply, "status").toString().equals("APPLIED"), "Native G commit was not acknowledged");
+                Object shown = field(editor, editor.getClass(), "shown");
+                if (shown == null || !(boolean) invoke(shown, "ready")) return;
+                Object b = invoke(shown, "bounds");
+                Object shifted = b.getClass().getConstructor(int.class, int.class, int.class, int.class, int.class, int.class)
+                        .newInstance(11, 64, 20, 16, 71, 27);
+                Object source = field(editor, editor.getClass(), "source");
+                java.lang.reflect.Method commit = java.util.Arrays.stream(source.getClass().getMethods()).filter(m -> m.getName().equals("commit")).findFirst().orElseThrow();
+                editCallback = null;
+                commit.invoke(source, adapter.game(), shown, shifted, null, null, (java.util.function.Consumer<Object>) value -> editCallback = value);
+                stage = 46;
+            } else if (stage == 46 && editCallback != null) {
+                check((boolean) invoke(editCallback, "ready"), "Native whole-box shift failed");
+                check((int) invoke(invoke(editCallback, "bounds"), "minX") == 11, "Native whole-box shift mismatch");
+                quietRequest = (long) field(field(null, bridge, "CLIENT"), field(null, bridge, "CLIENT").getClass(), "requestId");
+                quietTicks = 40; stage = 47;
+            } else if (stage == 47 && --quietTicks <= 0) {
+                check((long) field(field(null, bridge, "CLIENT"), field(null, bridge, "CLIENT").getClass(), "requestId") == quietRequest,
+                        "Cached editor reads polled the server or restarted after its own CUI");
+                Object region = invoke(field(overlay, overlay.getClass(), "selectionManager"), "primaryRegionForAnalysis");
+                check((int) invoke(invoke(region, "boundsForAnalysis"), "minX") == 11, "Canonical CUI did not reach the overlay");
+                waitFor("editquiet", 48);
+            } else if (stage == 48 && acknowledged("editquiet")) { pressEdit(); stage = 49;
+            } else if (stage == 49 && --tapTicks <= 0) { releaseEdit(); stage = 50;
+            } else if (stage == 50 && (boolean) invoke(editor, "active")) {
+                check((boolean) editor.getClass().getMethod("scroll", double.class).invoke(editor, 1.0), "Cancellation draft input missing");
+                invoke(editor, "cancel"); check(!(boolean) invoke(editor, "active") && !(boolean) invoke(editor, "pending"), "Cancellation retained edit");
+                exercisingEditing = false; adapter.focusForEditing(false); waitFor("editcancel", 51);
+            } else if (stage == 51 && acknowledged("editcancel")) {
+                System.out.println("NATIVE PAPER EDIT PASS: G resize, remote shift, cancellation, cached reads and canonical CUI");
                 rememberContext(); waitFor("respawn", 12);
             } else if (stage == 12 && acknowledged("respawn")) {
                 if (!respawnRequested) respawnRequested = adapter.respawnIfDead();
@@ -241,6 +298,13 @@ public final class NativeBridgeChecks {
     }
 
     private String status() throws Exception { return call(null, "status").toString(); }
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void setEnum(String name, String value) throws Exception {
+        var field = editor.getClass().getDeclaredField(name); field.setAccessible(true);
+        field.set(editor, Enum.valueOf((Class<? extends Enum>) field.getType(), value));
+    }
+    private void pressEdit() throws Exception { adapter.editKey(field(editor, editor.getClass(), "editKey"), true); tapTicks = 2; }
+    private void releaseEdit() throws Exception { adapter.editKey(field(editor, editor.getClass(), "editKey"), false); }
     private void waitFor(String phase, int next) { stage = next; System.out.println("NATIVE PAPER WAIT: " + phase); }
     private boolean acknowledged(String phase) throws Exception { return Files.readString(control).trim().equals(phase); }
     private Object call(Object ignored, String name) throws Exception { return bridge.getMethod(name).invoke(null); }

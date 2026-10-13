@@ -8,6 +8,7 @@ import { resolve, relative, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'node:net';
 import { channel, frame, hello, request, decode } from './wire-codec.mjs';
+import { verifyEdits } from './paper-edit-proof.mjs';
 import { observeOwnedServer } from './owned-server.mjs';
 
 const [javaHome, serverDirectory, dependencyDirectory] = process.argv.slice(2);
@@ -220,6 +221,8 @@ try {
   assert.notDeepEqual(newConnection.epoch, afterRespawn.epoch);
   assert.equal((await reconnected.exchange(request(newConnection.epoch, 1))).value.status, 0);
   record('same offline identity reconnects in this server process without retaining old epoch');
+  await verifyEdits({ reconnected, second, one, consoleAction, negotiate, silent, record, waitFor });
+  await consoleAction('editgrant', 'WesoAllowed');
 
   const closeOnly = await negotiate(reconnected, 1, 1, 2);
   assert.equal(closeOnly.status, 1); assert.equal(closeOnly.capabilities, 0);
@@ -277,7 +280,8 @@ try {
     if (hintIndex) assert.notDeepEqual(reconnected.restartHints[hintIndex - 1], hint, 'Restart reused generation');
     await silent(reconnected, request(currentEpoch, 2));
     assert.equal((await metrics()).reads, 0, 'Restart accepted a previous core epoch');
-    const welcome = await negotiate(reconnected, 1, 1, 3);
+    const welcome = await negotiate(reconnected, 1, 2, 7);
+    assert.equal(welcome.capabilities, 3, 'Closed plugin loader must not advertise new editing work after re-enable');
     assert.notDeepEqual(welcome.epoch, currentEpoch);
     const read = await reconnected.exchange(request(welcome.epoch, 1));
     assert.deepEqual(read.value.bounds, one.value.bounds);
@@ -295,6 +299,7 @@ try {
   record('three same-process plugin disable/enable cycles release resources, reject old epochs and do not duplicate work');
   record('restart sends one 22-byte hint per opt-in listener, no legacy/ordinary payload, reads or permission bypass');
   record('previous minor-one client still receives negotiated close only, without an unsupported restart channel');
+
 
   for (const peer of clients) if (peer !== first && peer !== reconnected) {
     assert(!peer.ended, peer.errors.join(', ')); peer.client.end('verification complete');

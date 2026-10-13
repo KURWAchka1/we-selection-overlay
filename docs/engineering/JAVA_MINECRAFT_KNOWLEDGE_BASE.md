@@ -11,9 +11,11 @@ optional WorldEdit server companion, not a generic Java tutorial.
 - **Proposal** means a design awaiting a prototype and measurements.
 - **Unverified** means we must not advertise support yet.
 
-An experimental **read-only transport foundation** is now implemented; see the
-[implementation evidence](SERVER_BRIDGE_IMPLEMENTATION.md). Remote selection
-editing, clipboard synchronization and command simulation remain unimplemented.
+An experimental **metadata transport foundation** and **Paper 1.21.11 cuboid
+editing** are implemented; see the [foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
+and [remote-editing scope/tests](BRIDGE_REMOTE_SELECTION_2026-10-13.md). The editing
+consumer exists only in development Fabric/NeoForge 1.21.11 clients. Clipboard
+synchronization, command simulation and other dedicated hosts remain unimplemented.
 Published client 1.8.0 is unchanged and has no bridge protocol support.
 Existing CUI-only servers must keep working without installing a companion.
 
@@ -35,6 +37,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Active lifecycle load](BRIDGE_ACTIVE_LIFECYCLE_2026-10-12.md) | Observed queued wire requests before revocation/disconnect/disable, repeated recovery during active load, test-client state guard and evidence limits |
 | [Method interval diagnostics](BRIDGE_SLICE_DIAGNOSTICS_2026-10-12.md) | Test-only method/JFR attribution, profiler interference, independent counter reconciliation and unchanged production artifacts |
 | [Matched profiler control](BRIDGE_MATCHED_CONTROL_2026-10-13.md) | Same profiler policy in absent/installed gameplay runs, longer windows, raw-evidence reconciliation and independent-replication limits |
+| [Remote cuboid editing](BRIDGE_REMOTE_SELECTION_2026-10-13.md) | Minor-2 capture/commit, live authority, single-use revisions, cached native source, real Paper/native evidence and fresh-start boundary |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

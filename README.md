@@ -37,7 +37,7 @@ these restrictions are documented in `tools/MANUAL_TEST.md`.
 | `shared/neoforge-cui` | Shared-protocol bridge and private fallback registration |
 | `shared/server-bridge-protocol` | Experimental bounded Java 21 application protocol |
 | `shared/server-bridge-client` | Experimental loader-independent connection state |
-| `server-bridge` | Optional read-only Paper transport prototype and isolated tests |
+| `server-bridge` | Optional Paper metadata/cuboid-editing prototype and isolated tests |
 
 The packagers keep incompatible Minecraft classes in separate relocated runtime packages. Runtime detection loads only the matching package. Fabric bundles version-scoped CUI protocol metadata. NeoForge uses the installed shared protocol or a privately relocated, version-matched fallback to avoid split-package conflicts. See the packager READMEs and `TESTING.md` for details and test coverage.
 

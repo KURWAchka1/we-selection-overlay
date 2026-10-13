@@ -18,3 +18,6 @@ permissions:
   weso.bridge.admin:
     description: Inspect bridge transport counters.
     default: op
+  weso.bridge.selection.edit:
+    description: Allow cuboid adjustment with your existing WorldEdit selection permissions.
+    default: false

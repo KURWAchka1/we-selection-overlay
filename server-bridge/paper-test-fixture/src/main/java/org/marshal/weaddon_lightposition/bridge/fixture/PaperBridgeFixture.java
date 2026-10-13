@@ -22,6 +22,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 /** Never distributed; seeds metadata and explicit grants in a loopback-only test server. */
 public final class PaperBridgeFixture extends JavaPlugin implements Listener {
     private final Map<UUID, PermissionAttachment> grants = new HashMap<>();
+    private final Map<UUID, String> editAudits = new HashMap<>();
     private FixtureMeasurements measurements;
     private FixtureGameplay gameplay;
     private FixtureQueuedFaults queuedFaults;
@@ -57,6 +58,7 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         boolean allowed = player.getName().equals("WesoAllowed") || player.getName().equals("WesoSecond")
                 || player.getName().matches("WesoLoad[0-9]{2}");
         attachment.setPermission("weso.bridge.selection", allowed);
+        attachment.setPermission("weso.bridge.selection.edit", allowed && Boolean.getBoolean("weso.bridge.editFixture"));
         for (String node : new String[]{"pos", "expand", "contract", "shift"})
             attachment.setPermission("worldedit.selection." + node, allowed);
         seed(player.getName());
@@ -76,6 +78,7 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
 
     @EventHandler public void quit(PlayerQuitEvent event) {
         grants.remove(event.getPlayer().getUniqueId());
+        editAudits.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler public void respawn(PlayerRespawnEvent event) {
@@ -128,6 +131,34 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
             return true;
         }
         switch (args[0]) {
+            case "editgrant", "editrevoke" -> grants.get(player.getUniqueId()).setPermission("weso.bridge.selection.edit", args[0].equals("editgrant"));
+            case "expandonly", "contractonly", "shiftonly", "allgrants" -> {
+                for (String node : new String[]{"expand", "contract", "shift"})
+                    grants.get(player.getUniqueId()).setPermission("worldedit.selection." + node, args[0].equals("allgrants") || args[0].equals(node + "only"));
+            }
+            case "reverse" -> {
+                var actor = BukkitAdapter.adapt(player);
+                WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(),
+                        new CuboidRegionSelector(actor.getWorld(), BlockVector3.at(15, 70, 27), BlockVector3.at(10, 64, 20)));
+            }
+            case "extend" -> {
+                var actor = BukkitAdapter.adapt(player); var session = WorldEdit.getInstance().getSessionManager().get(actor);
+                session.setRegionSelector(actor.getWorld(), new com.sk89q.worldedit.regions.selector.ExtendingCuboidRegionSelector(session.getRegionSelector(actor.getWorld())));
+            }
+            case "unsupported" -> {
+                var actor = BukkitAdapter.adapt(player);
+                WorldEdit.getInstance().getSessionManager().get(actor).setRegionSelector(actor.getWorld(),
+                        new CuboidRegionSelector(actor.getWorld(), BlockVector3.at(10, 64, 20), BlockVector3.at(15, 70, 27)) { });
+            }
+            case "edit-command" -> {
+                if (!getServer().dispatchCommand(player, "/shift 1 east")) throw new IllegalStateException("WorldEdit shift command unavailable");
+            }
+            case "edit-audit-start" -> editAudits.put(player.getUniqueId(), editAudit(player));
+            case "edit-audit-end" -> {
+                if (!Objects.equals(editAudits.remove(player.getUniqueId()), editAudit(player))) throw new IllegalStateException("Selection editing changed fixture blocks");
+                var actor = BukkitAdapter.adapt(player); var session = WorldEdit.getInstance().getSessionManager().get(actor);
+                if (session.undo(null, actor) != null) throw new IllegalStateException("Selection editing added undo history");
+            }
             case "revoke" -> grants.get(player.getUniqueId()).setPermission("weso.bridge.selection", false);
             case "grant" -> grants.get(player.getUniqueId()).setPermission("weso.bridge.selection", true);
             case "empty" -> {
@@ -136,6 +167,11 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
                         .setRegionSelector(actor.getWorld(), new CuboidRegionSelector(actor.getWorld()));
             }
             case "seed" -> seed(player.getName());
+            case "seed-sync" -> {
+                seed(player.getName()); var actor = BukkitAdapter.adapt(player);
+                var session = WorldEdit.getInstance().getSessionManager().get(actor);
+                session.getRegionSelector(actor.getWorld()).explainRegionAdjust(actor, session);
+            }
             case "kill" -> player.setHealth(0);
             case "channeloff", "channelon" -> ChannelFaults.advertise(player, args[0].equals("channelon"));
             case "nether", "overworld" -> {
@@ -158,6 +194,18 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
 
     private org.bukkit.plugin.Plugin bridgePlugin() {
         return Objects.requireNonNull(getServer().getPluginManager().getPlugin("WorldEditSelectionOverlayBridge"));
+    }
+
+    private String editAudit(org.bukkit.entity.Player player) {
+        // Fixed loaded test area only. Never force loads to make an audit pass.
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256");
+            for (int x = 8; x <= 24; x++) for (int z = 18; z <= 30; z++) {
+                if (!player.getWorld().isChunkLoaded(x >> 4, z >> 4)) throw new IllegalStateException("Audit chunk is not loaded");
+                for (int y = 60; y <= 74; y++) digest.update(player.getWorld().getBlockAt(x, y, z).getBlockData().getAsString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+            return java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException ex) { throw new AssertionError(ex); }
     }
 
     private void verifyBridgeResources(boolean active) {

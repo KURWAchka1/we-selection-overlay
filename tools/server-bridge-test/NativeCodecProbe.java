@@ -42,6 +42,22 @@ public final class NativeCodecProbe {
             check(closed.equals(BridgeCodec.decode(decodedClose.bytes(), BridgeCodec.Direction.TO_CLIENT)),
                     "Native close notification failed application decoding");
             check(!buffer.isReadable(), "Native close notification left trailing bytes");
+            var editSnapshot = new BridgeMessage.EditSnapshot(new UUID(4, 5), new BridgeMessage.SelectionState(
+                    BridgeMessage.SelectionStatus.READY, new BridgeMessage.Bounds(0, -64, 0, 5, 319, 7), -64, 319, 7));
+            for (BridgeMessage edit : java.util.List.of(new BridgeMessage.EditReadRequest(new UUID(2, 3), 1),
+                    new BridgeMessage.EditReadReply(new UUID(2, 3), 1, editSnapshot),
+                    new BridgeMessage.EditCommitRequest(new UUID(2, 3), 2, editSnapshot.revision(), editSnapshot.selection().bounds()),
+                    new BridgeMessage.EditCommitReply(new UUID(2, 3), 2, BridgeMessage.CommitStatus.APPLIED, editSnapshot))) {
+                byte[] expected = BridgeCodec.encode(edit); buffer.clear();
+                encode.invoke(BridgePayload.CODEC, buffer, new BridgePayload(expected));
+                byte[] actualEdit = new byte[buffer.readableBytes()]; buffer.getBytes(0, actualEdit);
+                check(Arrays.equals(expected, actualEdit), "Native edit frame gained framing");
+                var decodedEdit = (BridgePayload) decode.invoke(BridgePayload.CODEC, buffer);
+                var direction = edit instanceof BridgeMessage.EditReadRequest || edit instanceof BridgeMessage.EditCommitRequest
+                        ? BridgeCodec.Direction.TO_SERVER : BridgeCodec.Direction.TO_CLIENT;
+                check(edit.equals(BridgeCodec.decode(decodedEdit.bytes(), direction)), "Native edit frame differs");
+                check(!buffer.isReadable(), "Native edit frame left trailing bytes");
+            }
             byte[] restart = BridgeRestartHint.encode(new UUID(4, 5));
             var restartPayload = new BridgeRestartPayload(restart);
             restart[0] = 0;

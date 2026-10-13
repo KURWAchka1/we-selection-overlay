@@ -1,8 +1,10 @@
 # Optional Server Bridge: Engineering Design
 
 Status: **long-term design, not a frozen wire specification**. A bounded,
-read-only transport foundation is implemented; the editing/streaming/simulation
-stages below are still proposals. See [executed evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
+metadata transport foundation and narrow Paper/1.21.11 cuboid editing are
+implemented. Streaming/simulation, other hosts and broader editing remain proposals.
+See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
+[executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).
 Research date: 2026-10-11. Start with the [knowledge base](JAVA_MINECRAFT_KNOWLEDGE_BASE.md).
 
@@ -57,7 +59,9 @@ protocol translators each need explicit verification; none is implicit support.
 2. A capability is availability information, **not authorization**. Recheck current
    permissions and context on every operation, before data publication and before
    applying a selection transaction. Invalidate active transfers after revocation.
-3. Proposed bridge nodes: `weso.bridge.selection`, `weso.bridge.clipboard` and
+3. Implemented selection nodes: `weso.bridge.selection` (read) and
+   `weso.bridge.selection.edit` (additional cuboid edit grant, default false).
+   Proposed later nodes include `weso.bridge.clipboard` and
    `weso.bridge.preview`. Require each applicable WorldEdit permission as well.
    Sensitive capabilities should initially be opt-in/admin-granted, not default true.
 4. Selection shifting needs `worldedit.selection.shift`; resizing needs expand

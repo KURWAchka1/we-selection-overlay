@@ -605,6 +605,36 @@ The summary reader rejects recorded data loss; raw measurement gates and
 percentiles are recomputed before accepting copied summaries. See the
 [matched-control method and evidence](BRIDGE_MATCHED_CONTROL_2026-10-13.md).
 
+## S52 Remote Cuboid Transactions And Paper Disable Boundary
+
+Checked **2026-10-13**, Paper **1.21.11-132 / c5eb079**, official WorldEdit
+**7.4.2 / eb8e82c3d8843bed3f71e82ea974122415645178**.
+Pinned [CuboidRegionSelector](https://github.com/EngineHub/WorldEdit/blob/eb8e82c3d8843bed3f71e82ea974122415645178/worldedit-core/src/main/java/com/sk89q/worldedit/regions/selector/CuboidRegionSelector.java)
+exposes `learnChanges` and `explainRegionAdjust`, including ordered CUI points.
+[CuboidRegion](https://github.com/EngineHub/WorldEdit/blob/eb8e82c3d8843bed3f71e82ea974122415645178/worldedit-core/src/main/java/com/sk89q/worldedit/regions/CuboidRegion.java)
+supplies expand/contract/shift. We reuse the repository's existing transaction
+instead of dispatching chat or copying a command implementation. The pinned
+[LocalSession](https://github.com/EngineHub/WorldEdit/blob/eb8e82c3d8843bed3f71e82ea974122415645178/worldedit-core/src/main/java/com/sk89q/worldedit/LocalSession.java)
+may switch/clear context in `getRegionSelector(world)`: host preflight checks
+selection world first. `getIfPresent` avoids creating a session during inspection.
+The fixture checks the public `undo(null, actor)` returns null on its fresh
+history; production never invokes undo, opens EditSession or reads block content.
+
+Pinned [PaperPluginInstanceManager](https://github.com/PaperMC/Paper/blob/c5eb079/paper-server/src/main/java/io/papermc/paper/plugin/manager/PaperPluginInstanceManager.java)
+closes and unregisters the configured plugin classloader after disable. Our real
+first edit test after same-instance re-enable failed with a closed ZIP loader.
+The [Paper command reference](https://docs.papermc.io/paper/reference/commands/#reload-alias-spigot-reload)
+recommends a restart instead of plugin reload. **Policy:** withhold editing after
+disable until full startup, do not reflectively reopen or eagerly warm the loader.
+Previously verified metadata recovery is a narrower fault-handling result, not
+general hot-reload support. Native tests use a fresh Paper process for each loader.
+
+**Our protocol design, not a WorldEdit guarantee:** connection-owned opaque
+single-use revisions, exact duplicate caching, current-state origin validation
+and UNKNOWN/no-retry outcomes. Identical restored state on the same selector
+(ABA) is not historical change detection. See the [executed remote-editing report](BRIDGE_REMOTE_SELECTION_2026-10-13.md)
+for real/native evidence and remaining scope.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

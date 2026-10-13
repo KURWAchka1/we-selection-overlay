@@ -17,6 +17,9 @@ public final class NeoNativeBridgeTest {
             @Override public Object player() { return client().player; }
             @Override public Object world() { return client().level; }
             @Override public Object connection() { return client().getConnection(); }
+            @Override public Object game() { return client(); }
+            @Override public void focusForEditing(boolean focused) { client().setWindowActive(focused); }
+            @Override public void editKey(Object key, boolean held) { ((KeyMapping) key).setDown(held); }
             @Override public boolean respawnIfDead() {
                 if (!client().player.isDeadOrDying()) return false;
                 client().player.respawn(); client().setScreen(null); return true;

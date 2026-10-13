@@ -15,6 +15,9 @@ public final class FabricNativeBridgeTest implements ClientModInitializer {
             @Override public Object player() { return client().player; }
             @Override public Object world() { return client().world; }
             @Override public Object connection() { return client().getNetworkHandler(); }
+            @Override public Object game() { return client(); }
+            @Override public void focusForEditing(boolean focused) { client().onWindowFocusChanged(focused); }
+            @Override public void editKey(Object key, boolean held) { ((KeyBinding) key).setPressed(held); }
             @Override public boolean respawnIfDead() {
                 if (!client().player.isDead()) return false;
                 client().player.requestRespawn(); client().setScreen(null); return true;

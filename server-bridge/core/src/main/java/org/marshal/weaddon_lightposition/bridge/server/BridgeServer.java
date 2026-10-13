@@ -19,6 +19,23 @@ public final class BridgeServer {
     public interface Host {
         boolean mayReadSelection(UUID connectionPlayer);
         SelectionState readSelection(UUID connectionPlayer);
+        default boolean mayEditSelection(UUID player) { return false; }
+        default EditCapture captureEdit(UUID player) { return EditCapture.unavailable(SelectionStatus.UNSUPPORTED); }
+        default EditOutcome applyEdit(UUID player, Object token, Bounds target) {
+            return new EditOutcome(CommitStatus.UNSUPPORTED, EditCapture.unavailable(SelectionStatus.UNSUPPORTED));
+        }
+    }
+
+    /** Opaque host token never enters the codec or a client-owned object. */
+    public record EditCapture(Object token, SelectionState selection) {
+        public EditCapture {
+            Objects.requireNonNull(selection);
+            if ((token != null) != (selection.status() == SelectionStatus.READY)) throw new IllegalArgumentException("Invalid host capture");
+        }
+        public static EditCapture unavailable(SelectionStatus status) { return new EditCapture(null, SelectionState.unavailable(status)); }
+    }
+    public record EditOutcome(CommitStatus status, EditCapture capture) {
+        public EditOutcome { Objects.requireNonNull(status); Objects.requireNonNull(capture); }
     }
 
     public record Limits(int maxConnections, int globalPerSecond, int globalBurst,
@@ -33,6 +50,7 @@ public final class BridgeServer {
 
     public record Metrics(int connections, long admitted, long throttled, long malformed,
                           long selectionReads, long replies, long encodedReplyBytes) { }
+    public record EditMetrics(long captures, long commits, long applied) { }
 
     public record DispatchLimits(int maxPerSlice, long sliceNanos, long maxPendingNanos) {
         public DispatchLimits {
@@ -51,7 +69,9 @@ public final class BridgeServer {
         UUID nonce, epoch;
         int capabilities;
         long lastRequest;
-        SelectionReply lastReply;
+        BridgeMessage lastReply, lastMessage;
+        EditCapture edit;
+        UUID editRevision;
         byte[] pending;
         long queuedAt;
         Peer(TokenBucket rate) { this.rate = rate; }
@@ -67,6 +87,7 @@ public final class BridgeServer {
     private final Map<UUID, Peer> peers = new HashMap<>();
     private final LinkedHashMap<UUID, Peer> pending = new LinkedHashMap<>();
     private long admitted, throttled, malformed, selectionReads, replies, encodedReplyBytes;
+    private long editCaptures, editCommits, editsApplied;
     private long queued, expired, cancelled, maxWaitNanos, maxSliceNanos;
     private int peakPending;
     private boolean draining;
@@ -156,6 +177,8 @@ public final class BridgeServer {
         BridgeMessage response = switch (message) {
             case Hello hello -> hello(player, peer, hello);
             case SelectionRequest request -> selection(player, peer, request);
+            case EditReadRequest request -> editRead(player, peer, request);
+            case EditCommitRequest request -> editCommit(player, peer, request);
             default -> null;
         };
         if (response == null) return null;
@@ -175,6 +198,8 @@ public final class BridgeServer {
         if (closed || peers.get(player) != peer) return null;
         int allowed = authorized ? hello.capabilities() & SUPPORTED_CAPABILITIES : 0;
         if (minor < 1) allowed &= ~SESSION_CLOSE;
+        if (minor < 2 || (allowed & SELECTION_EDIT) == 0 || !host.mayEditSelection(player)) allowed &= ~SELECTION_EDIT;
+        if (closed || peers.get(player) != peer) return null;
         if ((allowed & SELECTION_READ) == 0) {
             invalidate(peer);
             return new Welcome(hello.nonce(), NO_EPOCH, WelcomeStatus.DENIED, MAJOR, minor, 0, BridgeCodec.MAX_FRAME_BYTES);
@@ -184,8 +209,10 @@ public final class BridgeServer {
             peer.epoch = Objects.requireNonNull(epochs.get());
             peer.lastRequest = 0;
             peer.lastReply = null;
+            peer.lastMessage = null; peer.edit = null; peer.editRevision = null;
         }
         peer.capabilities = allowed;
+        if ((allowed & SELECTION_EDIT) == 0) { peer.edit = null; peer.editRevision = null; }
         return new Welcome(hello.nonce(), peer.epoch, WelcomeStatus.READY, MAJOR,
                 minor, allowed, BridgeCodec.MAX_FRAME_BYTES);
     }
@@ -201,7 +228,7 @@ public final class BridgeServer {
             return denied;
         }
         if (request.requestId() < peer.lastRequest) return null;
-        if (request.requestId() == peer.lastRequest) return peer.lastReply;
+        if (request.requestId() == peer.lastRequest) return request.equals(peer.lastMessage) && peer.lastReply instanceof SelectionReply reply ? reply : null;
         selectionReads++;
         SelectionState state = Objects.requireNonNull(host.readSelection(player));
         if (closed || peers.get(player) != peer || !request.epoch().equals(peer.epoch)) return null;
@@ -215,13 +242,87 @@ public final class BridgeServer {
             return reply;
         }
         peer.lastRequest = request.requestId();
+        peer.lastMessage = request;
         peer.lastReply = reply;
-        return peer.lastReply;
+        return reply;
+    }
+
+    private boolean editSession(Peer peer, UUID epoch) {
+        return epoch.equals(peer.epoch) && (peer.capabilities & SELECTION_EDIT) != 0;
+    }
+
+    private EditSnapshot retainCapture(Peer peer, EditCapture capture) {
+        peer.edit = capture.token() == null ? null : capture;
+        peer.editRevision = peer.edit == null ? NO_EPOCH : UUID.randomUUID();
+        return new EditSnapshot(peer.editRevision, capture.selection());
+    }
+
+    private BridgeMessage editRead(UUID player, Peer peer, EditReadRequest request) {
+        if (!editSession(peer, request.epoch())) return null;
+        boolean allowed = host.mayReadSelection(player) && host.mayEditSelection(player);
+        if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+        if (!allowed) {
+            var reply = new EditReadReply(request.epoch(), request.requestId(), EditSnapshot.unavailable(SelectionStatus.DENIED));
+            invalidate(peer); return reply;
+        }
+        if (request.requestId() < peer.lastRequest) return null;
+        if (request.requestId() == peer.lastRequest) return request.equals(peer.lastMessage) ? peer.lastReply : null;
+        editCaptures++;
+        EditCapture capture = Objects.requireNonNull(host.captureEdit(player));
+        if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+        allowed = host.mayReadSelection(player) && host.mayEditSelection(player);
+        if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+        if (!allowed || capture.selection().status() == SelectionStatus.DENIED) {
+            var reply = new EditReadReply(request.epoch(), request.requestId(), EditSnapshot.unavailable(SelectionStatus.DENIED));
+            invalidate(peer); return reply;
+        }
+        var reply = new EditReadReply(request.epoch(), request.requestId(), retainCapture(peer, capture));
+        cache(peer, request.requestId(), request, reply); return reply;
+    }
+
+    private BridgeMessage editCommit(UUID player, Peer peer, EditCommitRequest request) {
+        if (!editSession(peer, request.epoch())) return null;
+        boolean allowed = host.mayReadSelection(player) && host.mayEditSelection(player);
+        if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+        if (!allowed) {
+            var reply = new EditCommitReply(request.epoch(), request.requestId(), CommitStatus.DENIED, EditSnapshot.unavailable(SelectionStatus.DENIED));
+            invalidate(peer); return reply;
+        }
+        if (request.requestId() < peer.lastRequest) return null;
+        if (request.requestId() == peer.lastRequest) return request.equals(peer.lastMessage) ? peer.lastReply : null;
+        EditCapture original = peer.edit;
+        UUID revision = peer.editRevision;
+        // Consume before crossing the host boundary. An uncertain outcome must never be retried as a new apply.
+        peer.edit = null; peer.editRevision = null;
+        EditOutcome outcome;
+        if (original == null || !request.revision().equals(revision))
+            outcome = new EditOutcome(CommitStatus.CONFLICT, EditCapture.unavailable(SelectionStatus.EMPTY));
+        else if (request.bounds().minY() < original.selection().minY() || request.bounds().maxY() > original.selection().maxY())
+            outcome = new EditOutcome(CommitStatus.INVALID, EditCapture.unavailable(SelectionStatus.FAILED));
+        else {
+            editCommits++;
+            outcome = Objects.requireNonNull(host.applyEdit(player, original.token(), request.bounds()));
+            if (outcome.status() == CommitStatus.APPLIED) editsApplied++;
+        }
+        if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+        allowed = host.mayReadSelection(player) && host.mayEditSelection(player);
+        if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+        if (!allowed) {
+            var reply = new EditCommitReply(request.epoch(), request.requestId(), CommitStatus.UNKNOWN, EditSnapshot.unavailable(SelectionStatus.DENIED));
+            invalidate(peer); return reply;
+        }
+        var reply = new EditCommitReply(request.epoch(), request.requestId(), outcome.status(), retainCapture(peer, outcome.capture()));
+        if (outcome.capture().selection().status() == SelectionStatus.DENIED) { invalidate(peer); return reply; }
+        cache(peer, request.requestId(), request, reply); return reply;
+    }
+
+    private static void cache(Peer peer, long id, BridgeMessage request, BridgeMessage reply) {
+        peer.lastRequest = id; peer.lastMessage = request; peer.lastReply = reply;
     }
 
     private static void invalidate(Peer peer) {
         peer.nonce = null; peer.epoch = null; peer.capabilities = 0;
-        peer.lastRequest = 0; peer.lastReply = null;
+        peer.lastRequest = 0; peer.lastReply = null; peer.lastMessage = null; peer.edit = null; peer.editRevision = null;
     }
 
     private void checkThread() {
@@ -274,6 +375,7 @@ public final class BridgeServer {
         return new Metrics(peers.size(), admitted, throttled, malformed, selectionReads, replies, encodedReplyBytes);
     }
     public int pendingCount() { checkThread(); return pending.size(); }
+    public EditMetrics editMetrics() { checkThread(); return new EditMetrics(editCaptures, editCommits, editsApplied); }
     public QueueMetrics queueMetrics() {
         checkThread();
         return new QueueMetrics(pending.size(), peakPending, queued, expired, cancelled, maxWaitNanos, maxSliceNanos);

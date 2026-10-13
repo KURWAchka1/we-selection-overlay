@@ -49,6 +49,19 @@ public final class BridgeCodec {
             case SessionClosed value -> {
                 out.put((byte) 5); uuid(out, value.nonce()); uuid(out, value.epoch());
             }
+            case EditReadRequest value -> {
+                out.put((byte) 6); uuid(out, value.epoch()); out.putLong(value.requestId());
+            }
+            case EditReadReply value -> {
+                out.put((byte) 7); uuid(out, value.epoch()); out.putLong(value.requestId()); editSnapshot(out, value.snapshot());
+            }
+            case EditCommitRequest value -> {
+                out.put((byte) 8); uuid(out, value.epoch()); out.putLong(value.requestId()); uuid(out, value.revision()); bounds(out, value.bounds());
+            }
+            case EditCommitReply value -> {
+                out.put((byte) 9); uuid(out, value.epoch()); out.putLong(value.requestId());
+                out.put((byte) value.status().ordinal()); editSnapshot(out, value.snapshot());
+            }
         }
         return Arrays.copyOf(out.array(), out.position());
     }
@@ -61,7 +74,7 @@ public final class BridgeCodec {
             if (in.getInt() != MAGIC || Byte.toUnsignedInt(in.get()) != ENVELOPE_VERSION)
                 throw new IllegalArgumentException("Unknown bridge envelope");
             int opcode = Byte.toUnsignedInt(in.get());
-            if (direction == Direction.TO_SERVER ? opcode != 1 && opcode != 3 : opcode != 2 && opcode != 4 && opcode != 5)
+            if (direction == Direction.TO_SERVER ? opcode != 1 && opcode != 3 && opcode != 6 && opcode != 8 : opcode != 2 && opcode != 4 && opcode != 5 && opcode != 7 && opcode != 9)
                 throw new IllegalArgumentException("Unknown or wrong-direction bridge opcode");
             BridgeMessage message = switch (opcode) {
                 case 1 -> new Hello(uuid(in), u16(in), u16(in), in.getInt());
@@ -70,6 +83,10 @@ public final class BridgeCodec {
                 case 3 -> new SelectionRequest(uuid(in), in.getLong());
                 case 4 -> new SelectionReply(uuid(in), in.getLong(), selection(in));
                 case 5 -> new SessionClosed(uuid(in), uuid(in));
+                case 6 -> new EditReadRequest(uuid(in), in.getLong());
+                case 7 -> new EditReadReply(uuid(in), in.getLong(), editSnapshot(in));
+                case 8 -> new EditCommitRequest(uuid(in), in.getLong(), uuid(in), bounds(in));
+                case 9 -> new EditCommitReply(uuid(in), in.getLong(), value(CommitStatus.values(), in.get()), editSnapshot(in));
                 default -> throw new IllegalArgumentException("Unknown bridge opcode");
             };
             if (in.hasRemaining()) throw new IllegalArgumentException("Trailing bridge data");
@@ -84,6 +101,18 @@ public final class BridgeCodec {
         if (status != SelectionStatus.READY) return SelectionState.unavailable(status);
         return new SelectionState(status, new Bounds(in.getInt(), in.getInt(), in.getInt(),
                 in.getInt(), in.getInt(), in.getInt()), in.getInt(), in.getInt(), Byte.toUnsignedInt(in.get()));
+    }
+
+    private static Bounds bounds(ByteBuffer in) { return new Bounds(in.getInt(), in.getInt(), in.getInt(), in.getInt(), in.getInt(), in.getInt()); }
+    private static void bounds(ByteBuffer out, Bounds b) {
+        out.putInt(b.minX()).putInt(b.minY()).putInt(b.minZ()).putInt(b.maxX()).putInt(b.maxY()).putInt(b.maxZ());
+    }
+    private static EditSnapshot editSnapshot(ByteBuffer in) { return new EditSnapshot(uuid(in), selection(in)); }
+    private static void editSnapshot(ByteBuffer out, EditSnapshot snapshot) {
+        uuid(out, snapshot.revision()); SelectionState s = snapshot.selection(); out.put((byte) s.status().ordinal());
+        if (s.status() == SelectionStatus.READY) {
+            bounds(out, s.bounds()); out.putInt(s.minY()).putInt(s.maxY()).put((byte) s.permissions());
+        }
     }
 
     private static <T> T value(T[] values, byte encoded) {

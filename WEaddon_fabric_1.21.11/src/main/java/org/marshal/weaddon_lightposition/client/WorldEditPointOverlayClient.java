@@ -342,6 +342,7 @@ public final class WorldEditPointOverlayClient {
         if (isSelectionPayload(eventType)) {
             receivedSelectionPackets++;
             commandPreviewController.selectionChanged();
+            if (!multi) org.marshal.weaddon_lightposition.client.bridge.NativeServerBridge.cuiChanged();
         }
 
         switch (eventType) {

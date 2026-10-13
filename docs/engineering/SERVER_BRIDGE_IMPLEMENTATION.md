@@ -38,6 +38,13 @@ does not replace the busy-server release gate or explain the earlier long tick.
 
 ## Implemented Boundary
 
+**Current scope update, 2026-10-13:** the [remote cuboid editing stage](BRIDGE_REMOTE_SELECTION_2026-10-13.md)
+adds separately authorized minor-2 capture/commit on fresh Paper 1.21.11 startup
+and remote sources in development Fabric/NeoForge 1.21.11 clients. It reuses the
+existing transaction/controller and does not edit world blocks. Historical
+read-only foundation observations below retain their original scope. Clipboard,
+simulation, other server hosts and general hot reload are still unimplemented.
+
 The [server lifecycle and harness audit](BRIDGE_SERVER_LIFECYCLE_2026-10-12.md)
 adds an enabled-WorldEdit startup guard after a real failing fixture, 14 wire
 check groups including three plugin cycles, and 16 automated Node harness tests.

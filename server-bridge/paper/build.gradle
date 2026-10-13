@@ -9,6 +9,14 @@ dependencies {
     compileOnly 'com.sk89q.worldedit:worldedit-bukkit:7.4.2'
 }
 
+sourceSets.main.java {
+    srcDir rootProject.file('../shared/selection-editing/src/main/java')
+    include 'org/marshal/weaddon_lightposition/bridge/paper/**',
+            'org/marshal/weaddon_lightposition/selection/CuboidDraft.java',
+            'org/marshal/weaddon_lightposition/selection/SelectionEditSnapshot.java',
+            'org/marshal/weaddon_lightposition/selection/worldedit/SelectionEditTransaction.java'
+}
+
 tasks.named('processResources') {
     inputs.property('version', project.version)
     filesMatching('plugin.yml') { expand(version: project.version) }

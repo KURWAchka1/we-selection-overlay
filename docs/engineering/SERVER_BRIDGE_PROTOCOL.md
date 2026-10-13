@@ -1,6 +1,6 @@
-# Bridge Transport: Experimental Read-Only Schema
+# Bridge Transport: Experimental Metadata And Cuboid Editing
 
-Updated: 2026-10-12. Implementation: `0.1.0-dev`. This schema is **experimental**;
+Updated: 2026-10-13. Implementation: `0.1.0-dev`. This schema is **experimental**;
 numeric version 1 does not establish a released stable protocol. Unsupported
 capabilities are not advertised just because the longer-term design mentions them.
 
@@ -17,7 +17,8 @@ Every frame begins with magic `0x5745534f` (4 bytes, ASCII WESO), envelope versi
 `1` (unsigned byte), and opcode (unsigned byte). Hard length: 6..256 bytes.
 Reject unknown headers/opcodes, wrong directions, truncated/trailing data and
 invalid domain values. A negotiated frame allowance must accommodate the largest
-current message (64 bytes); a smaller allowance cannot enable this capability.
+metadata message (64 bytes). Editing additionally requires an allowance of at
+least 81 bytes; the hard 256-byte bound is unchanged.
 
 ## Messages
 
@@ -31,8 +32,12 @@ The following fields come **after** the six-byte header, in this exact order.
 | 3 SelectionRequest | Client -> server | epoch UUID, request ID i64 | 30 |
 | 4 SelectionReply | Server -> client | epoch UUID, request ID i64, selection status u8, optional ready fields below | 31 or 64 |
 | 5 SessionClosed | Server -> client | echoed nonce UUID, closed epoch UUID (nonzero) | 38 |
+| 6 EditReadRequest | Client -> server | epoch UUID, request ID i64 | 30 |
+| 7 EditReadReply | Server -> client | epoch UUID, request ID i64, revision UUID, selection state | 47 or 80 |
+| 8 EditCommitRequest | Client -> server | epoch UUID, request ID i64, revision UUID, six inclusive bound i32 values | 70 |
+| 9 EditCommitReply | Server -> client | epoch UUID, request ID i64, commit status u8, revision UUID, selection state | 48 or 81 |
 
-Current application version: major `1`, minor `1`. A different major produces
+Current application version: major `1`, minor `2`. A different major produces
 an incompatible welcome with no grants. Negotiate the lower supported minor;
 unknown requested capability bits are ignored, not authorized. Capability `0x01`
 means **read own selection metadata**, not a write/edit grant. Optional `0x02`
@@ -40,6 +45,11 @@ means **session-close notification**, available only at minor >= 1, explicitly
 requested and together with an authorized selection-read grant. Requesting only
 notifications does not authorize a session. Minor-zero clients retain their
 original four-message contract; every welcome status uses the negotiated minor.
+Optional `0x04` means **edit own cuboid selection**, only at minor >= 2, with
+selection-read permission and the separate `weso.bridge.selection.edit` grant.
+It does not authorize block edits, chat commands, clipboard or simulation. Native
+1.21.11 consumers request all three bits; adapters without that consumer request
+only read/close. Older message layouts and the separate restart hint are unchanged.
 
 Welcome status values: `0 READY`, `1 DENIED`, `2 INCOMPATIBLE`.
 Non-ready welcomes grant no capabilities and use the zero UUID epoch. A ready
@@ -59,6 +69,51 @@ Y bounds must fit the declared world height. Unknown permission bits are invalid
 These are only bounds, not the precise geometry or points of a non-cuboid region.
 No block content, world name, player ID, inventories, entities or clipboard is sent.
 
+The edit snapshot consists of a revision UUID followed by exactly the existing
+selection-state encoding (status and optional READY fields). READY requires a
+nonzero revision; unavailable states require the zero UUID. Commit status values:
+`0 APPLIED`, `1 CONFLICT`, `2 DENIED`, `3 INVALID`, `4 UNSUPPORTED`, `5 UNKNOWN`.
+APPLIED includes canonical READY state and a new revision. UNKNOWN means the
+server may have applied the operation; do not automatically resend it. A client
+timeout, disconnect or context loss while committing also has UNKNOWN outcome.
+
+## Cuboid Transaction Boundary
+
+An explicit edit read retains one server-owned original snapshot per negotiated
+peer, referenced by a random opaque revision. The client never sends a selector,
+player/world identity or Java object. A commit supplies only that revision and
+proposed bounds. Read and commit share the same monotonic request-ID space,
+single pending slot, quotas, fair dispatcher and timeout as metadata requests.
+
+Before applying, the Paper host rechecks actual connection actor, current world,
+the existing LocalSession and selector identities, ordered original points,
+height and the relevant live WorldEdit expand/contract/shift grants. It reuses
+the existing `SelectionEditTransaction`, including reversed points and the
+ExtendingCuboidRegionSelector. Other selector implementations fail closed.
+The world is checked before `getRegionSelector`, which may itself switch/clear
+selection context. No EditSession, block/chunk read, undo history write or chat
+command dispatch is needed. Normal public CUI updates publish canonical points.
+
+The original revision is consumed before calling the host. An exact repeated
+last ID **and payload** may return its cached reply but cannot reapply; the same
+ID with different data and older IDs are dropped. Cached replies still require
+live authorization. Revocation/context loss clears tokens and cached data. If
+authority disappears after application, the response is UNKNOWN with no disclosed
+selection, not a fictional rollback. This is current-state optimistic concurrency,
+not a log of every intermediate edit: restoring identical points on the same
+selector can be indistinguishable from an unchanged original (ABA).
+
+Only fresh Paper startup grants editing. Once that plugin instance is disabled,
+re-enabling it in the same JVM withholds `0x04` until a full server restart:
+Paper closes its classloader on disable. Existing metadata/close recovery remains
+tested; do not advertise general plugin hot-reload support.
+
+The 1.21.11 remote consumer caches edit snapshots. Ordinary controller ticks and
+render frames do not poll the server. CUI changes invalidate the cache; a consumer
+read refreshes it, not a subscription. Dragging stays local, confirmation sends
+one commit, and cancellation sends none. No mutation retries after uncertainty.
+See [remote editing evidence and remaining gates](BRIDGE_REMOTE_SELECTION_2026-10-13.md).
+
 ## Ownership And Freshness
 
 The platform supplies the actual connection player to the server core. No field
@@ -75,8 +130,8 @@ channel unregistration clear it. A still-open connection retains only its bounde
 admission record across context resets: unregistration/respawn cannot refill its
 request budget. Actual disconnect removes that record too. Request IDs
 are positive, increasing i64 values within the epoch. The server only caches the
-last reply: the same ID returns its original result; older IDs are dropped.
-The client has at most one pending read and accepts only its matching ID/epoch.
+last reply: the same ID and payload return its original result; older IDs are dropped.
+The client has at most one pending operation and accepts only its matching kind/ID/epoch.
 A timed-out read is not retried, and its late result cannot complete a newer one.
 
 The server now accepts at most one pending frame per connection for deferred
@@ -121,7 +176,7 @@ supports one-shot discovery after a negotiated graceful close. Its independent
 22-byte frame is magic `0x57455352` (WESR), version u8 `1`, kind u8 `1`, then a
 nonzero startup-generation UUID. It has no length prefix or authority fields;
 all other lengths/headers and the zero UUID are invalid. Application protocol
-1.1 and the original channel's five message layouts are unchanged.
+1.2 retains the original channel's first five message layouts unchanged.
 
 After successful Paper enable, send the same newly generated hint once to each
 already-online player advertising this optional channel. Initial joins use the
@@ -157,5 +212,6 @@ Handlers and the pending-frame dispatcher are owned by their platform game
 thread. Cheap frame/per-player checks precede queuing; the aggregate service
 budget precedes application decoding and session access. Invalid or throttled traffic is
 dropped without per-packet logging; quotas apply globally as well as per player.
-No unsolicited selection stream, background polling, mutation acknowledgment or
-clipboard/command-preview operation exists in this schema.
+No unsolicited selection stream, background polling, clipboard transfer or
+command-preview operation exists in this schema. Cuboid acknowledgments are
+explicit, bounded and separate from world editing.

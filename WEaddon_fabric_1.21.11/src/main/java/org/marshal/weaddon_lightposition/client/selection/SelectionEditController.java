@@ -28,6 +28,8 @@ public final class SelectionEditController {
     private FaceDrag faceDrag;
     private SelectionEditOptions options = SelectionEditOptions.defaults();
     private SelectionEditSource source;
+    private SelectionEditSource localSource;
+    private final SelectionEditSource remoteSource = new RemoteSelectionEditSource();
     private KeyBinding editKey, fastKey;
     private Path settings;
     private SelectionEditSnapshot origin, shown;
@@ -52,7 +54,7 @@ public final class SelectionEditController {
     private SelectionEditController() { }
     public static SelectionEditController instance() { return INSTANCE; }
     public SelectionEditOptions options() { return options; }
-    public boolean available() { return source != null && MinecraftClient.getInstance().getServer() != null; }
+    public boolean available() { return MinecraftClient.getInstance().getServer() != null ? localSource != null : org.marshal.weaddon_lightposition.client.bridge.NativeServerBridge.editContext() != null; }
     public boolean active() {
         if (!active && !pending) return false;
         MinecraftClient client = MinecraftClient.getInstance();
@@ -100,7 +102,7 @@ public final class SelectionEditController {
             catch (java.io.IOException ex) { log().warn("Could not load selection editing settings.", ex); }
         }
         if (!FabricLoader.getInstance().isModLoaded("worldedit")) return;
-        try { source = (SelectionEditSource) Class.forName("org.marshal.weaddon_lightposition.client.selection.WorldEditSelectionEditSource").getDeclaredConstructor().newInstance(); }
+        try { source = localSource = (SelectionEditSource) Class.forName("org.marshal.weaddon_lightposition.client.selection.WorldEditSelectionEditSource").getDeclaredConstructor().newInstance(); }
         catch (ReflectiveOperationException | LinkageError ex) { log().warn("Local selection editing is unavailable.", ex); }
     }
     private static org.slf4j.Logger log() { return org.slf4j.LoggerFactory.getLogger("worldedit_selection_overlay/selection-edit"); }
@@ -128,6 +130,11 @@ public final class SelectionEditController {
             level = client.world; player = client.player; acknowledged = null; shown = null; lastReadTick = ticks - 4;
         }
         if (acknowledged != null && --ackTicks <= 0) acknowledged = null;
+        SelectionEditSource next = client.getServer() != null ? localSource : available() ? remoteSource : null;
+        if (source != next) {
+            pending = false; ++commitSerial; cancel(); shown = null; acknowledged = null;
+            source = next; lastReadTick = ticks - 4;
+        }
         if (!usable(client)) {
             if (active || radialOpen || reading) cancel();
             keyGesture.cancel(held); shown = null; return;
@@ -220,7 +227,7 @@ public final class SelectionEditController {
 
     private boolean usable(MinecraftClient client) {
         return options.enabled() && source != null && client.player != null && client.world != null
-                && client.world == level && client.player == player && client.getServer() != null
+                && client.world == level && client.player == player && available()
                 && client.currentScreen == null && client.isWindowFocused();
     }
     private void begin(MinecraftClient client, boolean direct) {

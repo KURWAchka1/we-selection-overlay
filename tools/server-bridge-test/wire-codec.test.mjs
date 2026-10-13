@@ -1,11 +1,26 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { decode, hello, request } from './wire-codec.mjs';
+import { decode, hello, request, editRead, editCommit } from './wire-codec.mjs';
 
 test('wire helpers match the fixed-width Java protocol golden framing', () => {
   const uuid = Buffer.from('00000000000000010000000000000002', 'hex');
   assert.equal(hello(uuid).toString('hex'), '5745534f0101000000000000000100000000000000020001000000000001');
   assert.equal(request(uuid, 3).toString('hex'), '5745534f0103000000000000000100000000000000020000000000000003');
+});
+
+test('minor-two edit frames match Java golden bytes and canonical offsets', () => {
+  const epoch = Buffer.from('00000000000000020000000000000003', 'hex'), revision = Buffer.from('00000000000000000000000000000004', 'hex');
+  assert.equal(editRead(epoch, 1).length, 30);
+  assert.equal(editCommit(epoch, 1, revision, [-2, -64, 0, 5, 319, 7]).toString('hex'),
+    '5745534f010800000000000000020000000000000003000000000000000100000000000000000000000000000004fffffffeffffffc000000000000000050000013f00000007');
+  const reply = Buffer.alloc(81); Buffer.from('5745534f0109', 'hex').copy(reply); epoch.copy(reply, 6);
+  reply.writeBigInt64BE(1n, 22); revision.copy(reply, 31);
+  [-2, -64, 0, 5, 319, 7].forEach((n, i) => reply.writeInt32BE(n, 48 + i * 4));
+  reply.writeInt32BE(-64, 72); reply.writeInt32BE(319, 76); reply[80] = 7;
+  assert.deepEqual(decode(reply).bounds, [-2, -64, 0, 5, 319, 7]);
+  assert.equal(decode(reply).permissions, 7); assert.equal(decode(reply).commitStatus, 0);
+  for (let size = 0; size < reply.length; size++) assert.throws(() => decode(reply.subarray(0, size)));
+  assert.throws(() => decode(Buffer.concat([reply, Buffer.alloc(1)])));
 });
 
 test('selection parser preserves signed coordinates, ownership and large request IDs', () => {

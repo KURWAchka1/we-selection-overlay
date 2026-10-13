@@ -13,7 +13,7 @@ import com.sk89q.worldedit.world.World;
 import org.marshal.weaddon_lightposition.selection.CuboidDraft;
 import org.marshal.weaddon_lightposition.selection.SelectionEditSnapshot;
 
-/** Call exclusively on the integrated server thread. Never creates an EditSession. */
+/** Call exclusively on the owning server thread. Never creates an EditSession. */
 public final class SelectionEditTransaction {
     private record Origin(LocalSession session, RegionSelector selector, World world, BlockVector3 pos1, BlockVector3 pos2) { }
     private SelectionEditTransaction() { }

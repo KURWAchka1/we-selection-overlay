@@ -97,7 +97,7 @@ class BridgeServerTest {
         assertEquals(WelcomeStatus.DENIED, unknownBit.status()); assertEquals(0, unknownBit.capabilities());
         Welcome future = (Welcome) exchange(server, player, new Hello(nonce, 1, 65535, -1));
         assertEquals(MINOR, future.minor());
-        assertEquals(SUPPORTED_CAPABILITIES, future.capabilities());
+        assertEquals(SELECTION_READ | SESSION_CLOSE, future.capabilities());
     }
 
     @Test void aggregateRateIsNotMultipliedByPlayerCount() {
@@ -240,7 +240,7 @@ class BridgeServerTest {
         UUID optedIn = new UUID(1, 3), denied = new UUID(1, 4);
         allowed.add(optedIn);
         Welcome modern = (Welcome) exchange(server, optedIn, new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES));
-        assertEquals(SUPPORTED_CAPABILITIES, modern.capabilities());
+        assertEquals(SELECTION_READ | SESSION_CLOSE, modern.capabilities());
         Welcome refused = (Welcome) exchange(server, denied, new Hello(nonce, 1, 1, SUPPORTED_CAPABILITIES));
         assertEquals(WelcomeStatus.DENIED, refused.status());
         assertEquals(0, refused.capabilities());

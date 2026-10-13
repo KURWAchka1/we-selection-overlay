@@ -88,6 +88,16 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [2026-10-13 remote cuboid stage](BRIDGE_REMOTE_SELECTION_2026-10-13.md) passes
+27 actual Paper wire groups and the six native 1.21.11 connections, including
+G-driven resize, native remote-source shift, canonical CUI, cancellation and
+quiet cache reads. Capture/commit use the existing fair bounded queue. Dedicated
+queue/revocation/expiry/replay tests do not establish edit-load performance.
+Physical mouse dragging on a remote host, high-RTT/faulted edits, other hosts,
+26.x remote consumers and protection-plugin combinations remain open. Same-JVM
+plugin re-enable intentionally withholds editing after the classloader closes;
+fresh full startup is required. Published 1.8.0 is unchanged.
+
 Every run must record: repository commit, exact server/client Minecraft version,
 server implementation/build, loader/API, WorldEdit distribution/version/hash,
 Java vendor/version, companion/client protocol versions, permissions/protection
