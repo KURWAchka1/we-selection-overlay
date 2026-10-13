@@ -581,6 +581,30 @@ This is a local diagnostic control, not advice to disable profiling on users'
 servers or proof that all historical outliers had the same cause. Results and
 remaining unknowns are in the [interval report](BRIDGE_SLICE_DIAGNOSTICS_2026-10-12.md).
 
+## S51 Matched Comparisons And Independent Replication
+
+Checked **2026-10-13**, unchanged Paper **c5eb079** / Temurin **21.0.11+10**.
+OpenJDK's [JMH forking example](https://github.com/openjdk/jmh/blob/master/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample_12_Forking.java)
+explains mixed JVM optimization profiles, and its [run-to-run example](https://github.com/openjdk/jmh/blob/master/jmh-samples/src/main/java/org/openjdk/jmh/samples/JMHSample_13_RunToRun.java)
+demonstrates variation across fresh processes. These are methodological references,
+not a claim that our whole-server workload is JMH or that a fixed warmup removes
+all JVM startup effects. No example implementation is copied.
+
+NIST's [blocking guidance](https://www.itl.nist.gov/div898/handbook/pri/section3/pri332.htm)
+describes controlling nuisance variables. Our fixed absent/installed then
+installed/absent order exposes gross order bias but is not randomized blocking
+or a confidence-backed causal estimate. Individual ticks in the same JVM are
+not independent server-run replicates. Preserve all paired signs, GC/outliers
+and whole-run variation; do not pool ticks into an artificially precise claim.
+
+The [Paper profiling guide](https://docs.papermc.io/paper/profiling/)
+requires the relevant workload to be occurring for useful diagnosis. The local
+no-spark control retains identical JFR settings and verifies actual sampler
+absence through recorded VM operations, alongside configuration/log checks.
+The summary reader rejects recorded data loss; raw measurement gates and
+percentiles are recomputed before accepting copied summaries. See the
+[matched-control method and evidence](BRIDGE_MATCHED_CONTROL_2026-10-13.md).
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

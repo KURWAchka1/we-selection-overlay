@@ -24,11 +24,19 @@ class JfrLoadSummary {
         if (args.length < 3 || args.length > 33 || args.length % 2 != 1)
             throw new IllegalArgumentException("Expected recording and up to 16 start/end pairs");
         Window[] windows = new Window[(args.length - 1) / 2];
+        long sparkThreadDumps = 0;
         for (int i = 0; i < windows.length; i++) windows[i] = new Window(args[i * 2 + 1], args[i * 2 + 2]);
         try (RecordingFile file = new RecordingFile(Path.of(args[0]))) {
             while (file.hasMoreEvents()) {
                 RecordedEvent event = file.readEvent();
                 String type = event.getEventType().getName();
+                if (type.equals("jdk.DataLoss") && event.getLong("amount") > 0)
+                    throw new IllegalStateException("Recording reports lost JFR data");
+                if (type.equals("jdk.ExecuteVMOperation") && "ThreadDump".equals(event.getString("operation"))) {
+                    RecordedThread caller = event.getThread("caller");
+                    if (caller != null && caller.getJavaName() != null && caller.getJavaName().startsWith("spark-java-sampler-"))
+                        sparkThreadDumps++;
+                }
                 if (!type.equals("jdk.ExecutionSample") && !type.equals("jdk.ObjectAllocationSample")
                         && !type.equals("jdk.GarbageCollection") && !type.equals("jdk.ExecuteVMOperation")
                         && !type.equals("jdk.JavaMonitorEnter") && !type.equals("jdk.ThreadPark")) continue;
@@ -87,12 +95,12 @@ class JfrLoadSummary {
                     + "\"bridgeSamples\":%d,\"allocationSamples\":%d,\"bridgeAllocationSamples\":%d,"
                     + "\"sampledAllocationWeight\":%d,\"bridgeAllocationWeight\":%d,\"gcCount\":%d,\"gcMillis\":%.6f,"
                     + "\"maxGcMillis\":%.6f,\"gcPauseMillis\":%.6f,\"maxGcPauseMillis\":%.6f,"
-                    + "\"maxVmOperationMillis\":%.6f,\"maxOwnerMonitorMillis\":%.6f,\"maxOwnerParkMillis\":%.6f}%n",
+                    + "\"maxVmOperationMillis\":%.6f,\"maxOwnerMonitorMillis\":%.6f,\"maxOwnerParkMillis\":%.6f,\"recordingSparkThreadDumps\":%d}%n",
                     i, w.executionSamples, w.ownerSamples, w.bridgeSamples, w.allocationSamples, w.bridgeAllocationSamples,
                     w.sampledAllocationWeight, w.bridgeAllocationWeight, w.gcCount, w.gcNanos / 1_000_000.0,
                     w.maxGcNanos / 1_000_000.0, w.gcPauseNanos / 1_000_000.0, w.maxGcPauseNanos / 1_000_000.0,
                     w.maxVmOperationNanos / 1_000_000.0,
-                    w.maxOwnerMonitorNanos / 1_000_000.0, w.maxOwnerParkNanos / 1_000_000.0);
+                    w.maxOwnerMonitorNanos / 1_000_000.0, w.maxOwnerParkNanos / 1_000_000.0, sparkThreadDumps);
         }
     }
 }

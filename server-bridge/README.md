@@ -264,6 +264,20 @@ The [diagnostic report](../docs/engineering/BRIDGE_SLICE_DIAGNOSTICS_2026-10-12.
 records failed attempts, profiler interference and remaining cost gates. These
 instrumented functional runs are not a clean paired performance benchmark.
 
+For matched gameplay comparisons with the same no-spark setting in both fresh
+absent/installed JVM groups, without the method-instrumentation agent:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -GameplayLoad -WithoutSpark -Players 32 -Samples 400 -Repetitions 2 -AcceptEula
+node tools/server-bridge-test/analyze-load-proof.mjs gameplay --without-spark
+```
+
+This separate `build/bridge-gameplay-control-proof/` series preserves earlier
+default-profiler evidence. Its analyzer revalidates raw windows, recomputes
+percentiles, verifies matching starting-world digests and rejects recorded JFR
+data loss or observed spark sampling. See the [matched-control report](../docs/engineering/BRIDGE_MATCHED_CONTROL_2026-10-13.md)
+for executed scope, timing variation and remaining acceptance limits.
+
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge
 clients discover the channel only when advertised. No player gets the new

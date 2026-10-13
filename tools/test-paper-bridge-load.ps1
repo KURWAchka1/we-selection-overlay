@@ -19,10 +19,10 @@ if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $Gameplay
 if ($GameplayLoad -and ($Players -lt 4 -or $Samples % 20 -ne 0)) { throw 'Gameplay requires at least 4 players and a sample count divisible by 20' }
 if ($LifecycleLoad -and ($Players -ne 32 -or $Samples % 20 -ne 0)) { throw 'Active lifecycle requires 32 players and a sample count divisible by 20' }
 if ($SliceDiagnostics -and !$LifecycleLoad) { throw 'Slice diagnostics require the active lifecycle workload' }
-if ($WithoutSpark -and !$SliceDiagnostics) { throw 'Spark control requires slice diagnostics; ordinary fixture behavior is unchanged' }
+if ($WithoutSpark -and !($SliceDiagnostics -or $GameplayLoad)) { throw 'Spark control requires slice diagnostics or matched gameplay' }
 $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root 'build/bridge-paper-proof'
-$server = Join-Path $root $(if ($WithoutSpark) { 'build/bridge-slice-diagnostics-no-spark' } elseif ($SliceDiagnostics) { 'build/bridge-slice-diagnostics' } elseif ($ControlledBaseline) { 'build/bridge-baseline-proof' } elseif ($RestartLoad) { 'build/bridge-restart-load-proof' } elseif ($TickTimeline) { 'build/bridge-tick-timeline-proof' } elseif ($FairDispatch) { 'build/bridge-fair-dispatch-proof' } elseif ($GameplayLoad) { 'build/bridge-gameplay-proof' } elseif ($LifecycleLoad) { 'build/bridge-active-lifecycle-proof' } else { 'build/bridge-load-proof' })
+$server = Join-Path $root $(if ($WithoutSpark -and $GameplayLoad) { 'build/bridge-gameplay-control-proof' } elseif ($WithoutSpark) { 'build/bridge-slice-diagnostics-no-spark' } elseif ($SliceDiagnostics) { 'build/bridge-slice-diagnostics' } elseif ($ControlledBaseline) { 'build/bridge-baseline-proof' } elseif ($RestartLoad) { 'build/bridge-restart-load-proof' } elseif ($TickTimeline) { 'build/bridge-tick-timeline-proof' } elseif ($FairDispatch) { 'build/bridge-fair-dispatch-proof' } elseif ($GameplayLoad) { 'build/bridge-gameplay-proof' } elseif ($LifecycleLoad) { 'build/bridge-active-lifecycle-proof' } else { 'build/bridge-load-proof' })
 foreach ($file in @((Join-Path $Java21 'bin/java.exe'), (Join-Path $source 'server.jar'),
         (Join-Path $source 'plugins/worldedit.jar'), (Join-Path $root 'build/bridge-wire-deps/package.json'))) {
     if (!(Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing verified fixture dependency: $file" }

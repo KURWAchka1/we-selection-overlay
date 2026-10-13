@@ -24,7 +24,7 @@ export class FrozenFixtureWorld {
     this.root = resolve(directory);
     const inside = relative(build, this.root);
     assert(inside && !isAbsolute(inside) && inside !== '..' && !inside.startsWith(`..${sep}`));
-    assert(['bridge-baseline-proof', 'bridge-tick-timeline-proof', 'bridge-gameplay-proof'].includes(basename(this.root)), 'Not a named frozen fixture');
+    assert(['bridge-baseline-proof', 'bridge-tick-timeline-proof', 'bridge-gameplay-proof', 'bridge-gameplay-control-proof'].includes(basename(this.root)), 'Not a named frozen fixture');
     assert.equal(realpathSync(this.root).toLowerCase(), this.root.toLowerCase(), 'Fixture root must not resolve through links');
     this.snapshot = join(this.root, 'frozen-world');
     this.manifest = join(this.snapshot, 'manifest.json');

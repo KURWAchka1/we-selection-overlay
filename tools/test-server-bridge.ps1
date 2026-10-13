@@ -68,7 +68,7 @@ function Assert-PaperArtifact {
 }
 
 try {
-    $nodeTests = @('owned-server.test.mjs', 'frozen-fixture-world.test.mjs', 'wire-codec.test.mjs', 'load-window.test.mjs', 'gameplay-workload.test.mjs', 'active-lifecycle.test.mjs') |
+    $nodeTests = @('owned-server.test.mjs', 'frozen-fixture-world.test.mjs', 'wire-codec.test.mjs', 'load-window.test.mjs', 'load-evidence.test.mjs', 'gameplay-workload.test.mjs', 'active-lifecycle.test.mjs') |
             ForEach-Object { Join-Path $root "tools/server-bridge-test/$_" }
     & node --test @nodeTests 2>&1 | Tee-Object -FilePath (Join-Path $logs 'harness-node.log')
     if ($LASTEXITCODE -ne 0) { throw 'Bridge harness self-tests failed' }
@@ -81,6 +81,9 @@ try {
         & node --test (Join-Path $root 'tools/server-bridge-test/jfr-bridge-slices.test.mjs') 2>&1 |
             Tee-Object -FilePath (Join-Path $logs "harness-slices-$($target.Name).log")
         if ($LASTEXITCODE -ne 0) { throw "JFR slice reader self-tests failed: $($target.Name)" }
+        & node --test (Join-Path $root 'tools/server-bridge-test/jfr-load-summary.test.mjs') 2>&1 |
+            Tee-Object -FilePath (Join-Path $logs "harness-summary-$($target.Name).log")
+        if ($LASTEXITCODE -ne 0) { throw "JFR load summary self-tests failed: $($target.Name)" }
         & node --test (Join-Path $root 'tools/server-bridge-test/jfr-tick-timeline.test.mjs') 2>&1 |
             Tee-Object -FilePath (Join-Path $logs "harness-jfr-$($target.Name).log")
         if ($LASTEXITCODE -ne 0) { throw "JFR timeline self-tests failed: $($target.Name)" }

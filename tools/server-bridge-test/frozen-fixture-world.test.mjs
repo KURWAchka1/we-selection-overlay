@@ -56,6 +56,14 @@ test('gameplay has its own guarded frozen world, not a user server', t => {
   assert.equal(frozen.restore(), digest);
   assert.throws(() => new FrozenFixtureWorld(resolve(directory, '../minecraft')), /Not a named/);
 });
+
+test('profiler-control worlds are separately guarded and restore exact bytes', t => {
+  const { directory, frozen } = fixture(t, 'bridge-gameplay-control-proof');
+  const digest = frozen.capture();
+  writeFileSync(join(directory, 'bridge-fixture/level.dat'), 'control changed world');
+  assert.equal(frozen.restore(), digest);
+  assert.throws(() => frozen.capture(), /Never overwrite/);
+});
 test('existing snapshots and paths outside intended build fixture are rejected', t => {
   const { directory, frozen } = fixture(t); frozen.capture();
   assert.throws(() => frozen.capture(), /Never overwrite/);

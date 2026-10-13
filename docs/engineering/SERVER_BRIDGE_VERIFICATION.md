@@ -1,7 +1,7 @@
 # Server Bridge Verification Gates
 
 Status: **release gates, with partial foundation evidence**.
-Updated: 2026-10-12. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
+Updated: 2026-10-13. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
 contains Java 21/25 tests, six native-codec checks and a real Paper wire proof.
 Headless protocol clients are not Fabric/NeoForge gameplay clients. A subsequent
 [six-client native Paper 1.21.11 matrix](NATIVE_PAPER_REGRESSION_2026-10-11.md)
@@ -76,6 +76,15 @@ large intervals overlap profiler safepoints or GC, while other intervals remain
 unattributed; disabling spark does not establish a speedup. Test-loader/launcher
 and attribution defects are corrected without changing production. This closes
 the missing per-call observation, not the soft-budget or production cost gates.
+The [matched profiler-control cycle](BRIDGE_MATCHED_CONTROL_2026-10-13.md)
+adds 9,600 verified gameplay ticks from four fresh absent/installed JVMs, with
+identical no-spark policy and twice the earlier window length. Raw summaries,
+percentiles and workload gates reconcile; idle reads and queues return to zero.
+CPU deltas change sign across the two pairs, while flood allocation increases
+in both. Dispatcher high-water and unattributed full-tick outliers remain open;
+neither negative timing deltas nor maintained TPS constitute cost acceptance.
+This bounded foundation evidence permits the next isolated development stage,
+not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 

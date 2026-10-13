@@ -2,14 +2,33 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { verifyLoadEvidence } from './load-evidence.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const mode = process.argv[2] ?? 'load';
 assert(['load', 'baseline', 'restart', 'timeline', 'fair', 'gameplay'].includes(mode));
-const directory = join(root, 'build', { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof', fair: 'bridge-fair-dispatch-proof', gameplay: 'bridge-gameplay-proof' }[mode]);
+const withoutSpark = process.argv.slice(3).includes('--without-spark');
+assert(process.argv.slice(3).every(arg => arg === '--without-spark'));
+assert(!withoutSpark || mode === 'gameplay');
+const directory = join(root, 'build', withoutSpark ? 'bridge-gameplay-control-proof' : { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof', fair: 'bridge-fair-dispatch-proof', gameplay: 'bridge-gameplay-proof' }[mode]);
 const proof = JSON.parse(readFileSync(join(directory, 'load-proof.json'), 'utf8'));
 assert.equal(proof.mode ?? 'load', mode);
+assert.equal(!!proof.withoutSpark, withoutSpark, 'Profiler modes do not match');
 const runs = [...new Set(proof.results.map(result => result.run))];
+if (mode === 'gameplay') {
+  assert.deepEqual(runs, Array.from({ length: proof.repetitions }, (_, i) =>
+    (i % 2 ? ['installed', 'absent'] : ['absent', 'installed']).map(kind => `${i + 1}-${kind}`)).flat());
+  for (const run of runs) {
+    const windows = proof.results.filter(row => row.run === run);
+    assert.deepEqual(windows.map(w => w.label), ['silent', 'idle', 'one', 'many', 'flood', 'recovery']);
+    for (const window of windows) {
+      assert.equal(window.worldDigest, proof.worldDigest, 'Starting worlds differ');
+      const raw = JSON.parse(readFileSync(join(directory, 'measurements', run, `${window.label}.json`), 'utf8'));
+      verifyLoadEvidence(raw, window, { players: proof.players, samples: proof.samples,
+        installed: run.endsWith('-installed'), baselineOnly: false, gameplay: true, bridgePlayers: proof.bridgePlayers });
+    }
+  }
+}
 const profiles = [];
 const tickOutliers = [];
 for (const run of runs) {
@@ -23,6 +42,7 @@ for (const run of runs) {
   assert.equal(data.length, windows.length);
   for (const window of data) {
     assert(Number.isInteger(window.window) && window.window >= 0 && window.window < windows.length);
+    if (withoutSpark) assert.equal(window.recordingSparkThreadDumps, 0, 'Control recording contains spark sampling');
     profiles.push({ run, label: windows[window.window].label, ...window });
   }
   if (mode === 'timeline' || mode === 'fair' || mode === 'gameplay') {
@@ -75,7 +95,7 @@ if (mode === 'gameplay') {
     }
   }
 }
-const report = { checkedAt: proof.checkedAt, mode, worldDigest: proof.worldDigest, rows, profiles, tickOutliers,
+const report = { checkedAt: proof.checkedAt, mode, withoutSpark, worldDigest: proof.worldDigest, rows, profiles, tickOutliers,
   matchedComparisons,
   warning: 'Local bounded headless workloads on a shared laptop. Sampled allocation weights are estimates, not exact call costs. Frozen starting worlds reduce confounds but do not establish production performance acceptance or native-client lifecycle behavior.' };
 writeFileSync(join(directory, 'load-analysis.json'), JSON.stringify(report, null, 2));

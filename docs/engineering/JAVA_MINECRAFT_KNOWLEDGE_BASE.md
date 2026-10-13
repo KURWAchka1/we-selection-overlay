@@ -34,6 +34,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Mixed gameplay load](BRIDGE_GAMEPLAY_LOAD_2026-10-12.md) | Frozen-world comparisons with moving non-consumers, live entities and exact WorldEdit work; method and evidence limits |
 | [Active lifecycle load](BRIDGE_ACTIVE_LIFECYCLE_2026-10-12.md) | Observed queued wire requests before revocation/disconnect/disable, repeated recovery during active load, test-client state guard and evidence limits |
 | [Method interval diagnostics](BRIDGE_SLICE_DIAGNOSTICS_2026-10-12.md) | Test-only method/JFR attribution, profiler interference, independent counter reconciliation and unchanged production artifacts |
+| [Matched profiler control](BRIDGE_MATCHED_CONTROL_2026-10-13.md) | Same profiler policy in absent/installed gameplay runs, longer windows, raw-evidence reconciliation and independent-replication limits |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |
