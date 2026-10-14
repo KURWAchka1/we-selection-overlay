@@ -1,0 +1,29 @@
+plugins {
+    id 'application'
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.opencollab.dev/main/' }
+}
+
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+dependencies {
+    implementation 'org.geysermc.mcprotocollib:protocol:26.2-20261012.101744-21'
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.9'
+}
+dependencyLocking {
+    lockAllConfigurations()
+    // Gradle records timestamp snapshots under their base SNAPSHOT version.
+    // The explicit timestamp and checksum verification pin this one component.
+    ignoredDependencies.add('org.geysermc.mcprotocollib:protocol')
+}
+application { mainClass = 'org.marshal.wesoload.LoadClients' }
+tasks.register('verifyGuards', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = application.mainClass
+    args '--self-test'
+    maxHeapSize = '256m'
+    jvmArgs '-XX:ActiveProcessorCount=2'
+}
+tasks.named('check') { dependsOn 'verifyGuards' }

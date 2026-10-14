@@ -58,7 +58,7 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-82 harness self-tests (owned-process shutdown, frozen-world safety, exact tuples, native lifecycle/fault evidence, wire
+90 harness self-tests (owned-process shutdown, frozen-world safety, exact tuples, native lifecycle/fault evidence, bounded load IPC, wire
 helpers, mixed-workload and active-lifecycle validation); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
@@ -129,6 +129,28 @@ before a delayed request reaches Paper. The relay is test-only, offline and
 uncompressed, not a production proxy or a TCP-loss emulator. The separate
 `build/bridge-edit-load-proof/` uses 32 headless clients, eight concurrent editors,
 read pressure and four non-consumers. See [results and limitations](../docs/engineering/BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md).
+
+The same bounded 32-actor edit workload separately passes two fresh-JVM runs on
+each exact 26.x host, with raw/JFR reconciliation. These are headless wire
+clients, not simultaneous native Minecraft renderers. Cache the S55 server
+artifacts and build the [separate 26.2 load helper](../tools/bridge-load-clients/README.md)
+once; its approximately 23 MB dependencies are never bundled into player JARs:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Minecraft 26.2 -Players 32 -Samples 400 -Repetitions 2 -EditLoad -AcceptEula
+node tools/server-bridge-test/analyze-edit-load-proof.mjs 'C:\path\to\jdk-25' 26.2
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Minecraft 26.1.2 -Players 32 -Samples 400 -Repetitions 2 -EditLoad -AcceptEula
+node tools/server-bridge-test/analyze-edit-load-proof.mjs 'C:\path\to\jdk-25' 26.1.2
+```
+
+Only `-EditLoad` is ported to 26.x in this launcher; other workload modes remain
+explicitly legacy. Each exact tuple keeps separate evidence under
+`build/bridge-edit-load-proof/<version>/`. The 26.2 test uses checksum-pinned
+MCProtocolLib codec 776, not a modified 26.1 protocol table. See
+[executed scope, retained failures and timing limits](../docs/engineering/BRIDGE_26X_EDIT_LOAD_2026-10-14.md).
+The unresolved 60.4271 ms tick and cumulative dispatcher high-water prevent
+production performance acceptance; a passing functional workload does not
+establish zero overhead or every modpack/server combination.
 
 For actual remote handle/input coverage on both native 1.21.11 clients:
 

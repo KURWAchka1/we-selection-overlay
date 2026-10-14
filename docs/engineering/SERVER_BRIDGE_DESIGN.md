@@ -9,6 +9,10 @@ the [exact native fault suite](BRIDGE_26X_EDIT_FAULTS_2026-10-14.md).
 Only its completed rows establish the named delay/late-ack/revocation cases,
 not broader version/network-fault/performance support. Streaming/simulation, other server hosts
 and broader editing remain proposals.
+The [exact concurrent edit-load cycle](BRIDGE_26X_EDIT_LOAD_2026-10-14.md)
+subsequently verifies bounded 32-actor metadata/edit behavior on both 26.x hosts
+and legacy. Its headless clients and unresolved timing outliers do not establish
+native concurrent gameplay or production cost acceptance.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).

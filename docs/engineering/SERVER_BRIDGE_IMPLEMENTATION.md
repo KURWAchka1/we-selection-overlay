@@ -38,6 +38,16 @@ does not replace the busy-server release gate or explain the earlier long tick.
 
 ## Implemented Boundary
 
+The [2026-10-14 exact concurrent edit-load cycle](BRIDGE_26X_EDIT_LOAD_2026-10-14.md)
+adds two fresh 32-actor runs on each 26.x host and repeats legacy. All 3,704
+sustained commits, stale/foreign/replayed/revoked transactions, non-consumer
+isolation and cleanup reconcile with 7,200 raw/JFR ticks. A separate official
+MCProtocolLib 776 helper supplies 26.2 headless wire actors; it is never bundled
+into a client/companion. Test dependency-lock and fixed-time-world preparation
+defects are corrected and retained. Production artifacts remain unchanged;
+the unattributed 60.4271 ms tick and cumulative slice high-water keep production
+cost acceptance explicitly open.
+
 The [edit network-fault and concurrent-load cycle](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md)
 subsequently validates native delayed/late-ack/revoked commits and 32-actor edit
 pressure without changing production behavior. Its 2,400 matched JFR ticks and

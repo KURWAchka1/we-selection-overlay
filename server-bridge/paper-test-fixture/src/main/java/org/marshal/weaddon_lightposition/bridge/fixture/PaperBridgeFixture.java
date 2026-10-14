@@ -106,7 +106,8 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
                         || !world.setGameRule(org.bukkit.GameRules.RANDOM_TICK_SPEED, 0))
                     throw new IllegalStateException("Baseline gamerule rejected");
                 world.setDifficulty(org.bukkit.Difficulty.PEACEFUL);
-                world.setTime(6000); world.setStorm(false); world.setThundering(false);
+                if (!world.isFixedTime()) world.setTime(6000);
+                world.setStorm(false); world.setThundering(false);
                 for (var entity : world.getEntities()) if (!(entity instanceof org.bukkit.entity.Player)) entity.remove();
             }
             for (var testPlayer : getServer().getOnlinePlayers()) {

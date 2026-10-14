@@ -88,6 +88,17 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [exact concurrent edit-load cycle](BRIDGE_26X_EDIT_LOAD_2026-10-14.md) passes
+six fresh 32-actor server runs on 1.21.11, 26.1.2 and 26.2. Ordinary progress,
+admission pressure, own-player canonical state, stale/foreign/replay/revocation,
+zero non-consumer disclosure and final resource cleanup reconcile with 7,200
+raw/JFR ticks. 26.2 uses a separately pinned official MCProtocolLib 776 helper,
+not a fabricated or aliased wire protocol; these are headless clients, not native
+gameplay load. Two setup defects are retained/corrected without changing
+production. The 60.4271 ms outlier has no recorded overlapping explanation;
+cumulative slice high-water exceeds the soft target. Representative production
+cost, matched 26.x baseline attribution and native/moving gameplay remain open.
+
 The [exact native edit-fault cycle](BRIDGE_26X_EDIT_FAULTS_2026-10-14.md) separately
 records 400 ms one-way delay, an applied acknowledgment retained past timeout
 and edit permission revoked before commit delivery. Only completed exact tuples

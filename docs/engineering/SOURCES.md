@@ -798,6 +798,57 @@ audit, pre-delivery revocation and empty final queues. Eight positive/negative
 self-tests cover corrupted evidence and malformed prefixes. They validate the
 test harness, not native compatibility without running its real clients.
 
+## S58 Exact 26.x Concurrent Edit Load
+
+Checked **2026-10-14**. The official
+[PrismarineJS 26.2 integration PR](https://github.com/PrismarineJS/node-minecraft-protocol/pull/1496)
+is still open and describes integration scaffolding, not a supported released
+26.2 stack. The npm registry reports **minecraft-protocol 1.68.0** as the latest
+release at inspection. Its cached data resolves 26.1.2 to wire protocol **775**,
+but cannot resolve 26.2. Version metadata alone is not evidence that a complete
+wire decoder exists; no protocol number/table is patched or aliased for this test.
+
+[GeyserMC MCProtocolLib](https://github.com/GeyserMC/MCProtocolLib) documents its
+public client/session API and official OpenCollab Maven repository. The exact
+[26.2 snapshot metadata](https://repo.opencollab.dev/main/org/geysermc/mcprotocollib/protocol/26.2-SNAPSHOT/maven-metadata.xml)
+resolves **26.2-20261012.101744-21**. Its inspected source JAR declares codec
+**776 / 26.2**; current master already declares 777 / 26.3 and is not the source
+pin used here. The artifact's `ClientNetworkSessionFactory`, `MinecraftProtocol`,
+`SessionAdapter`, payload packet classes and `ClientListener` establish login,
+configuration, compression and automatic keepalive handling. Transfers follow
+another host by default; our fixture explicitly disables `FOLLOW_TRANSFERS`.
+Position/chunk-batch/ping acknowledgments use those public packet classes.
+No game wire packet is reimplemented or reflected into existence.
+
+Pinned source-JAR SHA256:
+`ab40ad3424c375f9cfc847cab9cac99a5c136c82be9652b05a142cd2ce6dc217`;
+binary: `5757ef29742d75b4af90fcdaf3d997e4b6dcf23928e601b4869487286854779a`.
+The separate [Java load helper](../../tools/bridge-load-clients/README.md)
+has explicit loopback/identity/channel restrictions and bounded memory/IPC.
+Its dependencies never enter the companion or client JARs. Runtime codec checks,
+actual 32-actor joins, payload exchanges and server-side authority assertions
+must pass before this library becomes load-test evidence for the exact host.
+
+[Gradle locking](https://docs.gradle.org/current/userguide/dependency_locking.html#sec:ignoring_dependencies)
+permits excluding one component without excluding its transitives. The first
+offline rebuild exposed timestamp-to-base-SNAPSHOT normalization in generated
+lock state. Only the directly timestamp-pinned MCProtocolLib component now uses
+that exclusion; every transitive remains locked. Committed SHA256 verification
+also pins its actual metadata/JAR, and the launcher rechecks the protocol JAR.
+This is not a switch to mutable `26.2-SNAPSHOT` or lenient lock mode. These are
+HTTPS integrity pins, not verified upstream signatures.
+
+The public [Paper 26.2 World contract](https://jd.papermc.io/paper/26.2/org/bukkit/World.html)
+documents clockless-world time getters. The first real 32-client run reproduced
+`Cannot set time in world without world clock` while preparing all three vanilla
+fixture dimensions, before measurement. `javap` of the exact resolved Paper
+server confirms the clock check in `CraftWorld.setFullTime`. The fixture now
+uses public `World.isFixedTime()` to avoid resetting fixed-time vanilla dimensions;
+weather/gamerules remain controlled. This is a scoped vanilla-fixture policy,
+not a claim that fixed-time status universally describes all custom world clocks.
+Failed server/helper logs and JFR are retained, and no failed attempt writes a
+successful proof. Production bridge code does not call this preparation path.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

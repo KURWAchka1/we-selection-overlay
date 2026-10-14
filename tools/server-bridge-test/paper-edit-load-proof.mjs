@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -12,29 +12,36 @@ import { channel, hello, request, editRead, editCommit, decode } from './wire-co
 import { captureProcess } from './native-process.mjs';
 import { observeOwnedServer } from './owned-server.mjs';
 import { verifyEditLoadWindow } from './edit-load-window.mjs';
+import { gestureTuple } from './gesture-tuples.mjs';
+import { startJavaLoadClients } from './java-load-clients.mjs';
 
-const [javaHome, directory, playerArgument, sampleArgument, repeatArgument] = process.argv.slice(2);
+const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode, version = '1.21.11'] = process.argv.slice(2);
+const tuple = gestureTuple(version);
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory), repetitions = Number(repeatArgument);
-assert.equal(relative(root, serverDir), join('build', 'bridge-edit-load-proof'));
+assert.equal(relative(root, serverDir), join('build', 'bridge-edit-load-proof', ...(version === '1.21.11' ? [] : [version])));
 assert.equal(Number(playerArgument), 32); assert.equal(Number(sampleArgument), 400);
 assert(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 4);
 const properties = readFileSync(join(serverDir, 'server.properties'), 'utf8');
 for (const line of ['server-ip=127.0.0.1', 'server-port=25579', 'online-mode=false', 'max-players=32']) assert(properties.split(/\r?\n/).includes(line));
 assert.match(readFileSync(join(serverDir, 'eula.txt'), 'utf8'), /^eula=true\s*$/);
-const require = createRequire(join(root, 'build/bridge-wire-deps/package.json')), minecraft = require('minecraft-protocol');
-assert.equal(require('minecraft-protocol/package.json').version, '1.68.0');
+const require = createRequire(join(root, 'build/bridge-wire-deps/package.json'));
+const minecraft = version === '26.2' ? null : require('minecraft-protocol');
+if (minecraft) assert.equal(require('minecraft-protocol/package.json').version, '1.68.0');
 const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
-assert.equal(hash(join(serverDir, 'server.jar')), '5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba');
-assert.equal(hash(join(serverDir, 'plugins/worldedit.jar')), '0ee152b1be5dfb51500505e2bf5a8c9d66f09c7fa484bf9aea384d7e7b459b06');
-const hashes = { companion: hash(join(serverDir, 'companion.jar')), fixture: hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar')) };
+const hashes = { paper: hash(join(serverDir, 'server.jar')), worldedit: hash(join(serverDir, 'plugins/worldedit.jar')),
+  companion: hash(join(serverDir, 'companion.jar')), fixture: hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar')) };
+assert.equal(hashes.paper, tuple.paperSha256);
+assert.equal(createHash(tuple.worldeditAlgorithm).update(readFileSync(join(serverDir, 'plugins/worldedit.jar'))).digest('hex'), tuple.worldeditHash);
+const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, windowsHide: true, encoding: 'utf8' });
+assert.equal(revision.status, 0); const baseline = revision.stdout.trim(); assert.match(baseline, /^[0-9a-f]{40}$/);
 const proof = join(serverDir, 'edit-load-proof.json'), failure = join(serverDir, 'edit-load-failure.json');
 for (const file of [proof, failure]) if (existsSync(file)) unlinkSync(file);
-let server, cancelled = false, stopping = true, peers = [], workers = [], fault;
+let server, transport, cancelled = false, stopping = true, peers = [], workers = [], fault;
 const runs = [];
 process.on('SIGINT', () => { cancelled = true; }); process.on('SIGTERM', () => { cancelled = true; });
 async function waitFor(predicate, label, timeout = 15000) {
   const end = Date.now() + timeout;
-  while (!predicate()) { assert(!fault && !cancelled && !server?.exited && Date.now() < end, `${label}: ${fault ?? 'timeout/stop'}`); await delay(10); }
+  while (!predicate()) { assert(!fault && !transport?.fault && !cancelled && !server?.exited && Date.now() < end, `${label}: ${fault ?? transport?.fault ?? 'timeout/stop'}`); await delay(10); }
 }
 async function metrics() {
   const start = server.lines.length; server.child.stdin.write('wesobridge\n');
@@ -52,7 +59,7 @@ async function action(action, name) {
 }
 async function connect(index) {
   const name = `WesoLoad${String(index).padStart(2, '0')}`;
-  const client = minecraft.createClient({ host: '127.0.0.1', port: 25579, username: name, auth: 'offline', version: '1.21.11', profilesFolder: false, disableChatSigning: true, clientSettings: { viewDistance: 2 } });
+  const client = transport.createClient({ host: '127.0.0.1', port: 25579, username: name, auth: 'offline', version, profilesFolder: false, disableChatSigning: true, clientSettings: { viewDistance: 2 } });
   const p = { name, client, index, role: index < 8 ? 'editor' : index < 16 ? 'reader' : index < 28 ? 'flood' : 'silent', frames: [], cui: [], play: false, ended: false,
     id: 0, sent: 0, applied: 0, reads: 0, latencies: [], bounds: [100 + index * 16, 64, 20, 105 + index * 16, 70, 27] };
   peers.push(p);
@@ -121,7 +128,7 @@ async function measure(label, active) {
   verifyEditLoadWindow(window); return window;
 }
 async function run(round) {
-  peers = []; fault = null; stopping = true;
+  peers = []; fault = null; stopping = true; transport = null;
   const probe = createServer(); await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(25579, '127.0.0.1', resolve); }); await new Promise(resolve => probe.close(resolve));
   copyFileSync(join(serverDir, 'companion.jar'), join(serverDir, 'plugins/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar'));
   const config = join(serverDir, 'plugins/WorldEditSelectionOverlayBridge'); mkdirSync(config, { recursive: true });
@@ -133,6 +140,12 @@ async function run(round) {
   try {
     await waitFor(() => server.lines.some(s => /Done \(/.test(s)), 'Paper startup', 180000);
     assert(!server.lines.some(s => /Error occurred while enabling/.test(s)));
+    assert(!server.lines.some(s => s.includes('[WorldEditSelectionOverlayBridge]') && /Disabling|ERROR/.test(s)), 'Bridge failed closed at startup');
+    if (version === '26.2') {
+      transport = startJavaLoadClients(javaHome, join(serverDir, `edit-${round}-clients.log`));
+      await waitFor(() => transport.ready, 'exact 26.2 load codec', 15000);
+    } else transport = { createClient: options => minecraft.createClient(options), evidence: {
+      implementation: 'minecraft-protocol', version: '1.68.0', protocol: require('minecraft-data')(version).version.version } };
     await Promise.all(Array.from({length:32}, (_,i) => connect(i)));
     await action('control', 'baseline'); await delay(5000);
     const editors = peers.filter(p => p.role === 'editor');
@@ -157,18 +170,22 @@ async function run(round) {
     }
     await waitFor(() => peers.every(p => p.ended), 'all disconnects'); await delay(250);
     const final = await metrics(); assert.equal(final.connections, 0); assert.equal(final.pending, 0); assert.equal(final.tasks, 0);
-    const result = { round, idle, active, recovered, final, staleConflict: true, foreignConflict: true, duplicateAppliedOnce: true, revokedDenied: true };
+    const result = { round, transport: transport.evidence, idle, active, recovered, final, staleConflict: true, foreignConflict: true, duplicateAppliedOnce: true, revokedDenied: true };
     writeFileSync(join(serverDir, `edit-${round}-result.json`), JSON.stringify(result, null, 2));
     console.log(`EDIT LOAD PASS: run ${round}, ${active.after.applied-active.before.applied} commits, 32 actors`); return result;
   } finally {
     stopping = true; await Promise.allSettled(workers); workers = [];
-    for (const p of peers) if (!p.ended) { p.closing = true; p.client.end('Fixture cleanup'); }
-    try { await server.lifecycle.stop({graceMillis:20000}); } finally { if (server.exited) await server.drained; }
+    try {
+      for (const p of peers) if (!p.ended) { p.closing = true; p.client.end('Fixture cleanup'); }
+      await transport?.close?.();
+    } finally {
+      try { await server.lifecycle.stop({graceMillis:20000}); } finally { if (server.exited) await server.drained; }
+    }
   }
 }
 try {
   for (let round=1; round<=repetitions; round++) runs.push(await run(round));
   assert.equal(hash(join(serverDir, 'companion.jar')), hashes.companion);
-  writeFileSync(proof, JSON.stringify({ checkedAt:new Date().toISOString(), baseline:'bdc373c', minecraft:'1.21.11', hashes, actors:32, repetitions, runs }, null, 2));
+  writeFileSync(proof, JSON.stringify({ checkedAt:new Date().toISOString(), baseline, minecraft:version, hashes, actors:32, repetitions, runs }, null, 2));
   console.log('PAPER EDIT LOAD PROOF PASS; owned servers stopped');
 } catch (error) { writeFileSync(failure, JSON.stringify({ checkedAt:new Date().toISOString(), hashes, error:String(error), runs }, null, 2)); console.error(error); process.exitCode=1; }
