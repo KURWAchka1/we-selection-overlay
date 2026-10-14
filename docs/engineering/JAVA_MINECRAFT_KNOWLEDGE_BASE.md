@@ -17,8 +17,11 @@ and [remote-editing scope/tests](BRIDGE_REMOTE_SELECTION_2026-10-13.md). Develop
 Fabric/NeoForge consumers now cover all six runtime adapters. The additional
 [26.x native gesture proof](BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) is limited to
 exact Paper/WorldEdit pairs: 26.1.2/7.4.3 and 26.2/7.4.5. It does not extend the
-1.21.11 lifecycle/fault/load evidence to those hosts. Clipboard synchronization,
-command simulation and other dedicated hosts remain unimplemented.
+1.21.11 fault/load evidence to those hosts. The later
+[26.x negative/lifecycle matrix](BRIDGE_26X_LIFECYCLE_2026-10-14.md) passes the
+named denied/absent, respawn/world/reconnect and graceful-stop/re-enable scenarios;
+ungraceful loss, network-delay and load gates remain separate. Clipboard
+synchronization, command simulation and other dedicated hosts remain unimplemented.
 Published client 1.8.0 is unchanged and has no bridge protocol support.
 Existing CUI-only servers must keep working without installing a companion.
 
@@ -44,6 +47,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Edit network faults and concurrent load](BRIDGE_EDIT_FAULTS_AND_LOAD_2026-10-13.md) | Native RTT/late-ack/revocation checks, 32-actor edit pressure, raw/JFR reconciliation and remaining production gates |
 | [Native remote gestures](BRIDGE_NATIVE_GESTURES_2026-10-13.md) | Real callback/hit-test coverage, all faces/corners, cancellation, radial XYZ Move, server authority and native screenshots |
 | [26.x remote editing](BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) | Exact host tuples, four native connections, shared remote source, screenshots and remaining cross-version gates |
+| [26.x negative/lifecycle regression](BRIDGE_26X_LIFECYCLE_2026-10-14.md) | Native allowed/denied/absent joins, context renewal, old-token rejection, graceful companion lifecycle and bounded evidence |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

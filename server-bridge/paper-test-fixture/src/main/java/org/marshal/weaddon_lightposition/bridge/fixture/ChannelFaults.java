@@ -9,7 +9,9 @@ final class ChannelFaults {
     private ChannelFaults() { }
 
     static void advertise(Player player, boolean available) {
-        if (!Boolean.getBoolean("weso.bridge.fixture") || !Bukkit.getMinecraftVersion().equals("1.21.11"))
+        if (!Boolean.getBoolean("weso.bridge.fixture")
+                || !java.util.Set.of("1.21.11", "26.1.2", "26.2").contains(Bukkit.getMinecraftVersion())
+                || !Bukkit.getIp().equals("127.0.0.1") || (Bukkit.getPort() != 25579 && Bukkit.getPort() != 25580))
             throw new IllegalStateException("Pinned loopback fixture only");
         try {
             Class<?> id = Class.forName("net.minecraft.resources.Identifier");

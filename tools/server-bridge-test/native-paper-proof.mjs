@@ -8,10 +8,13 @@ import { resolve, relative, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { observeOwnedServer } from './owned-server.mjs';
 import { captureProcess as capture } from './native-process.mjs';
+import { gestureTuple } from './gesture-tuples.mjs';
+import { verifyLifecycleEntry, verifyLifecycleMatrix } from './native-lifecycle-evidence.mjs';
 
-const [javaHome, serverDirectory, modVersion, powershell] = process.argv.slice(2);
+const [javaHome, serverDirectory, modVersion, powershell, minecraft = '1.21.11'] = process.argv.slice(2);
+const tuple = gestureTuple(minecraft);
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(serverDirectory);
-assert.equal(relative(root, serverDir), join('build', 'bridge-native-proof'));
+assert.equal(relative(root, serverDir), join('build', 'bridge-native-proof', ...(minecraft === '1.21.11' ? [] : [minecraft])));
 assert.match(modVersion, /^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$/);
 assert(process.env.WESO_TEST_DESKTOP?.startsWith('WesoTest-'), 'Guarded private desktop required');
 assert.match(readFileSync(join(serverDir, 'server.properties'), 'utf8'), /^server-ip=127\.0\.0\.1$/m);
@@ -23,16 +26,18 @@ let server, client, cancelled = false;
 process.on('SIGINT', () => { cancelled = true; });
 process.on('SIGTERM', () => { cancelled = true; });
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
-const paperHash = '5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba';
+const paperHash = tuple.paperSha256;
 assert.equal(hash(join(serverDir, 'server.jar')), paperHash);
-assert.equal(hash(join(serverDir, 'plugins/worldedit.jar')), '0ee152b1be5dfb51500505e2bf5a8c9d66f09c7fa484bf9aea384d7e7b459b06');
+assert.equal(createHash(tuple.worldeditAlgorithm).update(readFileSync(join(serverDir, 'plugins/worldedit.jar'))).digest('hex'), tuple.worldeditHash);
 const artifactPaths = Object.fromEntries(['fabric', 'neoforge'].map(loader => [loader,
   join(root, `WEaddon_${loader}_universal_1.21.11-26.2/build/libs/worldedit_selection_overlay-${modVersion}-${loader}-1.21.11-26.2.jar`)]));
 const clientHashes = Object.fromEntries(Object.entries(artifactPaths).map(([loader, path]) => [loader, hash(path)]));
 const companionHash = hash(join(serverDir, 'companion.jar'));
 const fixtureHash = hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar'));
 const proofPath = join(serverDir, 'native-proof.json');
+const failurePath = join(serverDir, 'native-failure.json');
 if (existsSync(proofPath)) unlinkSync(proofPath);
+if (existsSync(failurePath)) unlinkSync(failurePath);
 
 async function waitFor(predicate, label, timeout = 180000) {
   const end = Date.now() + timeout;
@@ -56,6 +61,7 @@ async function startServer(companion, label = 'absent') {
   await waitFor(() => server.lines.some(s => /Done \(/.test(s)), 'Paper startup');
   assert(!server.lines.some(s => /Error occurred while enabling/.test(s)), server.lines.slice(-25).join('\n'));
   assert.equal(server.lines.some(s => s.includes('Experimental read-only bridge enabled')), companion);
+  if (companion) assert(!server.lines.some(s => s.includes('[WorldEditSelectionOverlayBridge]') && /Disabling|ERROR/.test(s)), 'Bridge failed closed at startup');
 }
 async function stopServer() {
   if (server) {
@@ -78,7 +84,8 @@ async function metrics() {
   const e = server.lines.slice(start).find(s => /Cuboid captures=/.test(s));
   const number = (line, key) => Number(line.match(new RegExp(`${key}=(\\d+)`))[1]);
   return { connections: number(a, 'connections'), reads: number(b, 'reads'), replies: number(b, 'replies'),
-    restartHints: number(c, 'hints'), hintBytes: number(c, 'bytes'), editCaptures: number(e, 'captures'), editCommits: number(e, 'commits'), editsApplied: number(e, 'applied') };
+    restartHints: number(c, 'hints'), hintBytes: number(c, 'bytes'), editCaptures: number(e, 'captures'), editCommits: number(e, 'commits'), editsApplied: number(e, 'applied'),
+    pending: number(server.lines.slice(start).find(s => /Queue pending=/.test(s)), 'pending'), tasks: number(server.lines.slice(start).find(s => /Queue pending=/.test(s)), 'tasks') };
 }
 async function runClient(loader, scenario) {
   assert.equal(hash(artifactPaths[loader]), clientHashes[loader], 'Client artifact changed during the matrix');
@@ -86,10 +93,11 @@ async function runClient(loader, scenario) {
   const control = join(serverDir, `${loader}-${scenario}-control.txt`);
   writeFileSync(control, '');
   const name = scenario === 'denied' ? 'WesoDenied' : 'WesoAllowed';
-  const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-File', join(root, 'tools/test-command-matrix.ps1'), '-Java21', javaHome, '-Java25', javaHome, '-Only', `${loader}-1.21.11`, '-ModVersion', modVersion, '-NativeBridgeScenario', scenario, '-NativeBridgeControl', control, '-DesktopWorker'], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-File', join(root, 'tools/test-command-matrix.ps1'), '-Java21', javaHome, '-Java25', javaHome, '-Only', `${loader}-${tuple.family}`, '-ModVersion', modVersion, '-NativeBridgeScenario', scenario, '-NativeBridgeControl', control, '-NativeBridgeMinecraft', minecraft, '-DesktopWorker'], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   client = capture(child, join(serverDir, `${loader}-${scenario}.log`));
   let index = 0;
   let channelReads, beforeShutdown;
+  const phases = [];
   const end = Date.now() + 300000;
   while (!client.exited) {
     assert(Date.now() < end && !cancelled, 'Native client timeout/cancellation');
@@ -99,6 +107,7 @@ async function runClient(loader, scenario) {
       assert(!line.includes('NATIVE PAPER BRIDGE FAIL:'), line);
       const phase = line.match(/NATIVE PAPER WAIT: (initial|quiet|editsetup|editquiet|editcancel|respawn|nether|overworld|channeloff|channelon|empty|seed|revoke|grant|reconnect|rejoin|rejoined|bridgeoff|bridgeon|restarted|disconnect)\s*$/)?.[1];
       if (!phase) continue;
+      phases.push(phase);
       if (phase === 'initial' || phase === 'quiet') {
         if (baseline) assert.equal((await metrics()).reads, baseline.reads, 'Hello/idle scanned selection');
       } else if (phase === 'editsetup') {
@@ -164,8 +173,11 @@ async function runClient(loader, scenario) {
       assert.equal(final.replies, 2, 'Restart duplicated negotiation or read');
     } else { assert.equal(final.reads, 0, 'Unexpected denied metadata reads'); assert.equal(final.replies, 0, 'Denied hint retried hello'); }
   }
-  evidence.push({ loader, scenario, baseline, beforeShutdown, final });
-  checks.push(`${loader} native 1.21.11 -> Paper: ${scenario}, CUI and disconnect cleanup`);
+  const contexts = client.lines.map(s => s.match(/NATIVE PAPER CONTEXT PASS: (.+)$/)?.[1]).filter(Boolean);
+  const entry = { loader, scenario, baseline, beforeShutdown, final, contexts, phases };
+  verifyLifecycleEntry(entry);
+  evidence.push(entry);
+  checks.push(`${loader} native ${minecraft} -> Paper: ${scenario}, CUI and disconnect cleanup`);
   console.log(`PASS: ${checks.at(-1)}`);
   client = null;
 }
@@ -184,9 +196,12 @@ try {
   await startServer(false);
   for (const loader of ['fabric', 'neoforge']) await runClient(loader, 'absent');
   await stopServer();
-  writeFileSync(proofPath, JSON.stringify({ checkedAt: new Date().toISOString(), minecraft: '1.21.11', paper: server.lines.find(s => /This server is running Paper/.test(s)), paperHash, modVersion, companionHash, fixtureHash, clientWorldEdit: 'not installed; server-side WorldEdit 7.4.2 only', hashes: clientHashes, checks, evidence }, null, 2));
+  verifyLifecycleMatrix(evidence);
+  const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', windowsHide: true });
+  assert.equal(revision.status, 0);
+  writeFileSync(proofPath, JSON.stringify({ checkedAt: new Date().toISOString(), baseline: revision.stdout.trim(), minecraft, tuple, paper: server.lines.find(s => /This server is running Paper/.test(s)), paperHash, modVersion, companionHash, fixtureHash, clientWorldEdit: `not installed; server-side WorldEdit ${tuple.worldedit} only`, hashes: clientHashes, checks, evidence }, null, 2));
   console.log('NATIVE PAPER MATRIX PASS: six real Minecraft runs');
-} catch (ex) { console.error(ex); process.exitCode = 1; }
+} catch (ex) { writeFileSync(failurePath, JSON.stringify({ checkedAt: new Date().toISOString(), minecraft, error: String(ex), evidence }, null, 2)); console.error(ex); process.exitCode = 1; }
 finally {
   if (client && !client.exited && client.child.pid) {
     spawnSync('taskkill', ['/PID', String(client.child.pid), '/T', '/F'], { windowsHide: true });

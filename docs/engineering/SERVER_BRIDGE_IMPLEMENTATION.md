@@ -60,6 +60,14 @@ transaction/controller and does not edit world blocks. Historical read-only
 foundation observations below retain their original scope. Clipboard, simulation,
 other server implementations and general hot reload are still unimplemented.
 
+The [2026-10-14 26.x negative/lifecycle cycle](BRIDGE_26X_LIFECYCLE_2026-10-14.md)
+adds twelve native allowed/denied/absent runs on those two exact hosts, including
+actual respawn/world changes, channel withdrawal, reconnect and graceful companion
+stop/re-enable. Old-context edit snapshots and unavailable reads fail locally.
+The initial test-injector guard failure is retained and corrected after exact
+server-class inspection. Production client/companion artifacts are unchanged;
+network-delay, ungraceful loss and load evidence are not widened by implication.
+
 The [server lifecycle and harness audit](BRIDGE_SERVER_LIFECYCLE_2026-10-12.md)
 adds an enabled-WorldEdit startup guard after a real failing fixture, 14 wire
 check groups including three plugin cycles, and 16 automated Node harness tests.

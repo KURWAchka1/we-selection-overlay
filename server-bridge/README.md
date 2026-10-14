@@ -58,7 +58,7 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-67 harness self-tests (owned-process shutdown, frozen-world safety, exact tuples, wire
+74 harness self-tests (owned-process shutdown, frozen-world safety, exact tuples, native lifecycle evidence, wire
 helpers, mixed-workload and active-lifecycle validation); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
@@ -155,8 +155,21 @@ and 26.2 hosts. Cache the checksum-pinned Paper/WorldEdit artifacts listed in th
 ```
 
 Each tuple uses a separate ignored `build/bridge-native-gesture-proof/<version>/`
-server. The 26.x launcher currently rejects non-gesture native modes; denial,
-absence, lifecycle, network-fault and load evidence is not inherited from 1.21.11.
+server. For the later six-client allowed/denied/absent and lifecycle matrix, use
+the same exact-version/JDK arguments **without** `-EditGestures`:
+
+```powershell
+.\tools\test-native-paper-bridge.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Minecraft 26.1.2 -ModVersion 1.8.0-bridge-dev -AcceptEula
+.\tools\test-native-paper-bridge.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Minecraft 26.2 -ModVersion 1.8.0-bridge-dev -AcceptEula
+```
+
+These matrices pass both loaders and write separate versioned evidence under
+`build/bridge-native-proof/<version>/`. They cover actual respawn/world/reconnect,
+explicit channel changes, graceful companion stop/re-enable and old-context edit
+rejection without new requests. See [executed scope and limits](../docs/engineering/BRIDGE_26X_LIFECYCLE_2026-10-14.md).
+The 26.x launcher still rejects `-EditFaults`; network-delay and load evidence is
+not inherited from 1.21.11. Same-JVM re-enable does not restore editing after the
+plugin classloader closes; install/update through a full server restart.
 
 The extended wire fixture also exercises actual same-world death/respawn,
 same-process reconnect, bridge channel unregister/register and WorldEdit disable.

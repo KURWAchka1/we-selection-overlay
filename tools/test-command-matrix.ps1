@@ -25,7 +25,7 @@ New-Item -ItemType Directory -Force -Path $logs | Out-Null
 if ($NativeBridgeScenario) {
     $family = if ($NativeBridgeMinecraft -eq '26.1.2') { '26.1' } else { $NativeBridgeMinecraft }
     if ($Only.Count -ne 1 -or $Only[0] -notin @("fabric-$family", "neoforge-$family")) { throw 'Native Paper proof requires one version-matched client' }
-    if ($family -ne '1.21.11' -and $NativeBridgeScenario -ne 'gestures') { throw '26.x native proof currently supports gestures only' }
+    if ($family -ne '1.21.11' -and $NativeBridgeScenario.StartsWith('fault-')) { throw '26.x native edit-fault proof is not ported yet' }
     $control = [IO.Path]::GetFullPath($NativeBridgeControl)
     $directory = if ($NativeBridgeScenario.StartsWith('fault-')) { 'build/bridge-native-fault-proof' } elseif ($NativeBridgeScenario -eq 'gestures') { 'build/bridge-native-gesture-proof' } else { 'build/bridge-native-proof' }
     $allowed = [IO.Path]::GetFullPath((Join-Path $root $directory)) + [IO.Path]::DirectorySeparatorChar

@@ -81,6 +81,10 @@ public final class NativeBridgeChecks {
                 String expected = scenario.equals("allowed") ? "READY" : scenario.equals("denied") ? "DENIED" : "UNAVAILABLE";
                 if (!status().equals(expected)) return;
                 check(call(null, "selection") == null, "Negotiation performed unsolicited read");
+                if (!scenario.equals("allowed")) {
+                    check(call(null, "editContext") == null && !(boolean) invoke(editor, "available"), "Unavailable bridge granted editing");
+                    rejectUnavailableRead();
+                }
                 verifyBounds(invoke(region, "boundsForAnalysis"));
                 System.out.println("NATIVE PAPER CUI PASS: " + scenario);
                 waitFor(scenario.equals("allowed") ? "initial" : "quiet", 1);
@@ -200,6 +204,7 @@ public final class NativeBridgeChecks {
                 check(System.nanoTime() - contextStarted < 30_000_000_000L, "Same-process reconnect did not recover");
                 if (!adapter.joined() || !status().equals("READY")) return;
                 check(adapter.connection() != previousConnection && !previousEpoch.equals(epoch()), "Reconnect reused old context");
+                rejectStaleEdit();
                 check(call(null, "selection") == null, "Reconnect read metadata without a consumer");
                 Object region = invoke(field(overlay, overlay.getClass(), "selectionManager"), "primaryRegionForAnalysis");
                 if (region == null) return;
@@ -270,6 +275,33 @@ public final class NativeBridgeChecks {
                 "Unavailable context retained metadata/epoch/nonce");
         check(!(boolean) invoke(state, "pending") && (int) invoke(state, "capabilities") == 0,
                 "Unavailable context retained work/capabilities");
+        check(call(null, "editContext") == null && !(boolean) invoke(editor, "available"), "Unavailable context retained editing");
+        rejectUnavailableRead();
+        rejectStaleEdit();
+    }
+
+    private void rejectUnavailableRead() throws Exception {
+        Object[] result = new Object[1];
+        Object source = field(editor, editor.getClass(), "remoteSource");
+        var read = java.util.Arrays.stream(source.getClass().getMethods()).filter(m -> m.getName().equals("read")).findFirst().orElseThrow();
+        Object state = field(null, bridge, "CLIENT");
+        long request = (long) field(state, state.getClass(), "requestId");
+        read.invoke(source, adapter.game(), (java.util.function.Consumer<Object>) value -> result[0] = value);
+        check(result[0] != null && !(boolean) invoke(result[0], "ready"), "Unavailable source returned cached selection");
+        check((long) field(state, state.getClass(), "requestId") == request, "Unavailable source sent a read");
+    }
+
+    private void rejectStaleEdit() throws Exception {
+        if (editCallback == null) return;
+        Object[] result = new Object[1];
+        Object source = field(editor, editor.getClass(), "remoteSource");
+        var commit = java.util.Arrays.stream(source.getClass().getMethods()).filter(m -> m.getName().equals("commit")).findFirst().orElseThrow();
+        Object state = field(null, bridge, "CLIENT");
+        long request = (long) field(state, state.getClass(), "requestId");
+        commit.invoke(source, adapter.game(), editCallback, invoke(editCallback, "bounds"), null, null,
+                (java.util.function.Consumer<Object>) value -> result[0] = value);
+        check(result[0] != null && !(boolean) invoke(result[0], "ready"), "Old edit snapshot survived a context boundary");
+        check((long) field(state, state.getClass(), "requestId") == request, "Stale edit reached the network");
     }
 
     private void verifySelection(String expected, int minY, int maxY) throws Exception {
@@ -299,6 +331,7 @@ public final class NativeBridgeChecks {
         check(adapter.connection() == previousConnection, "Context recovery reconnected instead of recovering: " + label);
         check(call(null, "selection") == null, "Context retained old selection: " + label);
         check(!(boolean) invoke(field(null, bridge, "CLIENT"), "pending"), "Context retained pending request");
+        rejectStaleEdit();
         System.out.println("NATIVE PAPER CONTEXT PASS: " + label);
         return true;
     }

@@ -716,6 +716,50 @@ Only the test adapters invoke the pinned callback in-JVM. 26.2 moves screen
 access to `Minecraft.gui`; separate compiled test adapters preserve that boundary.
 No production private callback/reflection API or operating-system input is added.
 
+## S56 Native 26.x Lifecycle And Negative Evidence
+
+Checked **2026-10-14**. The official Fabric networking guides for
+[26.1.2](https://docs.fabricmc.net/26.1.2/develop/networking) and
+[26.2](https://docs.fabricmc.net/develop/networking),
+[NeoForge optional payload registration](https://docs.neoforged.net/docs/networking/payload/)
+and [Paper plugin messaging](https://docs.papermc.io/paper/dev/plugin-messaging/)
+describe the platform payload boundaries. Registration/channel availability is
+not application authorization or an acknowledgment that a selection changed.
+Our inference is to test channel advertisement, negotiated state and actual
+WorldEdit/server counters independently; no new platform API is introduced.
+
+The public Paper compile-boundary events
+[PlayerRespawnEvent](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/player/PlayerRespawnEvent.html)
+and [PlayerChangedWorldEvent](https://jd.papermc.io/paper/1.21.11/org/bukkit/event/player/PlayerChangedWorldEvent.html)
+identify different lifecycle transitions. The respawn contract warns that
+player state can reset before post-respawn. The fixture therefore observes
+actual native player/world identity and fresh protocol epochs, not just a
+console command or a simulated event. These compile-boundary docs alone are
+not 26.x evidence; exact S55 hosts must pass real native transitions.
+
+The existing Java 21 Paper test fixture joins `Weso*` actors with explicit
+permission attachments, seeds actual WorldEdit selectors and uses only public
+host APIs to kill/teleport/kick them. No OP grant, client WorldEdit, system input,
+new production polling or provided-dependency packaging is needed. The extended
+client fixture explicitly rejects unavailable reads and old-context commits
+without advancing request IDs. The independent
+[lifecycle evidence verifier](../../tools/server-bridge-test/native-lifecycle-evidence.mjs)
+requires complete unique loader/scenario coverage, exact phase/context order,
+canonical apply counts, zero denied source work and empty final queues/tasks.
+Its negative tests are not a substitute for running the native matrix.
+
+Channel withdrawal/re-advertisement is a distinct **test-only wire injection**:
+Bukkit's [Messenger reserved-channel contract](https://jd.papermc.io/paper/1.21.11/org/bukkit/plugin/messaging/Messenger.html#isReservedChannel(java.lang.String))
+reserves `REGISTER/UNREGISTER`, so this pre-existing fixture uses pinned
+packet reflection rather than production plugin messaging. The first 26.2 run
+correctly refused its old 1.21.11-only guard. `javap` of both exact resolved Paper
+server JARs confirms `Identifier.parse`, `DiscardedPayload(Identifier, byte[])`,
+`ClientboundCustomPayloadPacket(CustomPacketPayload)`, the player `connection`
+field and inherited `send(Packet)` signatures. The injector now permits those
+three exact versions only, the fixture JVM flag, loopback IP and fixture ports.
+This exception is not permission to add Minecraft internals to production code
+or a claim about untested server builds. No injector classes ship to users.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

@@ -88,6 +88,16 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [26.x negative/lifecycle cycle](BRIDGE_26X_LIFECYCLE_2026-10-14.md) passes
+twelve real allowed/denied/absent game runs on the exact 26.1.2/26.2 hosts.
+Fresh epochs, same-world respawn, Nether/Overworld changes, channel advertisement,
+same-process reconnect and negotiated graceful stop/re-enable reconcile with
+server counters. Unavailable reads and old-context commits never advance request
+IDs. This closes the named bounded native scenarios, not delayed/late replies,
+ungraceful loss, backend switches, concurrent load or representative cost gates.
+The test-only channel injector and proof validation are strengthened; no production
+behavior or public artifacts change. Historical reports below retain their scope.
+
 The [26.x remote editing cycle](BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) ports the
 existing consumer to all four 26.x adapters and passes 28 native gesture cases
 per loader on exact Paper 26.1.2/WorldEdit 7.4.3 and Paper 26.2/WorldEdit 7.4.5
