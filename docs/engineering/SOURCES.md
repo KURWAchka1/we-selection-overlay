@@ -849,6 +849,56 @@ not a claim that fixed-time status universally describes all custom world clocks
 Failed server/helper logs and JFR are retained, and no failed attempt writes a
 successful proof. Production bridge code does not call this preparation path.
 
+## S59 Edit Method And Safepoint Attribution
+
+Checked **2026-10-14**. Oracle's Java 25
+[RecordingFile contract](https://docs.oracle.com/en/java/javase/25/docs/api/jdk.jfr/jdk/jfr/consumer/RecordingFile.html)
+provides streaming event reads and warns against `readAllEvents` for large files.
+The [jfr command reference](https://docs.oracle.com/en/java/javase/25/docs/specs/man/jfr.html)
+documents `configure`, `event#setting=value` and `metadata`. The new diagnostic
+fixture derives one JFC from the installed JDK's default settings, then enables
+zero-threshold `ExecuteVMOperation` and `SafepointBegin` in **both** arms. It
+retains Paper's default spark policy; this is not an uninstrumented production
+benchmark or advice to disable user profiling. Paper's
+[profiling guide](https://docs.papermc.io/paper/profiling/) requires observing the
+workload in which a suspected problem actually occurs.
+
+Inspected Temurin **25.0.2+10** `lib/jfr/default.jfc`: both events have a **10 ms**
+threshold. `jfr metadata --events jdk.ExecuteVMOperation` exposes the operation,
+caller and `safepointId`; `SafepointBegin` has the matching ID. Matching IDs in a
+separate streaming pass avoids assuming file-order equals timestamp-order, or
+losing an associated operation whose body starts after a selected call returns.
+An associated operation/caller identifies the requested VM operation, **not**
+the reason a particular thread was slow to rendezvous or the CPU cost of a call.
+Overlapping GC/VM/synchronization intervals must not be added as disjoint costs.
+
+Reinspection of the retained 26.2 edit-load run finds four `SafepointBegin`
+intervals (IDs **4619..4622**) overlapping the 60.4271 ms tick, totaling
+**55.0482 ms**. The old tick reader omitted this event category. Its original
+zero recorded VM-body/GC overlap was not evidence of no JVM synchronization.
+The thresholded old recording cannot establish the missing operation/caller;
+the new diagnostic settings cannot retroactively recover discarded events.
+
+The exact unchanged companion was inspected with Java 21 `javap -p -s` before
+adding test-only wrappers for `mayEditSelection`, `captureEdit` and `applyEdit`.
+These retain real descriptors, object identity, exceptions and owner-thread
+execution. The agent still touches only companion classes, never WorldEdit or
+Minecraft implementation methods. All instrumentation stays out of shipped JARs.
+
+The pinned [OpenJDK 25.0.2+10 safepoint source](https://github.com/openjdk/jdk25u/blob/jdk-25.0.2%2B10/src/hotspot/share/runtime/safepoint.cpp)
+places `EventSafepointBegin` around synchronization and publishes the safepoint
+ID after threads rendezvous. The initial lookup in `openjdk/jdk` failed (404);
+the versioned `jdk25u` source is the inspected reference, not master.
+
+Paper's [26.1 announcement](https://papermc.io/news/26-1/) documents the move
+from three server-root world directories to dimension directories inside one
+world root. The [26.2 announcement](https://papermc.io/news/26-2/) retains that
+layout. A real priming run reproduced the old frozen helper's missing-Nether
+directory failure before measurements. Exact 26.x diagnostic roots now snapshot
+the complete `bridge-fixture` tree, requiring all three vanilla dimension
+directories. Legacy fixtures retain their old schema/layout. No user world is
+migrated, and a failed snapshot cannot silently become a matched-world proof.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

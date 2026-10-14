@@ -13,6 +13,10 @@ The [exact concurrent edit-load cycle](BRIDGE_26X_EDIT_LOAD_2026-10-14.md)
 subsequently verifies bounded 32-actor metadata/edit behavior on both 26.x hosts
 and legacy. Its headless clients and unresolved timing outliers do not establish
 native concurrent gameplay or production cost acceptance.
+The [26.2 attribution follow-up](BRIDGE_26_2_EDIT_ATTRIBUTION_2026-10-14.md)
+separates active/cold methods in four matched-workload diagnostic/control runs.
+It corrects the old reader's missing safepoint category without treating every
+long call as profiler interference or closing the soft-budget/cost gates.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).

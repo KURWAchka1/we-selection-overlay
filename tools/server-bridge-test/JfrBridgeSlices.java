@@ -11,10 +11,12 @@ import java.util.Set;
 import jdk.jfr.consumer.RecordedEvent;
 import jdk.jfr.consumer.RecordingFile;
 
-/** Two streaming passes; bounded method counts and at most twenty selected roots. */
+/** Streaming passes; optional marker prepass, bounded method counts and selected roots. */
 class JfrBridgeSlices {
-    private static final Set<String> OPERATIONS = Set.of("drain", "process", "permission", "read", "send", "enqueue", "ingress",
-            "value", "wide", "fail", "pause", "nested");
+    private static final Set<String> BASE = Set.of("drain", "process", "permission", "read", "send", "enqueue", "ingress");
+    private static final Set<String> EDIT = Set.of("editPermission", "capture", "apply");
+    private static final Set<String> OPERATIONS = Set.of("drain", "process", "permission", "read", "send", "enqueue", "ingress", "editPermission", "capture", "apply",
+            "value", "wide", "fail", "pause", "nested", "object");
     private record Call(long id, long parent, long thread, String operation, Instant start, Instant end,
                         long wall, long cpu, long allocation, long before, long after, boolean failed) { }
     private static final class Group {
@@ -27,16 +29,39 @@ class JfrBridgeSlices {
         long gc, vm, safepointBegin, park, monitor, ownerSamples, deoptimizations;
         final Set<String> vmOperations = new java.util.TreeSet<>();
         final Set<String> vmCallers = new java.util.TreeSet<>();
+        final Set<Long> safepointIds = new java.util.TreeSet<>();
+        final Set<String> associatedVmOperations = new java.util.TreeSet<>();
+        final Set<String> associatedVmCallers = new java.util.TreeSet<>();
         Detail(Call root) { this.root = root; }
     }
     public static void main(String[] args) throws Exception {
-        if (args.length != 2 || !Set.of("production", "probe").contains(args[1]))
-            throw new IllegalArgumentException("Expected recording and production/probe");
-        boolean production = args[1].equals("production");
+        if ((args.length != 2 && args.length != 4) || !Set.of("production", "probe", "edit").contains(args[1]))
+            throw new IllegalArgumentException("Expected recording, production/probe/edit and optional phase/count");
+        boolean production = !args[1].equals("probe");
         Path path = Path.of(args[0]);
+        Instant phaseStart = null, phaseEnd = null;
+        if (args.length == 4) {
+            String phase = args[2]; int expected = Integer.parseInt(args[3]);
+            if (!phase.matches("[a-z][a-z0-9-]{0,31}") || expected < 1 || expected > 2400)
+                throw new IllegalArgumentException("Invalid diagnostic phase/count");
+            java.util.BitSet samples = new java.util.BitSet();
+            try (RecordingFile recording = new RecordingFile(path)) {
+                while (recording.hasMoreEvents()) {
+                    RecordedEvent event = recording.readEvent();
+                    if (!event.getEventType().getName().equals("weso.fixture.Tick") || !phase.equals(event.getString("phase"))) continue;
+                    int sample = event.getInt("sample");
+                    if (sample < 0 || sample >= expected || samples.get(sample) || event.getEndTime().isBefore(event.getStartTime()))
+                        throw new IllegalStateException("Invalid or duplicate diagnostic phase marker");
+                    samples.set(sample);
+                    if (phaseStart == null || event.getStartTime().isBefore(phaseStart)) phaseStart = event.getStartTime();
+                    if (phaseEnd == null || event.getEndTime().isAfter(phaseEnd)) phaseEnd = event.getEndTime();
+                }
+            }
+            if (samples.cardinality() != expected) throw new IllegalStateException("Missing diagnostic phase markers");
+        }
         Map<String, Group> groups = new LinkedHashMap<>();
         List<Call> largest = new ArrayList<>(), highwaters = new ArrayList<>();
-        int count = 0;
+        int count = 0, seen = 0;
         long coreMax = 0;
         Map<String, Integer> threadDumpCallers = new java.util.TreeMap<>();
         try (RecordingFile recording = new RecordingFile(path)) {
@@ -49,8 +74,10 @@ class JfrBridgeSlices {
                     if (threadDumpCallers.size() > 64) throw new IllegalStateException("Too many VM callers");
                 }
                 if (!event.getEventType().getName().equals("weso.diagnostic.Call")) continue;
-                if (++count > 1_000_000) throw new IllegalStateException("Diagnostic event ceiling exceeded");
+                if (++seen > 1_000_000) throw new IllegalStateException("Diagnostic event ceiling exceeded");
                 Call call = call(event);
+                if (phaseStart != null && (call.start.isBefore(phaseStart) || call.end.isAfter(phaseEnd))) continue;
+                count++;
                 Group group = groups.computeIfAbsent(call.operation, ignored -> new Group());
                 group.walls.add(call.wall); group.sum += call.wall; group.cpu += call.cpu;
                 group.allocated += call.allocation; if (call.failed) group.failed++;
@@ -62,7 +89,9 @@ class JfrBridgeSlices {
                 coreMax = Math.max(coreMax, call.after);
             }
         }
-        if (count == 0 || production && !groups.keySet().equals(Set.of("drain", "process", "permission", "read", "send", "enqueue", "ingress")))
+        if (args.length == 2 && (count == 0 || production && (!groups.keySet().containsAll(BASE)
+                || !BASE.containsAll(groups.keySet().stream().filter(s -> !EDIT.contains(s)).toList())
+                || args[1].equals("edit") && !groups.keySet().containsAll(EDIT))))
             throw new IllegalStateException("Missing diagnostic method evidence");
         if (production && groups.values().stream().anyMatch(g -> g.failed != 0)) throw new IllegalStateException("Diagnostic method failed");
         List<Detail> details = new ArrayList<>();
@@ -95,7 +124,14 @@ class JfrBridgeSlices {
                     if (!Set.of("jdk.GCPhasePause", "jdk.ExecuteVMOperation", "jdk.SafepointBegin", "jdk.ThreadPark", "jdk.JavaMonitorEnter").contains(kind)) continue;
                     long overlap = overlap(root.start, root.end, event.getStartTime(), event.getEndTime());
                     if (kind.equals("jdk.GCPhasePause")) detail.gc += overlap;
-                    else if (kind.equals("jdk.SafepointBegin")) detail.safepointBegin += overlap;
+                    else if (kind.equals("jdk.SafepointBegin")) {
+                        detail.safepointBegin += overlap;
+                        if (overlap > 0) {
+                            long id = event.getLong("safepointId");
+                            if (id <= 0 || detail.safepointIds.size() >= 1024) throw new IllegalStateException("Invalid safepoint association");
+                            detail.safepointIds.add(id);
+                        }
+                    }
                     else if (kind.equals("jdk.ExecuteVMOperation")) {
                         detail.vm += overlap;
                         if (overlap > 0) {
@@ -108,6 +144,19 @@ class JfrBridgeSlices {
                     else if (event.getThread() != null && event.getThread().getJavaThreadId() == root.thread) {
                         if (kind.equals("jdk.ThreadPark")) detail.park += overlap; else detail.monitor += overlap;
                     }
+                }
+            }
+        }
+        // JFR buffers are not time ordered. Join by ID in a separate pass, including
+        // operation bodies that begin after the selected method has already returned.
+        try (RecordingFile recording = new RecordingFile(path)) {
+            while (recording.hasMoreEvents()) {
+                RecordedEvent event = recording.readEvent();
+                if (!event.getEventType().getName().equals("jdk.ExecuteVMOperation")) continue;
+                for (Detail detail : details) if (detail.safepointIds.contains(event.getLong("safepointId"))) {
+                    String operation = event.getString("operation");
+                    if (!operation.matches("[A-Za-z0-9_]{1,64}")) throw new IllegalStateException("Invalid associated VM operation");
+                    detail.associatedVmOperations.add(operation); detail.associatedVmCallers.add(caller(event));
                 }
             }
         }
@@ -138,7 +187,9 @@ class JfrBridgeSlices {
                 if (!first) System.out.print(','); first = false;
                 System.out.printf(Locale.ROOT, "{\"id\":%d,\"parentId\":%d,\"operation\":\"%s\",\"wallMillis\":%.6f,\"allocatedBytes\":%d}", child.id, child.parent, child.operation, child.wall / 1e6, child.allocation);
             }
-            System.out.println("]}");
+            System.out.printf("],\"safepointIds\":[%s],\"associatedVmOperations\":[%s],\"associatedVmCallers\":[%s]}%n",
+                    detail.safepointIds.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")),
+                    quoted(detail.associatedVmOperations), quoted(detail.associatedVmCallers));
         }
     }
     private static String caller(RecordedEvent event) {

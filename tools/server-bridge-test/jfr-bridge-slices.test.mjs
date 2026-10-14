@@ -17,7 +17,8 @@ function read(mode = 'probe', path = recording) {
 test('real diagnostic recording preserves nested calls, failures and pause overlap', () => {
   const result = read(); assert.equal(result.status, 0, result.stderr || result.error?.message);
   const [totals, ...intervals] = result.stdout.trim().split(/\r?\n/).map(line => JSON.parse(line));
-  assert.equal(totals.calls, 6); assert.equal(intervals.length, 6);
+  assert.equal(totals.calls, 7); assert.equal(intervals.length, 7);
+  assert.equal(totals.groups.find(g => g.operation === 'object').count, 1);
   assert.equal(totals.groups.reduce((n, g) => n + g.failed, 0), 1);
   assert.equal(totals.groups.find(g => g.operation === 'value').count, 2);
   const nested = intervals.find(i => i.operation === 'nested');
@@ -26,6 +27,8 @@ test('real diagnostic recording preserves nested calls, failures and pause overl
   assert(pause.parkOverlapMillis > 0 && pause.gcOverlapMillis > 0);
   assert(pause.parkOverlapMillis <= pause.wallMillis + .1);
   assert(pause.gcOverlapMillis <= pause.wallMillis + .1);
+  assert(pause.safepointIds.length > 0 && pause.associatedVmOperations.length > 0,
+    'Actual full-GC VM operation must join its begin interval by safepoint ID');
   // GC and VM-operation intervals can overlap; they must not be added as disjoint costs.
   assert(totals.groups.every(g => g.count > 0 && g.p95Millis <= g.maxMillis && g.p99Millis <= g.maxMillis));
 });

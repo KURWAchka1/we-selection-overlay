@@ -55,6 +55,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [26.x negative/lifecycle regression](BRIDGE_26X_LIFECYCLE_2026-10-14.md) | Native allowed/denied/absent joins, context renewal, old-token rejection, graceful companion lifecycle and bounded evidence |
 | [Exact native edit faults](BRIDGE_26X_EDIT_FAULTS_2026-10-14.md) | Host-discovered packet prefixes, delayed/late/revoked native transactions, independent canonical bounds/counters and remaining load gates |
 | [Exact concurrent editing](BRIDGE_26X_EDIT_LOAD_2026-10-14.md) | Six fresh 32-actor runs, pinned 26.2 wire helper, 7,200 reconciled ticks, test-fixture corrections and unresolved timing gates |
+| [26.2 edit attribution](BRIDGE_26_2_EDIT_ATTRIBUTION_2026-10-14.md) | Four frozen-world control/diagnostic runs, ten wrapped methods, 4,800 verified ticks, corrected safepoint observation and remaining unassigned intervals |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

@@ -7,14 +7,27 @@ import { verifyEditLoadWindow } from './edit-load-window.mjs';
 import { gestureTuple } from './gesture-tuples.mjs';
 import { javaLoadVersion, javaLoadSha256 } from './java-load-clients.mjs';
 import { channel } from './wire-codec.mjs';
+import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 
 const javaHome = process.argv[2]; assert(javaHome, 'Explicit JDK home required');
 const version = process.argv[3] ?? '1.21.11', tuple = gestureTuple(version);
-const root = resolve(import.meta.dirname, '../..'), directory = join(root, 'build/bridge-edit-load-proof', ...(version === '1.21.11' ? [] : [version]));
+assert(process.argv.length <= 4 || process.argv.length === 5 && process.argv[4] === '--matched-slices');
+const matchedSlices = process.argv[4] === '--matched-slices';
+const root = resolve(import.meta.dirname, '../..'), directory = matchedSlices ? join(root, 'build/bridge-edit-diagnostics', version)
+  : join(root, 'build/bridge-edit-load-proof', ...(version === '1.21.11' ? [] : [version]));
 const output = join(directory, 'edit-load-analysis.json'); if (existsSync(output)) unlinkSync(output);
 const proof = JSON.parse(readFileSync(join(directory, 'edit-load-proof.json')));
 assert.equal(proof.minecraft, version); assert.equal(proof.actors, 32);
 const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
+assert.equal(!!proof.matchedSlices, matchedSlices);
+if (matchedSlices) {
+  assert.equal(proof.repetitions, 4); assert.deepEqual(proof.order, ['control','instrumented','instrumented','control']);
+  assert.match(proof.frozenDigest, /^[0-9a-f]{64}$/);
+  assert.equal(new FrozenFixtureWorld(directory).digest(), proof.frozenDigest);
+  assert.equal(hash(join(directory,'edit-diagnostics.jfc')), proof.hashes.jfrSettings);
+  for (const [key, name] of [['agent','bridge-slice-agent.jar'],['bootstrap','bridge-slice-bootstrap.jar']])
+    assert.equal(hash(join(root, 'tools/bridge-slice-agent/build/libs', name)), proof.hashes[key]);
+}
 assert.equal(hash(join(directory, 'companion.jar')), proof.hashes.companion);
 assert.equal(hash(join(directory, 'plugins/weso-paper-test-fixture.jar')), proof.hashes.fixture);
 assert.equal(hash(join(directory, 'server.jar')), tuple.paperSha256);
@@ -22,7 +35,7 @@ assert.equal(createHash(tuple.worldeditAlgorithm).update(readFileSync(join(direc
 assert.equal(proof.runs.length, proof.repetitions); assert(proof.repetitions >= 1 && proof.repetitions <= 4);
 const results = [];
 function invoke(binary, args) {
-  const p = spawnSync(binary, args, { windowsHide:true, encoding:'utf8', timeout:30000, maxBuffer:4*1024*1024 });
+  const p = spawnSync(binary, args, { windowsHide:true, encoding:'utf8', timeout:120000, maxBuffer:4*1024*1024 });
   assert(!p.error && p.status === 0, p.error?.message ?? p.stderr); return p.stdout;
 }
 for (const [index, run] of proof.runs.entries()) {
@@ -34,6 +47,15 @@ for (const [index, run] of proof.runs.entries()) {
   assert.equal([...serverLog.matchAll(/WESO_FIXTURE_OK edit-audit-end WesoLoad\d\d/g)].length, 8, 'Missing world/undo audits');
   const dispatch = [...serverLog.matchAll(/max wait nanos=(\d+), max slice nanos=(\d+), dispatch tasks=(\d+)/g)].at(-1);
   assert(dispatch, 'Missing raw dispatcher metrics'); assert.equal(Number(dispatch[3]), 0);
+  if (matchedSlices) {
+    assert(serverLog.includes('[spark] Starting background profiler...'));
+    assert(serverLog.includes('built-in Java engine will be used instead.'));
+    assert.equal(run.instrumented, run.round === 2 || run.round === 3);
+    assert.equal(run.frozenDigest, proof.frozenDigest);
+    assert.equal((serverLog.match(/WESO_SLICE_INSTRUMENTED /g) ?? []).length, run.instrumented ? 3 : 0);
+    if (run.instrumented) for (const text of ['BridgeServer methods=3', 'WorldEditOverlayBridgePlugin methods=2', 'WorldEditOverlayBridgePlugin$SelectionHost methods=5'])
+      assert(serverLog.includes(text), 'Exact wrapper plan not loaded');
+  }
   if (version === '26.2') {
     assert.equal(run.transport.implementation, 'MCProtocolLib'); assert.equal(run.transport.version, javaLoadVersion);
     assert.equal(run.transport.protocol, 776);
@@ -79,9 +101,34 @@ for (const [index, run] of proof.runs.entries()) {
     assert(Math.abs(row.paperMillis-windows[row.window].ticks.tickMillis[row.sample])<=0.000001,'JFR and Paper tick disagree');
   }
   const active = run.active, latencies = active.actors.filter(a=>a.role==='editor').flatMap(a=>a.latencies).sort((a,b)=>a-b);
+  let slices;
+  if (run.instrumented) {
+    const readSlices = extra => invoke(join(javaHome,'bin/java.exe'), ['-Xmx256m','-XX:ActiveProcessorCount=2',
+      join(root,'tools/server-bridge-test/JfrBridgeSlices.java'),recording,'edit',...extra]).trim().split(/\r?\n/).map(line=>JSON.parse(line));
+    const [totals, ...intervals] = readSlices([]);
+    const groups = Object.fromEntries(totals.groups.map(group => [group.operation, group]));
+    assert.equal(groups.process.count, run.final.admitted);
+    assert.equal(groups.read.count, run.final.reads);
+    assert.equal(groups.capture.count, run.final.captures);
+    assert.equal(groups.apply.count, run.final.commits);
+    assert.equal(groups.send.count, run.final.replies);
+    const queued = [...serverLog.matchAll(/Queue pending=\d+, peak=\d+, queued=(\d+), expired=(\d+), cancelled=(\d+)/g)].at(-1);
+    assert(queued,'Missing raw ingress counters'); assert.equal(Number(queued[2]),0); assert.equal(Number(queued[3]),0);
+    assert.equal(groups.enqueue.count,Number(queued[1])+run.final.throttled);
+    assert.equal(groups.ingress.count,groups.enqueue.count);
+    assert(Math.abs(totals.coreMaxMillis - Number(dispatch[2])/1e6) < .000001);
+    const phases = windows.map((window,i) => {
+      const [totals, ...intervals] = readSlices([`edit-${run.round}-${['idle','active','recovered'][i]}`,'400']);
+      if (i !== 1) assert.equal(totals.calls,0,'Diagnostic calls occurred in a quiet measured window');
+      return {phase:['idle','active','recovered'][i],totals,intervals};
+    });
+    slices = {totals,intervals,phases};
+  }
   results.push({ round:run.round, markers:1200, recordedDataLoss:0,
+    ...(matchedSlices ? {instrumented:run.instrumented,slices} : {}),
     applied:active.after.applied-active.before.applied, latencyP95:latencies[Math.ceil(latencies.length*.95)-1], latencyMax:latencies.at(-1),
     dispatcherMaxWaitNanos:Number(dispatch[1]), dispatcherMaxSliceNanos:Number(dispatch[2]), outliers:rows });
 }
-writeFileSync(output,JSON.stringify({checkedAt:new Date().toISOString(),minecraft:version,hashes:proof.hashes,results},null,2));
+writeFileSync(output,JSON.stringify({checkedAt:new Date().toISOString(),minecraft:version,hashes:proof.hashes,
+  ...(matchedSlices ? {matchedSlices,frozenDigest:proof.frozenDigest,order:proof.order} : {}),results},null,2));
 console.log(`EDIT LOAD ANALYSIS PASS: ${results.length*1200} matched JFR ticks, exact raw summaries, no recorded data loss`);

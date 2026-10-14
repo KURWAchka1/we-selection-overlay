@@ -38,6 +38,14 @@ does not replace the busy-server release gate or explain the earlier long tick.
 
 ## Implemented Boundary
 
+The [2026-10-14 Paper 26.2 attribution cycle](BRIDGE_26_2_EDIT_ATTRIBUTION_2026-10-14.md)
+adds four frozen-world control/instrumented launches and reconciles 2,483 applies,
+4,800 ticks and ten method counters without changing production artifacts.
+It corrects omitted safepoint-begin observation in the previous 60.4271 ms tick
+and separates active calls from cold setup. A modern-layout test snapshot defect
+is retained/fixed. The 14.7746 ms read and soft-budget overshoot remain open;
+matched instrumentation evidence is not a release cost baseline.
+
 The [2026-10-14 exact concurrent edit-load cycle](BRIDGE_26X_EDIT_LOAD_2026-10-14.md)
 adds two fresh 32-actor runs on each 26.x host and repeats legacy. All 3,704
 sustained commits, stale/foreign/replayed/revoked transactions, non-consumer

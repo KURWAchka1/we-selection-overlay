@@ -88,6 +88,18 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [26.2 edit-attribution cycle](BRIDGE_26_2_EDIT_ATTRIBUTION_2026-10-14.md)
+passes four frozen-world control/instrumented JVM runs, 2,483 applies and 4,800
+raw/JFR ticks without production changes. Lifetime method/counter reconciliation
+and active phase separation pass. The corrected historical reader finds 55.0482
+ms of safepoint-begin overlap in the old 60.4271 ms tick; it does not establish
+the missing thresholded caller/operation. New short VM-operation records and
+safepoint-ID joins identify observer associations, not the cause of all delay.
+A 14.7746 ms read remains mostly unexplained, and instrumented drains exceed
+the soft budget. Modern-world snapshot preparation is corrected with negative
+tests and retained failure evidence. Production cost, arbitrary faults and
+native/moving workload acceptance remain open.
+
 The [exact concurrent edit-load cycle](BRIDGE_26X_EDIT_LOAD_2026-10-14.md) passes
 six fresh 32-actor server runs on 1.21.11, 26.1.2 and 26.2. Ordinary progress,
 admission pressure, own-player canonical state, stale/foreign/replay/revocation,

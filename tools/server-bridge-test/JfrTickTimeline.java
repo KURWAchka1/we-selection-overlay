@@ -32,7 +32,8 @@ class JfrTickTimeline {
         final int window;
         final Tick tick;
         final Instant inferredStart;
-        long gcPause, vmOperation, ownerMonitor, ownerPark, ownerSamples, bridgeSamples;
+        long gcPause, vmOperation, safepointBegin, ownerMonitor, ownerPark, ownerSamples, bridgeSamples;
+        long drainCount, drainOverlap, drainMax;
         Outlier(int window, Tick tick) {
             this.window = window; this.tick = tick;
             inferredStart = tick.end.minusNanos(Math.round(tick.paperMillis * 1_000_000.0));
@@ -80,8 +81,8 @@ class JfrTickTimeline {
             while (file.hasMoreEvents()) {
                 RecordedEvent event = file.readEvent();
                 String type = event.getEventType().getName();
-                if (!List.of("jdk.GCPhasePause", "jdk.ExecuteVMOperation", "jdk.JavaMonitorEnter",
-                        "jdk.ThreadPark", "jdk.ExecutionSample").contains(type)) continue;
+                if (!List.of("jdk.GCPhasePause", "jdk.ExecuteVMOperation", "jdk.SafepointBegin", "jdk.JavaMonitorEnter",
+                        "jdk.ThreadPark", "jdk.ExecutionSample", "weso.diagnostic.Call").contains(type)) continue;
                 for (Outlier o : outliers) {
                     if (type.equals("jdk.ExecutionSample")) {
                         if (event.getStartTime().isBefore(o.inferredStart) || !event.getStartTime().isBefore(o.tick.end)) continue;
@@ -101,10 +102,16 @@ class JfrTickTimeline {
                     long overlap = Duration.between(start, end).toNanos();
                     if (type.equals("jdk.GCPhasePause")) o.gcPause += overlap;
                     else if (type.equals("jdk.ExecuteVMOperation")) o.vmOperation += overlap;
+                    else if (type.equals("jdk.SafepointBegin")) o.safepointBegin += overlap;
                     else {
                         RecordedThread thread = event.getThread();
                         if (thread == null || !"Server thread".equals(thread.getJavaName())) continue;
-                        if (type.equals("jdk.JavaMonitorEnter")) o.ownerMonitor += overlap; else o.ownerPark += overlap;
+                        if (type.equals("weso.diagnostic.Call")) {
+                            if (event.getString("operation").equals("drain")) {
+                                o.drainCount++; o.drainOverlap += overlap;
+                                o.drainMax = Math.max(o.drainMax, event.getLong("wallNanos"));
+                            }
+                        } else if (type.equals("jdk.JavaMonitorEnter")) o.ownerMonitor += overlap; else o.ownerPark += overlap;
                     }
                 }
             }
@@ -117,11 +124,13 @@ class JfrTickTimeline {
                     + "\"endEpochSecond\":%d,\"endNano\":%d,\"paperMillis\":%.6f,\"bracketMillis\":%.6f,"
                     + "\"paperMinusBracketMillis\":%.6f,\"bracketCpuMillis\":%.6f,\"bracketAllocatedBytes\":%d,"
                     + "\"inferredGcPauseMillis\":%.6f,\"inferredVmOperationMillis\":%.6f,"
+                    + "\"inferredSafepointBeginMillis\":%.6f,\"inferredDrainCount\":%d,\"inferredDrainOverlapMillis\":%.6f,\"inferredDrainMaxMillis\":%.6f,"
                     + "\"inferredOwnerMonitorMillis\":%.6f,\"inferredOwnerParkMillis\":%.6f,"
                     + "\"inferredOwnerSamples\":%d,\"inferredBridgeSamples\":%d,\"phaseWallEndSkewMillis\":%.6f}%n",
                     o.window, windows[o.window].ticks.size(), t.sample, t.number, t.end.getEpochSecond(), t.end.getNano(),
                     t.paperMillis, bracket, t.paperMillis - bracket, t.bracketCpu / 1_000_000.0, t.bracketAllocation,
                     o.gcPause / 1_000_000.0, o.vmOperation / 1_000_000.0,
+                    o.safepointBegin / 1_000_000.0, o.drainCount, o.drainOverlap / 1_000_000.0, o.drainMax / 1_000_000.0,
                     o.ownerMonitor / 1_000_000.0, o.ownerPark / 1_000_000.0, o.ownerSamples, o.bridgeSamples,
                     Duration.between(windows[o.window].end, windows[o.window].ticks.stream()
                             .map(Tick::end).max(Comparator.naturalOrder()).orElseThrow()).toNanos() / 1_000_000.0);

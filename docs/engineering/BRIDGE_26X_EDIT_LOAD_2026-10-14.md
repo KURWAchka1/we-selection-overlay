@@ -76,6 +76,16 @@ other runs 355.16..415.51 ms. Neither maintained progress nor the smaller second
 run is production cost acceptance. Different client libraries also prevent
 claiming that one Minecraft version is inherently faster than another here.
 
+Follow-up reanalysis on the same date corrected a missing event category in the
+tick reader: four recorded `SafepointBegin` intervals, IDs **4619..4622**, overlap
+the first run's 60.4271 ms tick for a total **55.0482 ms**. The original statement
+about no recorded GC/VM-body/monitor/park overlap remains limited to those
+categories, not all JVM synchronization. This narrows the observation but does
+not establish the synchronization trigger or slow-rendezvous cause. The original
+default JFR thresholds omit VM-operation bodies below 10 ms. The old analysis
+is retained separately; raw recordings and ticks are unchanged. See
+[S59](SOURCES.md#s59-edit-method-and-safepoint-attribution).
+
 ## Evidence And Harness Changes
 
 The supervisor/launcher/analyzer now select the three checksum-pinned exact

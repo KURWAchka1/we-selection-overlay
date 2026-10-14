@@ -24,7 +24,10 @@ public final class SliceAgent {
             PAPER, Map.of("sendReply(Ljava/util/UUID;[B)V", "send",
                     "onPluginMessageReceived(Ljava/lang/String;Lorg/bukkit/entity/Player;[B)V", "ingress"),
             PAPER + "$SelectionHost", Map.of("mayReadSelection(Ljava/util/UUID;)Z", "permission",
-                    "readSelection(Ljava/util/UUID;)L" + PREFIX + "protocol/BridgeMessage$SelectionState;", "read"));
+                    "readSelection(Ljava/util/UUID;)L" + PREFIX + "protocol/BridgeMessage$SelectionState;", "read",
+                    "mayEditSelection(Ljava/util/UUID;)Z", "editPermission",
+                    "captureEdit(Ljava/util/UUID;)L" + CORE + "$EditCapture;", "capture",
+                    "applyEdit(Ljava/util/UUID;Ljava/lang/Object;L" + PREFIX + "protocol/BridgeMessage$Bounds;)L" + CORE + "$EditOutcome;", "apply"));
 
     public static void premain(String arguments, Instrumentation instrumentation) {
         if (!Boolean.getBoolean("weso.bridge.fixture") || !Boolean.getBoolean("weso.bridge.sliceDiagnostics"))

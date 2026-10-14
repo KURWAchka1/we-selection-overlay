@@ -14,13 +14,18 @@ import { observeOwnedServer } from './owned-server.mjs';
 import { verifyEditLoadWindow } from './edit-load-window.mjs';
 import { gestureTuple } from './gesture-tuples.mjs';
 import { startJavaLoadClients } from './java-load-clients.mjs';
+import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 
-const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode, version = '1.21.11'] = process.argv.slice(2);
+const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode, version = '1.21.11', ...options] = process.argv.slice(2);
+assert(options.length <= 1 && options.every(option => option === '--matched-slices'));
+const matchedSlices = options.includes('--matched-slices');
 const tuple = gestureTuple(version);
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory), repetitions = Number(repeatArgument);
-assert.equal(relative(root, serverDir), join('build', 'bridge-edit-load-proof', ...(version === '1.21.11' ? [] : [version])));
+assert.equal(relative(root, serverDir), matchedSlices ? join('build', 'bridge-edit-diagnostics', version)
+  : join('build', 'bridge-edit-load-proof', ...(version === '1.21.11' ? [] : [version])));
 assert.equal(Number(playerArgument), 32); assert.equal(Number(sampleArgument), 400);
 assert(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 4);
+if (matchedSlices) assert.equal(repetitions, 4);
 const properties = readFileSync(join(serverDir, 'server.properties'), 'utf8');
 for (const line of ['server-ip=127.0.0.1', 'server-port=25579', 'online-mode=false', 'max-players=32']) assert(properties.split(/\r?\n/).includes(line));
 assert.match(readFileSync(join(serverDir, 'eula.txt'), 'utf8'), /^eula=true\s*$/);
@@ -30,6 +35,22 @@ if (minecraft) assert.equal(require('minecraft-protocol/package.json').version, 
 const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
 const hashes = { paper: hash(join(serverDir, 'server.jar')), worldedit: hash(join(serverDir, 'plugins/worldedit.jar')),
   companion: hash(join(serverDir, 'companion.jar')), fixture: hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar')) };
+const agent = join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-agent.jar');
+const recordingSettings = matchedSlices ? join(serverDir, 'edit-diagnostics.jfc') : 'default';
+if (matchedSlices) {
+  hashes.agent = hash(agent);
+  hashes.bootstrap = hash(join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-bootstrap.jar'));
+  assert(!existsSync(join(serverDir, 'edit-load-proof.json')), 'Archive a previous diagnostic cycle before rerunning');
+  for (const file of ['edit-load-failure.json','edit-0.log','edit-1.log'])
+    assert(!existsSync(join(serverDir,file)), 'Archive previous diagnostic attempts before rerunning');
+  const configured = spawnSync(join(javaHome,'bin/jfr.exe'), ['configure','--input','default','--output',recordingSettings,
+    'jdk.ExecuteVMOperation#enabled=true','jdk.ExecuteVMOperation#threshold=0ms',
+    'jdk.SafepointBegin#enabled=true','jdk.SafepointBegin#threshold=0ms'], {windowsHide:true,encoding:'utf8',timeout:30000});
+  assert.equal(configured.status,0,configured.stderr || configured.error?.message);
+  hashes.jfrSettings = hash(recordingSettings);
+}
+const frozen = matchedSlices ? new FrozenFixtureWorld(serverDir) : null;
+let frozenDigest;
 assert.equal(hashes.paper, tuple.paperSha256);
 assert.equal(createHash(tuple.worldeditAlgorithm).update(readFileSync(join(serverDir, 'plugins/worldedit.jar'))).digest('hex'), tuple.worldeditHash);
 const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, windowsHide: true, encoding: 'utf8' });
@@ -133,14 +154,17 @@ async function run(round) {
   copyFileSync(join(serverDir, 'companion.jar'), join(serverDir, 'plugins/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar'));
   const config = join(serverDir, 'plugins/WorldEditSelectionOverlayBridge'); mkdirSync(config, { recursive: true });
   writeFileSync(join(config, 'config.yml'), 'limits:\n  max-connections: 1024\n  global-requests-per-second: 100\n  global-burst: 100\n  player-requests-per-second: 4\n  player-burst: 8\n');
+  const instrumented = matchedSlices && (round === 2 || round === 3);
   const child = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-XX:ActiveProcessorCount=2', '-Dweso.bridge.fixture=true', '-Dweso.bridge.editFixture=true', '-Dweso.bridge.measureTicks=400',
-    `-XX:StartFlightRecording=filename=edit-${round}.jfr,settings=default,dumponexit=true,maxsize=32m`, '-jar', 'server.jar', '--nogui'], { cwd: serverDir, windowsHide: true, stdio: ['pipe','pipe','pipe'] });
+    ...(instrumented ? ['-Dweso.bridge.sliceDiagnostics=true', `-javaagent:${agent}`] : []),
+    `-XX:StartFlightRecording=filename=edit-${round}.jfr,settings=${recordingSettings},dumponexit=true,maxsize=32m`, '-jar', 'server.jar', '--nogui'], { cwd: serverDir, windowsHide: true, stdio: ['pipe','pipe','pipe'] });
   server = captureProcess(child, join(serverDir, `edit-${round}.log`)); server.lifecycle = observeOwnedServer(child);
   if (child.pid) setPriority(child.pid, constants.priority.PRIORITY_BELOW_NORMAL);
   try {
     await waitFor(() => server.lines.some(s => /Done \(/.test(s)), 'Paper startup', 180000);
     assert(!server.lines.some(s => /Error occurred while enabling/.test(s)));
     assert(!server.lines.some(s => s.includes('[WorldEditSelectionOverlayBridge]') && /Disabling|ERROR/.test(s)), 'Bridge failed closed at startup');
+    if (round === 0) { await action('control', 'baseline'); return; }
     if (version === '26.2') {
       transport = startJavaLoadClients(javaHome, join(serverDir, `edit-${round}-clients.log`));
       await waitFor(() => transport.ready, 'exact 26.2 load codec', 15000);
@@ -170,7 +194,7 @@ async function run(round) {
     }
     await waitFor(() => peers.every(p => p.ended), 'all disconnects'); await delay(250);
     const final = await metrics(); assert.equal(final.connections, 0); assert.equal(final.pending, 0); assert.equal(final.tasks, 0);
-    const result = { round, transport: transport.evidence, idle, active, recovered, final, staleConflict: true, foreignConflict: true, duplicateAppliedOnce: true, revokedDenied: true };
+    const result = { round, ...(matchedSlices ? {instrumented, frozenDigest} : {}), transport: transport.evidence, idle, active, recovered, final, staleConflict: true, foreignConflict: true, duplicateAppliedOnce: true, revokedDenied: true };
     writeFileSync(join(serverDir, `edit-${round}-result.json`), JSON.stringify(result, null, 2));
     console.log(`EDIT LOAD PASS: run ${round}, ${active.after.applied-active.before.applied} commits, 32 actors`); return result;
   } finally {
@@ -184,8 +208,17 @@ async function run(round) {
   }
 }
 try {
-  for (let round=1; round<=repetitions; round++) runs.push(await run(round));
+  if (frozen) {
+    if (!frozen.exists()) { await run(0); frozen.capture(); }
+    frozenDigest = frozen.digest();
+  }
+  for (let round=1; round<=repetitions; round++) {
+    if (frozen) assert.equal(frozen.restore(), frozenDigest);
+    runs.push(await run(round));
+  }
   assert.equal(hash(join(serverDir, 'companion.jar')), hashes.companion);
-  writeFileSync(proof, JSON.stringify({ checkedAt:new Date().toISOString(), baseline, minecraft:version, hashes, actors:32, repetitions, runs }, null, 2));
+  writeFileSync(proof, JSON.stringify({ checkedAt:new Date().toISOString(), baseline, minecraft:version, hashes, actors:32, repetitions,
+    ...(matchedSlices ? {matchedSlices, frozenDigest, order:['control','instrumented','instrumented','control'],
+      profiler:'Paper default spark + JFR default with zero-threshold ExecuteVMOperation/SafepointBegin'} : {}), runs }, null, 2));
   console.log('PAPER EDIT LOAD PROOF PASS; owned servers stopped');
 } catch (error) { writeFileSync(failure, JSON.stringify({ checkedAt:new Date().toISOString(), hashes, error:String(error), runs }, null, 2)); console.error(error); process.exitCode=1; }

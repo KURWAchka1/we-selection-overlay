@@ -14,10 +14,15 @@ function fixture(t, name = 'bridge-baseline-proof') {
     rmSync(path, { recursive: true, force: true });
   });
   const directory = join(scratch, name);
-  for (const name of ['bridge-fixture', 'bridge-fixture_nether', 'bridge-fixture_the_end']) {
+  const modern = ['bridge-edit-diagnostics/26.2','bridge-edit-diagnostics/26.1.2'].includes(name);
+  for (const name of modern ? ['bridge-fixture'] : ['bridge-fixture', 'bridge-fixture_nether', 'bridge-fixture_the_end']) {
     mkdirSync(join(directory, name, 'region'), { recursive: true });
     writeFileSync(join(directory, name, 'level.dat'), name);
     writeFileSync(join(directory, name, 'region/r.0.0.mca'), 'original region');
+  }
+  if (modern) for (const dimension of ['overworld','the_nether','the_end']) {
+    const path = join(directory,'bridge-fixture/dimensions/minecraft',dimension,'region');
+    mkdirSync(path,{recursive:true}); writeFileSync(join(path,'r.0.0.mca'),dimension);
   }
   return { directory, frozen: new FrozenFixtureWorld(directory) };
 }
@@ -69,6 +74,41 @@ test('existing snapshots and paths outside intended build fixture are rejected',
   assert.throws(() => frozen.capture(), /Never overwrite/);
   assert.throws(() => new FrozenFixtureWorld(resolve(build, '../bridge-baseline-proof')));
   assert.throws(() => new FrozenFixtureWorld(resolve(directory, '..')));
+});
+
+test('exact-version edit diagnostics restore bytes and reject arbitrary version directories', t => {
+  const { directory, frozen } = fixture(t, 'bridge-edit-diagnostics/26.2');
+  const digest = frozen.capture();
+  writeFileSync(join(directory, 'bridge-fixture/level.dat'), 'edited');
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/the_nether/region/r.0.0.mca'),'changed nether');
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/the_end/region/r.0.0.mca'),'changed end');
+  assert.equal(frozen.restore(), digest);
+  for (const dimension of ['overworld','the_nether','the_end'])
+    assert.equal(readFileSync(join(directory,'bridge-fixture/dimensions/minecraft',dimension,'region/r.0.0.mca'),'utf8'),dimension);
+  for (const name of ['26.3', 'latest', '26.1', 'minecraft'])
+    assert.throws(() => new FrozenFixtureWorld(resolve(directory, '..', name)), /Not a named/);
+});
+
+test('modern snapshot layout cannot be substituted', t => {
+  const { directory, frozen } = fixture(t,'bridge-edit-diagnostics/26.1.2'); frozen.capture();
+  const file = join(directory,'frozen-world/manifest.json'), manifest = JSON.parse(readFileSync(file));
+  delete manifest.layout; writeFileSync(file,JSON.stringify(manifest));
+  assert.throws(()=>frozen.restore(),/Snapshot layout differs/);
+  assert.equal(readFileSync(join(directory,'bridge-fixture/level.dat'),'utf8'),'bridge-fixture');
+});
+test('a missing modern snapshot dimension fails before live worlds are touched', t => {
+  const { directory, frozen } = fixture(t,'bridge-edit-diagnostics/26.2'); frozen.capture();
+  const target = resolve(directory,'frozen-world/bridge-fixture/dimensions/minecraft/the_end');
+  assert.equal(relative(directory,target),join('frozen-world/bridge-fixture/dimensions/minecraft/the_end'));
+  rmSync(target,{recursive:true});
+  assert.throws(()=>frozen.restore(),/ENOENT/);
+  assert.equal(readFileSync(join(directory,'bridge-fixture/level.dat'),'utf8'),'bridge-fixture');
+});
+test('mutable helper properties cannot redirect a recursive restore outside named worlds', t => {
+  const { directory, frozen } = fixture(t,'bridge-edit-diagnostics/26.2'); frozen.capture();
+  frozen.worlds = ['..'];
+  assert.throws(()=>frozen.restore(),/Invalid fixture world targets/);
+  assert.equal(readFileSync(join(directory,'bridge-fixture/level.dat'),'utf8'),'bridge-fixture');
 });
 test('junction inside a target refuses recursive restore before deletion', t => {
   const { directory, frozen } = fixture(t); frozen.capture();
