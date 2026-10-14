@@ -760,6 +760,44 @@ three exact versions only, the fixture JVM flag, loopback IP and fixture ports.
 This exception is not permission to add Minecraft internals to production code
 or a claim about untested server builds. No injector classes ship to users.
 
+## S57 Exact Native Fault Packet Discovery
+
+Checked **2026-10-14**. [Paper plugin messaging](https://docs.papermc.io/paper/dev/plugin-messaging/)
+uses the player's Minecraft packet stream; channel names do not identify packet
+numbers across versions. The [PrismarineJS protocol implementation](https://github.com/PrismarineJS/node-minecraft-protocol)
+and the pinned local **minecraft-protocol 1.68.0** advertise 26.1 but not 26.2.
+The actual cached `minecraft-data` lookup returns 26.1 data for 26.1.2 and no
+data for 26.2. We do not upgrade or alias this dependency to invent coverage.
+
+Resolved Mojang/NeoForge source JARs **26.1.2.75 / 26.2.0.67** expose
+`GameProtocols.SERVERBOUND_TEMPLATE/CLIENTBOUND_TEMPLATE` and
+`ProtocolInfo.DetailsProvider.details().listPackets(PacketVisitor)`. The visitor
+reports each registered `PacketType` and its network ID from the codec order;
+`CommonPacketTypes.*_CUSTOM_PAYLOAD` identifies the desired entries. `FriendlyByteBuf`
+encodes the VarInt packet ID and UTF channel identifier. `javap` of the exact
+Paper JARs verifies these reflective signatures; actual native interception,
+not source similarity, is required to validate the complete packet prefix.
+Source-JAR SHA256: `299322cea45afd74dc0eb65afc826f7e828a0a32121639080ff908de401c2c1a`
+and `73a39ae9ee8c0497efe797e35c05827c839cf3c83092e6ead9a5caf723aefa85`.
+
+Our test-only [PacketPrefixes](../../server-bridge/paper-test-fixture/src/main/java/org/marshal/weaddon_lightposition/bridge/fixture/PacketPrefixes.java)
+reads those public members of internal Minecraft classes in the owned server
+JVM. It requires explicit fixture/fault flags, offline mode, loopback port 25580
+and one of the three exact approved versions. It frees its temporary Netty
+buffer and fails closed on missing/duplicate entries or API mismatch. The Node
+supervisor verifies the reported host, canonical VarInt and exact channel
+encoding before arming the existing bounded relay. No packet IDs are hardcoded
+or inferred from a neighbouring release. This is an explicit **test-fixture
+exception**, not a production Paper API or an arbitrary-proxy compatibility claim.
+No Minecraft internals, reflection or extra dependencies enter the companion.
+
+The independent [fault evidence validator](../../tools/server-bridge-test/native-fault-evidence.mjs)
+requires complete unique loader/scenario coverage, ordered phases, pending-state
+observation, exact capture/apply/relay counts, server WorldEdit bounds, world/undo
+audit, pre-delivery revocation and empty final queues. Eight positive/negative
+self-tests cover corrupted evidence and malformed prefixes. They validate the
+test harness, not native compatibility without running its real clients.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

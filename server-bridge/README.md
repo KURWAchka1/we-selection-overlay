@@ -58,7 +58,7 @@ From the repository root, with JDK 21 and 25 installed:
 ```
 
 Use `-Offline` only after dependencies are cached. Node.js is required for the
-74 harness self-tests (owned-process shutdown, frozen-world safety, exact tuples, native lifecycle evidence, wire
+82 harness self-tests (owned-process shutdown, frozen-world safety, exact tuples, native lifecycle/fault evidence, wire
 helpers, mixed-workload and active-lifecycle validation); they run without Minecraft windows or third-party Node packages.
 The script also runs unit/domain tests on both JVMs, builds the Paper JAR and checks the actual native payload codecs
 on all six runtimes. It does **not** launch Minecraft, create windows, capture
@@ -167,9 +167,22 @@ These matrices pass both loaders and write separate versioned evidence under
 `build/bridge-native-proof/<version>/`. They cover actual respawn/world/reconnect,
 explicit channel changes, graceful companion stop/re-enable and old-context edit
 rejection without new requests. See [executed scope and limits](../docs/engineering/BRIDGE_26X_LIFECYCLE_2026-10-14.md).
-The 26.x launcher still rejects `-EditFaults`; network-delay and load evidence is
-not inherited from 1.21.11. Same-JVM re-enable does not restore editing after the
-plugin classloader closes; install/update through a full server restart.
+For the separate native delayed-request, late-acknowledgment and pre-delivery
+permission-revocation suite, select `-EditFaults` on either exact 26.x host:
+
+```powershell
+.\tools\test-native-paper-bridge.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Minecraft 26.1.2 -ModVersion 1.8.0-bridge-dev -EditFaults -AcceptEula
+.\tools\test-native-paper-bridge.ps1 -Java21 'C:\path\to\jdk-21' -Java25 'C:\path\to\jdk-25' -Minecraft 26.2 -ModVersion 1.8.0-bridge-dev -EditFaults -AcceptEula
+```
+
+Each tuple has six native fault cases and separate evidence under
+`build/bridge-native-fault-proof/<version>/`. The separate test fixture discovers
+PLAY packet prefixes from the actual pinned Paper registry; it does not borrow
+another version's protocol table. No third-party Node protocol package is needed
+for this native fault mode. See [executed results and remaining gates](../docs/engineering/BRIDGE_26X_EDIT_FAULTS_2026-10-14.md).
+Concurrent-load and performance evidence is not inherited from 1.21.11.
+Same-JVM re-enable does not restore editing after the plugin classloader closes;
+install/update through a full server restart.
 
 The extended wire fixture also exercises actual same-world death/respawn,
 same-process reconnect, bridge channel unregister/register and WorldEdit disable.

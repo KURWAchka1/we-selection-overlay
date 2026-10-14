@@ -1,7 +1,7 @@
 # Server Bridge Verification Gates
 
 Status: **release gates, with partial foundation evidence**.
-Updated: 2026-10-13. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
+Updated: 2026-10-14. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
 contains Java 21/25 tests, six native-codec checks and a real Paper wire proof.
 Headless protocol clients are not Fabric/NeoForge gameplay clients. A subsequent
 [six-client native Paper 1.21.11 matrix](NATIVE_PAPER_REGRESSION_2026-10-11.md)
@@ -87,6 +87,16 @@ This bounded foundation evidence permits the next isolated development stage,
 not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
+
+The [exact native edit-fault cycle](BRIDGE_26X_EDIT_FAULTS_2026-10-14.md) separately
+records 400 ms one-way delay, an applied acknowledgment retained past timeout
+and edit permission revoked before commit delivery. Only completed exact tuples
+in its execution table are passed. Actual native pending/UNKNOWN/denied states,
+intercepted request/reply counts, independent WorldEdit bounds, world/undo audit
+and final cleanup must agree. Runtime/launcher and packet discovery changes are
+test-only; production JARs and protocol remain unchanged. These bounded cases
+do not establish concurrent 26.x load, arbitrary TCP/proxy/backend faults,
+ungraceful dependency loss or production cost acceptance.
 
 The [26.x negative/lifecycle cycle](BRIDGE_26X_LIFECYCLE_2026-10-14.md) passes
 twelve real allowed/denied/absent game runs on the exact 26.1.2/26.2 hosts.

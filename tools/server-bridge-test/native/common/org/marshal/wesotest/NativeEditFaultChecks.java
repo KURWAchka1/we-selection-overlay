@@ -29,7 +29,7 @@ public final class NativeEditFaultChecks {
             }
             if (!adapter.joined()) return;
             if (overlay == null) { overlay = adapter.overlay(); if (overlay == null) return; }
-            if (editor == null) editor = Class.forName("org.marshal.weaddon_lightposition.runtime.mc1_21_11.client.selection.SelectionEditController").getMethod("instance").invoke(null);
+            if (editor == null) editor = NativeBridgeChecks.runtimeClass("client.selection.SelectionEditController").getMethod("instance").invoke(null);
             editor.getClass().getMethod("configure", boolean.class, int.class, int.class).invoke(editor, enabled, 1, 8);
             if (enabled) adapter.focusForEditing(true);
             if (stage == 0) {

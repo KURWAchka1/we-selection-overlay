@@ -11,7 +11,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if (!$AcceptEula) { throw 'Owner acceptance of https://www.minecraft.net/eula is required' }
 if ($EditFaults -and $EditGestures) { throw 'Choose one isolated edit proof mode' }
-if ($Minecraft -ne '1.21.11' -and ($EditFaults -or !$Java25)) { throw '26.x proof requires Java25; edit-fault mode is not ported yet' }
+if ($Minecraft -ne '1.21.11' -and !$Java25) { throw '26.x proof requires Java25' }
 . (Join-Path $PSScriptRoot 'test-desktop.ps1')
 if (!$DesktopWorker) {
     & (Join-Path $PSScriptRoot 'test-desktop/probe-cursor.ps1') -Java21 $Java21
@@ -58,8 +58,7 @@ try {
     'eula=true' | Set-Content -LiteralPath (Join-Path $server 'eula.txt') -Encoding ASCII
     $proof = if ($EditFaults) { 'native-edit-fault-proof.mjs' } elseif ($EditGestures) { 'native-edit-gesture-proof.mjs' } else { 'native-paper-proof.mjs' }
     $serverJava = if ($Minecraft -eq '1.21.11') { $Java21 } else { $Java25 }
-    $arguments = @($serverJava, $server, $ModVersion, (Get-Process -Id $PID).Path)
-    if (!$EditFaults) { $arguments += $Minecraft }
+    $arguments = @($serverJava, $server, $ModVersion, (Get-Process -Id $PID).Path, $Minecraft)
     & node (Join-Path $PSScriptRoot "server-bridge-test/$proof") @arguments
     if ($LASTEXITCODE -ne 0) { throw "Native Paper proof failed; see $server" }
 } finally { Pop-Location; $env:JAVA_HOME = $previousJava }

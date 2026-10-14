@@ -4,13 +4,16 @@ Status: **long-term design, not a frozen wire specification**. A bounded,
 metadata transport foundation and narrow Paper cuboid editing are implemented.
 Development consumers cover all six adapters; the exact 26.1.2 and 26.2 host
 [gesture checks](BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) and later
-[negative/lifecycle checks](BRIDGE_26X_LIFECYCLE_2026-10-14.md) do not establish
-broader version/network-fault/performance support. Streaming/simulation, other server hosts
+[negative/lifecycle checks](BRIDGE_26X_LIFECYCLE_2026-10-14.md) are supplemented by
+the [exact native fault suite](BRIDGE_26X_EDIT_FAULTS_2026-10-14.md).
+Only its completed rows establish the named delay/late-ack/revocation cases,
+not broader version/network-fault/performance support. Streaming/simulation, other server hosts
 and broader editing remain proposals.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).
-Research date: 2026-10-11. Start with the [knowledge base](JAVA_MINECRAFT_KNOWLEDGE_BASE.md).
+Research date: 2026-10-11; exact fault research updated 2026-10-14 in [S57](SOURCES.md#s57-exact-native-fault-packet-discovery).
+Start with the [knowledge base](JAVA_MINECRAFT_KNOWLEDGE_BASE.md).
 
 ## Product Boundary
 

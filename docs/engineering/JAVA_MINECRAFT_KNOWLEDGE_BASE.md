@@ -20,7 +20,9 @@ exact Paper/WorldEdit pairs: 26.1.2/7.4.3 and 26.2/7.4.5. It does not extend the
 1.21.11 fault/load evidence to those hosts. The later
 [26.x negative/lifecycle matrix](BRIDGE_26X_LIFECYCLE_2026-10-14.md) passes the
 named denied/absent, respawn/world/reconnect and graceful-stop/re-enable scenarios;
-ungraceful loss, network-delay and load gates remain separate. Clipboard
+the separate [exact native fault cycle](BRIDGE_26X_EDIT_FAULTS_2026-10-14.md)
+records delayed requests, late acknowledgments and pre-delivery edit revocation
+on each completed exact tuple. Ungraceful loss and load gates remain separate. Clipboard
 synchronization, command simulation and other dedicated hosts remain unimplemented.
 Published client 1.8.0 is unchanged and has no bridge protocol support.
 Existing CUI-only servers must keep working without installing a companion.
@@ -48,6 +50,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [Native remote gestures](BRIDGE_NATIVE_GESTURES_2026-10-13.md) | Real callback/hit-test coverage, all faces/corners, cancellation, radial XYZ Move, server authority and native screenshots |
 | [26.x remote editing](BRIDGE_26X_REMOTE_EDITING_2026-10-13.md) | Exact host tuples, four native connections, shared remote source, screenshots and remaining cross-version gates |
 | [26.x negative/lifecycle regression](BRIDGE_26X_LIFECYCLE_2026-10-14.md) | Native allowed/denied/absent joins, context renewal, old-token rejection, graceful companion lifecycle and bounded evidence |
+| [Exact native edit faults](BRIDGE_26X_EDIT_FAULTS_2026-10-14.md) | Host-discovered packet prefixes, delayed/late/revoked native transactions, independent canonical bounds/counters and remaining load gates |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

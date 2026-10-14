@@ -68,6 +68,14 @@ The initial test-injector guard failure is retained and corrected after exact
 server-class inspection. Production client/companion artifacts are unchanged;
 network-delay, ungraceful loss and load evidence are not widened by implication.
 
+The subsequent [exact native edit-fault cycle](BRIDGE_26X_EDIT_FAULTS_2026-10-14.md)
+explicitly tests delayed traffic, acknowledgment after timeout and edit grant
+revoked before commit delivery on the completed exact hosts in its table. The
+test fixture discovers packet prefixes from each running Paper registry instead
+of guessing protocol IDs; native results reconcile with canonical WorldEdit
+bounds, counters and world/undo audit. No production change is required in these
+reproduced cases. Concurrent 26.x load and production cost acceptance remain open.
+
 The [server lifecycle and harness audit](BRIDGE_SERVER_LIFECYCLE_2026-10-12.md)
 adds an enabled-WorldEdit startup guard after a real failing fixture, 14 wire
 check groups including three plugin cycles, and 16 automated Node harness tests.

@@ -44,6 +44,7 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(queuedFaults, this);
         measurements = new FixtureMeasurements(this, gameplay);
         getServer().getPluginManager().registerEvents(measurements, this);
+        if (Boolean.getBoolean("weso.bridge.faultFixture")) PacketPrefixes.report();
     }
 
     @Override public void onDisable() {
