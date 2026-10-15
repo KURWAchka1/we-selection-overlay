@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateLoadWindow } from './load-window.mjs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join, relative, resolve, sep } from 'node:path';
+import { recordLoadWindow, validateLoadWindow } from './load-window.mjs';
 import { bridgeConsumerCount, movement } from './gameplay-workload.mjs';
 
 const options = { players: 4, samples: 100, installed: true, baselineOnly: false, gameplay: true, bridgePlayers: 3 };
@@ -64,4 +66,27 @@ test('ordinary players never become consumers and active consumers keep their pr
     d => d.ordinaryReplyLatencies.maxMillis = 2001]) {
     const d = window(); mutate(d); assert.throws(() => validateLoadWindow(d, options));
   }
+});
+
+test('moving transport evidence rejects corrections, unsolicited frames and malformed counters', () => {
+  const valid=()=>({...window(),teleports:[0,0,0,0],bridgeFrames:[10,10,10,0]});
+  validateLoadWindow(valid(),options);
+  for (const mutate of [d=>d.teleports[1]++,d=>d.bridgeFrames[3]++,d=>d.teleports.pop(),d=>delete d.bridgeFrames,
+    d=>d.bridgeFrames[0]=NaN,d=>d.teleports[0]=-.5]) {
+    const d=valid(); mutate(d); assert.throws(()=>validateLoadWindow(d,options));
+  }
+  for (const installed of [false,true]) for (const label of ['silent','idle','recovery']) {
+    const d={...window(label,installed),teleports:[0,0,0,0],bridgeFrames:[1,0,0,0]};
+    assert.throws(()=>validateLoadWindow(d,{...options,installed}));
+  }
+});
+
+test('failed moving route window retains enriched evidence without an acceptance flag', t => {
+  const build=resolve(import.meta.dirname,'../../build'); mkdirSync(build,{recursive:true});
+  const directory=mkdtempSync(join(build,'moving-window-probe-'));
+  t.after(()=>{const inside=relative(build,resolve(directory));assert(inside.startsWith('moving-window-probe-')&&!inside.includes(sep));rmSync(directory,{recursive:true,force:true});});
+  const file=join(directory,'failed.json'),data={...window(),teleports:[0,1,0,0],bridgeFrames:[10,10,10,0]};
+  assert.throws(()=>recordLoadWindow(file,data,options),/corrected\/teleported/);
+  const retained=JSON.parse(readFileSync(file)); assert.equal(retained.validated,false);
+  assert.deepEqual(retained.teleports,data.teleports); assert.deepEqual(retained.bridgeFrames,data.bridgeFrames);
 });

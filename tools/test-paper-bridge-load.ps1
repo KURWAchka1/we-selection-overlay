@@ -20,7 +20,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if (!$AcceptEula) { throw 'Owner acceptance of https://www.minecraft.net/eula is required' }
-if ($Minecraft -ne '1.21.11' -and (!$EditLoad -or !$Java25)) { throw '26.x load proof currently requires EditLoad and Java25' }
+if ($Minecraft -ne '1.21.11' -and (!$Java25 -or !($EditLoad -or ($Minecraft -eq '26.2' -and $GameplayLoad -and $WithoutSpark)))) { throw '26.x requires Java25 and EditLoad, or exact 26.2 matched no-spark GameplayLoad' }
+if ($Minecraft -eq '26.2' -and $GameplayLoad -and ($Players -ne 32 -or $Samples -ne 400 -or $Repetitions -ne 2)) { throw '26.2 gameplay requires 32 actors, 400 ticks and two reversed-order pairs' }
 if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $GameplayLoad, $LifecycleLoad, $EditLoad).Where({ $_ }).Count -gt 1) { throw 'Choose one workload mode: frozen baseline, restart load, tick timeline, fair dispatch, gameplay, active lifecycle or edit load' }
 if ($EditLoad -and ($Players -ne 32 -or $Samples -ne 400)) { throw 'Edit load requires 32 actors and 400 ticks per phase' }
 if ($MatchedEditDiagnostics -and $EditProfilerControl) { throw 'Choose one edit study: instrumentation or profiler control' }
@@ -53,6 +54,11 @@ if ($editStudy) {
         if (Test-Path -LiteralPath (Join-Path $server $name)) {
             throw "Archive existing edit study before build/copy: $server"
         }
+    }
+}
+if ($Minecraft -eq '26.2' -and $GameplayLoad) {
+    foreach ($name in @('load-proof.json','load-failure.json','prepare.log','1-absent.log')) {
+        if (Test-Path -LiteralPath (Join-Path $server $name)) { throw "Archive existing gameplay study before build/copy: $server" }
     }
 }
 $dependencies = @((Join-Path $Java21 'bin/java.exe'), $paper, $worldEdit)
@@ -95,6 +101,7 @@ try {
     $runner = if ($EditLoad) { 'server-bridge-test/paper-edit-load-proof.mjs' } elseif ($LifecycleLoad) { 'server-bridge-test/paper-active-lifecycle-proof.mjs' } else { 'server-bridge-test/paper-load-proof.mjs' }
     [string[]]$diagnosticArguments = @(if ($SliceDiagnostics) { '--slice-diagnostics' }; if ($WithoutSpark) { '--without-spark' })
     if ($EditLoad) { $diagnosticArguments += $Minecraft }
+    if ($GameplayLoad -and $Minecraft -eq '26.2') { $diagnosticArguments += $Minecraft }
     if ($MatchedEditDiagnostics) { $diagnosticArguments += '--matched-slices' }
     if ($EditProfilerControl) { $diagnosticArguments += '--spark-control' }
     $serverJava = if ($Minecraft -eq '1.21.11') { $Java21 } else { $Java25 }

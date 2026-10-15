@@ -2,10 +2,12 @@ package org.marshal.wesoload;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import io.netty.buffer.Unpooled;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -30,14 +32,16 @@ import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.Clientbound
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundPlayerPositionPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundChunkBatchFinishedPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.ServerboundPlayerLoadedPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundMovePlayerPosPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundAcceptTeleportationPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundChunkBatchReceivedPacket;
 
-/** Offline, stationary, loopback-only load actors. Never linked into a mod or plugin. */
+/** Offline, bounded loopback-only load actors. Never linked into a mod or plugin. */
 public final class LoadClients {
     private static final Gson JSON = new Gson();
     private static final String BRIDGE = "worldedit_selection_overlay:bridge";
     private static final Map<String, ClientSession> CLIENTS = new ConcurrentHashMap<>();
+    private static final Set<String> POSITION_READY = ConcurrentHashMap.newKeySet();
     private static final ThreadPoolExecutor HANDLERS = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
             new ArrayBlockingQueue<>(4096), task -> { var thread = new Thread(task, "WesoLoadPackets"); thread.setDaemon(true); return thread; });
 
@@ -76,9 +80,22 @@ public final class LoadClients {
                 byte[] data = outgoing(channel, command.get("data").getAsString());
                 session.send(new ServerboundCustomPayloadPacket(Key.key(channel), data));
             }
+            case "move" -> {
+                ClientSession session = CLIENTS.get(name);
+                require(session != null && session.isConnected() && POSITION_READY.contains(name), "Actor position not ready");
+                session.send(movement(name, command.get("x").getAsDouble(), command.get("y").getAsDouble(), command.get("z").getAsDouble()));
+            }
             case "end" -> { ClientSession session = CLIENTS.get(name); require(session != null, "Unknown actor"); session.disconnect("Verification complete"); }
             default -> throw new IllegalArgumentException("Unknown IPC operation");
         }
+    }
+
+    private static ServerboundMovePlayerPosPacket movement(String name, double x, double y, double z) {
+        int index = Integer.parseInt(name.substring(8));
+        require(Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z)
+                && x >= 10 && x <= 22 && z >= 10 && z <= 22 && y == 80 + index % 2,
+                "Movement outside the owned flight route");
+        return new ServerboundMovePlayerPosPacket(false, false, x, y, z);
     }
 
     private static byte[] outgoing(String channel, String encoded) {
@@ -112,6 +129,8 @@ public final class LoadClients {
                 } else if (packet instanceof ClientboundPlayerPositionPacket position) {
                     owner.send(new ServerboundAcceptTeleportationPacket(position.getId()));
                     owner.send(ServerboundPlayerLoadedPacket.INSTANCE);
+                    POSITION_READY.add(name);
+                    emit("teleport", name, "");
                 } else if (packet instanceof ClientboundChunkBatchFinishedPacket) owner.send(new ServerboundChunkBatchReceivedPacket(20));
                 else if (packet instanceof ClientboundPingPacket ping) owner.send(new ServerboundPongPacket(ping.getId()));
             }
@@ -120,6 +139,7 @@ public final class LoadClients {
                 // Never suppress a parser error to make a load test pass.
             }
             @Override public void disconnected(DisconnectedEvent event) {
+                POSITION_READY.remove(name);
                 if (event.getCause() != null) emit("fault", name, event.getCause().toString());
                 emit("ended", name, event.getReason().toString());
             }
@@ -140,6 +160,18 @@ public final class LoadClients {
             try { outgoing(value[0], value[1]); } catch (IllegalArgumentException ex) { refused = true; }
             require(refused, "Guard accepted invalid input");
         }
-        System.out.println("LOAD CLIENT GUARDS PASS: exact 776 codec, bounded wire input, explicit channels and offline loopback identities");
+        for (var xyz : new double[][]{{Double.NaN,80,16},{16,Double.POSITIVE_INFINITY,16},{9,80,16},{16,81,16},{16,80,23}}) {
+            boolean refused = false;
+            try { movement("WesoLoad00",xyz[0],xyz[1],xyz[2]); } catch (IllegalArgumentException ex) { refused = true; }
+            require(refused, "Movement guard accepted invalid input");
+        }
+        var packet = movement("WesoLoad01",22,81,16);
+        var bytes = Unpooled.buffer();
+        try {
+            packet.serialize(bytes);
+            require(bytes.readableBytes() == 25, "Unexpected movement codec size");
+            require(packet.equals(new ServerboundMovePlayerPosPacket(bytes)) && !bytes.isReadable(), "Movement codec round trip");
+        } finally { bytes.release(); }
+        System.out.println("LOAD CLIENT GUARDS PASS: exact 776 codec, bounded wire/movement input, movement round trip, explicit channels and offline loopback identities");
     }
 }

@@ -4,6 +4,7 @@ import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { observeLoadClients, javaLoadVersion } from './java-load-clients.mjs';
 import { channel } from './wire-codec.mjs';
+import { movement } from './gameplay-workload.mjs';
 
 function fixture() {
   const child = new EventEmitter(); child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
@@ -69,4 +70,26 @@ test('requires all owned actors ended and rejects truncated helper output', asyn
   f.child.stdin.once('finish', () => f.child.emit('close', 0)); await assert.rejects(f.pool.close(), /live actor/);
   const cut = fixture(); cut.ready(); cut.child.stdout.write('{');
   cut.child.stdin.once('finish', () => cut.child.emit('close', 0)); await assert.rejects(cut.pool.close());
+});
+
+test('movement requires joined actor and acknowledged server position; preserves bounded route', () => {
+  const f = fixture(); f.ready(); const peer = f.pool.createClient(options('WesoLoad01'));
+  assert.throws(() => peer.write('position',movement(1,0)));
+  f.event({ type:'joined',name:'WesoLoad01' });
+  assert.throws(() => peer.write('position',movement(1,0)));
+  f.event({ type:'teleport',name:'WesoLoad01' }); assert.equal(peer.teleports,1);
+  for (const invalid of [{...movement(1,0),x:NaN},{...movement(1,0),z:23},{...movement(1,0),y:80},
+    {...movement(1,0),flags:{onGround:true,hasHorizontalCollision:false}}]) assert.throws(() => peer.write('position',invalid));
+  for (let step=0;step<100;step++) peer.write('position',movement(1,step));
+  const commands=f.child.stdin.read().toString().trim().split('\n').map(JSON.parse);
+  assert.equal(commands.filter(c => c.op === 'move').length,100);
+  assert.deepEqual(commands[1],{op:'move',name:'WesoLoad01',x:movement(1,0).x,y:81,z:movement(1,0).z});
+  f.event({type:'ended',name:'WesoLoad01'}); assert.throws(() => peer.write('position',movement(1,1)));
+});
+test('teleport events cannot manufacture pre-play or disconnected movement readiness', () => {
+  for (const ended of [false,true]) {
+    const f=fixture(); f.ready(); f.pool.createClient(options('WesoLoad00'));
+    if (ended) { f.event({type:'joined',name:'WesoLoad00'}); f.event({type:'ended',name:'WesoLoad00'}); }
+    f.event({type:'teleport',name:'WesoLoad00'}); assert(f.pool.fault);
+  }
 });

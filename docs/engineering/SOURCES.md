@@ -936,6 +936,33 @@ for future configuration schemas. Wrapper source discovery and policy self-tests
 precede the experiment. Fixed AB/BA on one shared laptop is not randomized
 replication or a basis for universal speedup/latency claims; see S51.
 
+## S61 Exact 26.2 Moving Gameplay Transport
+
+Checked **2026-10-15**. The official
+[MCProtocolLib project](https://github.com/GeyserMC/MCProtocolLib) documents its
+public packet API and Open Collaboration repository. Reuse the exact
+`org.geysermc.mcprotocollib:protocol:26.2-20261012.101744-21` from S58, not current
+master or an aliased Prismarine version. The inspected
+[source artifact](https://repo.opencollab.dev/main/org/geysermc/mcprotocollib/protocol/26.2-SNAPSHOT/protocol-26.2-20261012.101744-21-sources.jar)
+has SHA-256 `ab40ad3424c375f9cfc847cab9cac99a5c136c82be9652b05a142cd2ce6dc217`.
+Its `ServerboundMovePlayerPosPacket` fields are two booleans then three doubles;
+its public constructor takes `(onGround, horizontalCollision, x, y, z)`. The
+library owns serialization. Actual round-trip and loopback server acceptance
+must be verified; inspecting source alone is not a successful gameplay test.
+
+`ClientboundPlayerPositionPacket` exposes the teleport ID; the existing helper
+acknowledges it with `ServerboundAcceptTeleportationPacket` and sends the public
+player-loaded packet. Movement is admitted only after that initial callback.
+Subsequent teleport events remain evidence, not discarded correction noise.
+Server-side accepted movement and live entity/edit counters independently check
+the offered route. All instrumentation belongs to test tooling, not shipped JARs.
+
+The no-spark policy uses the [normal Paper setting](https://docs.papermc.io/paper/reference/global-configuration/#spark)
+and the exact host/source/configuration checks in S60. AB/BA and frozen-world
+method limitations remain those in S51, not a statistical performance guarantee.
+Exact modern dimension layout follows S59. This new moving workload does not
+retroactively explain the stationary profiler-study outliers.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

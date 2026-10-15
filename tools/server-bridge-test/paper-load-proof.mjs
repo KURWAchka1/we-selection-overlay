@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { copyFileSync, createWriteStream, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { constants, cpus, setPriority } from 'node:os';
@@ -12,18 +12,18 @@ import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 import { observeOwnedServer } from './owned-server.mjs';
 import { recordLoadWindow } from './load-window.mjs';
 import { bridgeConsumerCount, movement } from './gameplay-workload.mjs';
+import { loadHost } from './gameplay-host.mjs';
+import { startJavaLoadClients } from './java-load-clients.mjs';
+import { paperProfilerConfig, verifyProfilerLog } from './edit-diagnostic-policy.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode = 'load'] = process.argv.slice(2);
 assert(['load', 'baseline', 'restart', 'timeline', 'fair', 'gameplay'].includes(mode));
 const gameplay = mode === 'gameplay';
-const withoutSpark = process.argv.slice(8).includes('--without-spark');
-assert(process.argv.slice(8).every(arg => arg === '--without-spark'));
-assert(!withoutSpark || gameplay, 'Profiler control requires matched gameplay');
+const host = loadHost(mode,process.argv.slice(8)), {version,withoutSpark,tuple} = host;
 const baselineOnly = ['baseline', 'timeline'].includes(mode);
 const restartLoad = mode === 'restart';
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory);
-const directoryName = withoutSpark ? 'bridge-gameplay-control-proof' : { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof', fair: 'bridge-fair-dispatch-proof', gameplay: 'bridge-gameplay-proof' }[mode];
-assert.equal(relative(root, serverDir), join('build', directoryName), 'Never operate a user server');
+assert.equal(relative(root, serverDir), host.directory, 'Never operate a user server');
 const frozen = baselineOnly || gameplay ? new FrozenFixtureWorld(serverDir) : null;
 let worldDigest;
 const players = Number(playerArgument), samples = Number(sampleArgument), repetitions = Number(repeatArgument);
@@ -31,18 +31,19 @@ assert(Number.isInteger(players) && players >= 2 && players <= 32);
 assert(Number.isInteger(samples) && samples >= 100 && samples <= 2400);
 assert(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 4);
 if (gameplay) assert(players >= 4 && samples % 20 === 0);
+if (version === '26.2') assert(players === 32 && samples === 400 && repetitions === 2, 'Exact gameplay comparison requires 32 actors, 400 ticks and reversed-order pairs');
 const bridgePlayers = gameplay ? bridgeConsumerCount(players) : players;
 assert.match(readFileSync(join(serverDir, 'eula.txt'), 'utf8'), /^eula=true\s*$/);
 const properties = readFileSync(join(serverDir, 'server.properties'), 'utf8');
 for (const line of ['server-ip=127.0.0.1', 'server-port=25579', 'online-mode=false', 'max-players=32'])
   assert(properties.split(/\r?\n/).includes(line));
 const require = createRequire(join(root, 'build/bridge-wire-deps/package.json'));
-const minecraft = require('minecraft-protocol');
-assert.equal(require('minecraft-protocol/package.json').version, '1.68.0');
-if (gameplay) assert.equal(require('minecraft-data/package.json').version, '3.117.0');
+const minecraft = version === '26.2' ? null : require('minecraft-protocol');
+if (minecraft) assert.equal(require('minecraft-protocol/package.json').version, '1.68.0');
+if (gameplay && minecraft) assert.equal(require('minecraft-data/package.json').version, '3.117.0');
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
-assert.equal(hash(join(serverDir, 'server.jar')), '5ffef465eeeb5f2a3c23a24419d97c51afd7dbb4923ff42df9a3f58bba1ccfba');
-assert.equal(hash(join(serverDir, 'plugins/worldedit.jar')), '0ee152b1be5dfb51500505e2bf5a8c9d66f09c7fa484bf9aea384d7e7b459b06');
+assert.equal(hash(join(serverDir, 'server.jar')), tuple.paperSha256);
+assert.equal(createHash(tuple.worldeditAlgorithm).update(readFileSync(join(serverDir,'plugins/worldedit.jar'))).digest('hex'),tuple.worldeditHash);
 const companionName = 'worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar';
 const allowedPlugins = new Set(['worldedit.jar', 'weso-paper-test-fixture.jar', companionName]);
 assert(readdirSync(join(serverDir, 'plugins')).filter(n => n.endsWith('.jar')).every(n => allowedPlugins.has(n)));
@@ -50,12 +51,24 @@ const companionHash = hash(join(serverDir, 'companion.jar'));
 const fixtureHash = hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar'));
 const results = [], checks = [];
 const lifecycleResults = [];
+const runEvidence = [];
 const restartChannel = 'worldedit_selection_overlay:restart';
 let cancelled = false;
 process.on('SIGINT', () => { cancelled = true; });
 process.on('SIGTERM', () => { cancelled = true; });
-rmSync(join(serverDir, 'load-proof.json'), { force: true });
-rmSync(join(serverDir, 'load-failure.json'), { force: true });
+if (version === '26.2') for (const name of ['load-proof.json','load-failure.json','prepare.log','1-absent.log'])
+  assert(!existsSync(join(serverDir,name)), 'Archive previous gameplay attempts before rerunning');
+else {
+  rmSync(join(serverDir, 'load-proof.json'), { force: true });
+  rmSync(join(serverDir, 'load-failure.json'), { force: true });
+}
+const recordingSettings = version === '26.2' ? join(serverDir,'gameplay.jfc') : 'profile';
+if (version === '26.2') {
+  const configured = spawnSync(join(javaHome,'bin/jfr.exe'),['configure','--input','profile','--output',recordingSettings,
+    'jdk.ExecuteVMOperation#enabled=true','jdk.ExecuteVMOperation#threshold=0ms',
+    'jdk.SafepointBegin#enabled=true','jdk.SafepointBegin#threshold=0ms'],{windowsHide:true,encoding:'utf8',timeout:30000});
+  assert.equal(configured.status,0,configured.stderr || configured.error?.message);
+}
 
 async function freePort() {
   const probe = createServer();
@@ -68,14 +81,15 @@ function delta(after, before) {
 }
 async function run(installed, round, prepare = false) {
   await freePort();
+  const runName = prepare ? 'prepare' : `${round}-${installed ? 'installed' : 'absent'}`;
   if (withoutSpark) {
     const config = join(serverDir, 'config'); mkdirSync(config, { recursive: true });
     // Owned fixture only: the same pinned Paper profiler setting in both groups.
-    writeFileSync(join(config, 'paper-global.yml'), JSON.stringify({ _version: 31,
-      spark: { enabled: false, 'enable-immediately': false } }, null, 2));
+    const input=JSON.stringify(paperProfilerConfig(false),null,2);
+    writeFileSync(join(config, 'paper-global.yml'),input);
+    if (version === '26.2') writeFileSync(join(serverDir,`${runName}-paper-global.input.json`),input);
   }
   if (frozen && !prepare) worldDigest = frozen.restore();
-  const runName = prepare ? 'prepare' : `${round}-${installed ? 'installed' : 'absent'}`;
   const plugin = join(serverDir, 'plugins', companionName);
   if (installed) copyFileSync(join(serverDir, 'companion.jar'), plugin);
   else rmSync(plugin, { force: true });
@@ -85,11 +99,11 @@ async function run(installed, round, prepare = false) {
   writeFileSync(join(config, 'config.yml'), 'limits:\n  max-connections: 1024\n  global-requests-per-second: 100\n  global-burst: 100\n  player-requests-per-second: 4\n  player-burst: 8\n');
   const output = createWriteStream(join(serverDir, `${runName}.log`));
   const lines = [], peers = [], pending = { out: '', err: '' }, ordinaryLatencies = [];
-  let exited = false, phase = 'none', timer, movementTimer, disconnecting = false;
+  let exited = false, phase = 'none', timer, movementTimer, disconnecting = false, transport;
   const jfrName = `${runName}.jfr`;
   rmSync(join(serverDir, jfrName), { force: true });
   const java = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-XX:ActiveProcessorCount=2',
-    `-XX:StartFlightRecording=filename=${jfrName},settings=profile,dumponexit=true,maxsize=32m`,
+    `-XX:StartFlightRecording=filename=${jfrName},settings=${recordingSettings},dumponexit=true,maxsize=32m`,
     '-Dweso.bridge.fixture=true', `-Dweso.bridge.measureTicks=${samples}`, '-jar', 'server.jar', '--nogui'],
   { cwd: serverDir, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   const server = observeOwnedServer(java);
@@ -108,6 +122,7 @@ async function run(installed, round, prepare = false) {
     const deadline = Date.now() + timeout;
     while (!predicate()) {
       if (cancelled || exited) throw new Error(`Cancelled/server closed during ${label}: ${lines.slice(-10).join('\n')}`);
+      assert(!transport?.fault, String(transport?.fault));
       assert(!lines.some(s => /Gameplay workload edit failed|Unpaired fixture tick|Cannot write fixture|generated an exception whilst handling plugin message|NoClassDefFoundError|VerifyError/.test(s)), 'Fixture failed');
       if (Date.now() >= deadline) throw new Error(`Timeout: ${label}`);
       const problem = peers.find(p => p.errors.length || p.ended);
@@ -189,6 +204,7 @@ async function run(installed, round, prepare = false) {
     const latencyBefore = ordinaryLatencies.length;
     const sentBefore = peers.map(p => p.sent), repliesBefore = peers.map(p => p.replies);
     const movementBefore = peers.map(p => p.movementPackets);
+    const teleportsBefore = peers.map(p => p.client.teleports ?? 0), framesBefore = peers.map(p => p.bridgeFrames);
     const path = join(serverDir, 'plugins/WesoBridgeTestFixture', `load-${label}.json`);
     rmSync(path, { force: true });
     const start = lines.length;
@@ -207,6 +223,10 @@ async function run(installed, round, prepare = false) {
     data.sent = peers.map((p, i) => p.sent - sentBefore[i]);
     data.received = peers.map((p, i) => p.replies - repliesBefore[i]);
     if (gameplay) data.movementPackets = peers.map((p, i) => p.movementPackets - movementBefore[i]);
+    if (version === '26.2') {
+      data.teleports = peers.map((p,i) => p.client.teleports - teleportsBefore[i]);
+      data.bridgeFrames = peers.map((p,i) => p.bridgeFrames - framesBefore[i]);
+    }
     const runDirectory = join(serverDir, 'measurements', runName);
     mkdirSync(runDirectory, { recursive: true });
     recordLoadWindow(join(runDirectory, `${label}.json`), data, { players, samples, installed, baselineOnly, gameplay, bridgePlayers });
@@ -223,21 +243,31 @@ async function run(installed, round, prepare = false) {
       assert(lines.some(s => s.includes('spark profiler will not be enabled because it is currently disabled')));
       assert(!lines.some(s => s.includes('Starting background profiler')));
     }
+    if (version === '26.2') {
+      verifyProfilerLog(lines.join('\n'),false);
+      transport = startJavaLoadClients(javaHome,join(serverDir,`${runName}-clients.log`));
+      await waitFor(()=>transport.ready,'exact moving codec helper');
+      const archive=join(serverDir,'load-client-artifacts');
+      if (!existsSync(archive)) cpSync(join(root,'tools/bridge-load-clients/build/install/weso-bridge-load-clients/lib'),archive,{recursive:true,errorOnExist:true,force:false});
+      for (const artifact of transport.evidence.artifacts) assert.equal(hash(join(archive,artifact.name)),artifact.sha256);
+    }
     for (let index = 0; index < players; index++) {
       const name = `WesoLoad${String(index).padStart(2, '0')}`;
-      const client = minecraft.createClient({ host: '127.0.0.1', port: 25579, username: name,
-        auth: 'offline', version: '1.21.11', profilesFolder: false, clientSettings: { viewDistance: 2 }, disableChatSigning: true });
+      const client = (transport ?? minecraft).createClient({ host: '127.0.0.1', port: 25579, username: name,
+        auth: 'offline', version, profilesFolder: false, clientSettings: { viewDistance: 2 }, disableChatSigning: true });
       const peer = { client, name, index, errors: [], ended: false, playReady: false, sent: 0, replies: 0, welcome: null, id: 0, next: 0,
-        hints: [], closed: 0, restartArmed: false, restartHellos: 0, expectedNonce: null, sentTimes: new Map(), movementPackets: 0 };
+        hints: [], closed: 0, restartArmed: false, restartHellos: 0, expectedNonce: null, sentTimes: new Map(), movementPackets: 0, bridgeFrames:0, cui:0 };
       peers.push(peer);
       client.on('error', error => peer.errors.push(error.message));
       client.on('end', () => { peer.ended = true; });
       client.on('login', () => { peer.playReady = true; });
-      if (gameplay) client.on('position', packet => {
+      client.on('playerJoin', () => { peer.playReady = true; });
+      if (gameplay && !transport) client.on('position', packet => {
         // Acknowledge server teleports before sending the bounded synthetic flight route.
         client.write('teleport_confirm', { teleportId: packet.teleportId });
       });
       client.on('custom_payload', packet => {
+        if (packet.channel === 'worldedit:cui') { peer.cui++; return; }
         if (packet.channel === restartChannel) {
           try {
             assert(restartLoad && installed, 'Unsupported restart hint');
@@ -256,6 +286,7 @@ async function run(installed, round, prepare = false) {
           return;
         }
         if (packet.channel !== channel) return;
+        peer.bridgeFrames++;
         try {
           assert(installed, 'Absent companion sent bridge traffic');
           const value = decode(Buffer.from(packet.data));
@@ -284,7 +315,12 @@ async function run(installed, round, prepare = false) {
       });
       await waitFor(() => peer.playReady && lines.some(s => s.includes(`WESO_FIXTURE_JOIN ${name}`)), name);
       if (index < bridgePlayers)
-        client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(restartLoad ? `${channel}\0${restartChannel}` : channel) });
+        client.write('custom_payload', { channel: 'minecraft:register', data: Buffer.from(restartLoad ? `${channel}\0${restartChannel}` : transport ? `${channel}\0worldedit:cui` : channel) });
+      else if (transport) client.write('custom_payload',{channel:'minecraft:register',data:Buffer.from('worldedit:cui')});
+      if (transport) {
+        client.write('custom_payload',{channel:'worldedit:cui',data:Buffer.from('v|4')});
+        await waitFor(()=>peer.cui>0 && client.teleports>0,`CUI and initial position ${name}`);
+      }
     }
     if (baselineOnly || gameplay) {
       const start = lines.length;
@@ -362,13 +398,22 @@ async function run(installed, round, prepare = false) {
       checks.push(`${runName}: ${players}-way ownership, bounded traffic, legitimate progress, idle recovery, disconnect cleanup`);
     }
     assert.equal(hash(join(serverDir, 'companion.jar')), companionHash, 'Candidate changed during test');
+    if (version === '26.2' && !prepare) runEvidence.push({run:runName,worldDigest,transport:transport.evidence,
+      profilerInputSha256:hash(join(serverDir,`${runName}-paper-global.input.json`)),
+      recordingSettingsSha256:hash(recordingSettings),disconnected:installed ? await counters() : null,
+      actors:peers.map(p=>({name:p.name,bridgeFrames:p.bridgeFrames,cui:p.cui,teleports:p.client.teleports,movementPackets:p.movementPackets}))});
   } finally {
     if (timer) clearInterval(timer);
     if (movementTimer) clearInterval(movementTimer);
-    for (const peer of peers) if (!peer.ended) peer.client.end('fixture shutdown');
-    try { await server.stop(); }
-    finally { await new Promise(resolve => output.end(resolve)); }
+    disconnecting = true;
+    try {
+      for (const peer of peers) if (!peer.ended) peer.client.end('fixture shutdown');
+      if (transport) await transport.close();
+    }
+    finally { try { await server.stop(); }
+      finally { await new Promise(resolve => output.end(resolve)); } }
   }
+  if (version === '26.2') copyFileSync(join(serverDir,'config/paper-global.yml'),join(serverDir,`${runName}-paper-global.effective.yml`));
   const summary = spawnSync(join(javaHome, 'bin/jfr.exe'), ['summary', join(serverDir, jfrName)], { encoding: 'utf8', windowsHide: true, timeout: 30000 });
   assert.equal(summary.status, 0, summary.stderr);
   writeFileSync(join(serverDir, `${runName}-jfr-summary.txt`), summary.stdout);
@@ -383,10 +428,10 @@ try {
   }
   await freePort();
   writeFileSync(join(serverDir, 'load-proof.json'), JSON.stringify({ checkedAt: new Date().toISOString(),
-    minecraft: '1.21.11', mode, withoutSpark, worldDigest, players, bridgePlayers, samples, repetitions, javaHome, node: process.version,
+    minecraft: version, mode, withoutSpark, worldDigest, players, bridgePlayers, samples, repetitions, javaHome, node: process.version,
     processorModel: cpus()[0]?.model, logicalProcessors: cpus().length,
     serverHash: hash(join(serverDir, 'server.jar')), worldEditHash: hash(join(serverDir, 'plugins/worldedit.jar')),
-    companionHash, fixtureHash, checks, results, lifecycleResults,
+    companionHash, fixtureHash, checks, results, lifecycleResults, runEvidence,
     limitations: gameplay ? 'Identical frozen starting worlds, bounded flight routes, 16 live AI cows and 512-block WorldEdit batches per 20 ticks; at least one eighth of clients never negotiate the bridge. All phases matched absent/installed. AI decisions and network timing are not deterministic. Preloaded area, shared laptop and headless TCP clients, not arbitrary production gameplay or native GPU rendering.' : baselineOnly ? 'Controlled silent baseline from identical frozen world bytes, with random ticks, mob spawning, daylight/weather cycles disabled. Shared laptop, short warmup and stationary headless clients; not busy gameplay or production performance acceptance.' : 'Stationary headless protocol clients on flat loopback fixture; not native GPU clients, busy production gameplay or streaming/simulation cost.' }, null, 2));
   console.log('PAPER BRIDGE LOAD PROOF PASS; all owned processes stopped');
 } catch (error) {

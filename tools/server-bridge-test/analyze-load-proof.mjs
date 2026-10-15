@@ -1,20 +1,83 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { delimiter, join, resolve } from 'node:path';
 import { verifyLoadEvidence } from './load-evidence.mjs';
+import { loadHost } from './gameplay-host.mjs';
+import { javaLoadVersion, javaLoadSha256 } from './java-load-clients.mjs';
+import { paperProfilerConfig, verifyProfilerLog } from './edit-diagnostic-policy.mjs';
+import { profilerConfigLibraries, verifyEffectiveProfilerConfigurations } from './paper-profiler-config.mjs';
+import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 
 const root = resolve(import.meta.dirname, '../..');
 const mode = process.argv[2] ?? 'load';
 assert(['load', 'baseline', 'restart', 'timeline', 'fair', 'gameplay'].includes(mode));
-const withoutSpark = process.argv.slice(3).includes('--without-spark');
-assert(process.argv.slice(3).every(arg => arg === '--without-spark'));
-assert(!withoutSpark || mode === 'gameplay');
-const directory = join(root, 'build', withoutSpark ? 'bridge-gameplay-control-proof' : { load: 'bridge-load-proof', baseline: 'bridge-baseline-proof', restart: 'bridge-restart-load-proof', timeline: 'bridge-tick-timeline-proof', fair: 'bridge-fair-dispatch-proof', gameplay: 'bridge-gameplay-proof' }[mode]);
+const host=loadHost(mode,process.argv.slice(3)),{version,withoutSpark,tuple}=host;
+const directory = join(root,host.directory);
 const proof = JSON.parse(readFileSync(join(directory, 'load-proof.json'), 'utf8'));
+assert.equal(proof.minecraft,version);
 assert.equal(proof.mode ?? 'load', mode);
 assert.equal(!!proof.withoutSpark, withoutSpark, 'Profiler modes do not match');
 const runs = [...new Set(proof.results.map(result => result.run))];
+const hash=file=>createHash('sha256').update(readFileSync(file)).digest('hex');
+let effectiveConfigurationDigest;
+if (version === '26.2') {
+  assert.equal(proof.players,32); assert.equal(proof.samples,400); assert.equal(proof.repetitions,2);
+  assert.equal(new FrozenFixtureWorld(directory).digest(),proof.worldDigest);
+  assert.equal(hash(join(directory,'server.jar')),tuple.paperSha256); assert.equal(proof.serverHash,tuple.paperSha256);
+  assert.equal(createHash(tuple.worldeditAlgorithm).update(readFileSync(join(directory,'plugins/worldedit.jar'))).digest('hex'),tuple.worldeditHash);
+  assert.equal(hash(join(directory,'plugins/worldedit.jar')),proof.worldEditHash);
+  assert.equal(hash(join(directory,'companion.jar')),proof.companionHash);
+  assert.equal(hash(join(directory,'plugins/weso-paper-test-fixture.jar')),proof.fixtureHash);
+  assert.deepEqual(proof.runEvidence.map(r=>r.run),runs);
+  for (const run of proof.runEvidence) {
+    assert.equal(run.worldDigest,proof.worldDigest);
+    assert.equal(run.recordingSettingsSha256,hash(join(directory,'gameplay.jfc')));
+    const input=join(directory,`${run.run}-paper-global.input.json`);
+    assert.equal(run.profilerInputSha256,hash(input));
+    assert.deepEqual(JSON.parse(readFileSync(input)),paperProfilerConfig(false));
+    const serverLog=readFileSync(join(directory,`${run.run}.log`),'utf8'),installed=run.run.endsWith('-installed');
+    verifyProfilerLog(serverLog,false);
+    assert.equal(serverLog.includes('Experimental read-only bridge enabled'),installed);
+    assert(serverLog.includes('Loading Paper 26.2-133-ver/26.2@58e6e45'));
+    const transport=run.transport,lib=join(directory,'load-client-artifacts');
+    assert.equal(transport.implementation,'MCProtocolLib'); assert.equal(transport.version,javaLoadVersion); assert.equal(transport.protocol,776);
+    assert.deepEqual(transport.artifacts.map(a=>a.name).sort(),readdirSync(lib).filter(n=>n.endsWith('.jar')).sort());
+    assert.equal(transport.artifacts.find(a=>a.name===`protocol-${javaLoadVersion}.jar`)?.sha256,javaLoadSha256);
+    for (const artifact of transport.artifacts) {
+      assert.match(artifact.name,/^[A-Za-z0-9._+-]+\.jar$/); assert.equal(hash(join(lib,artifact.name)),artifact.sha256);
+    }
+    const events=readFileSync(join(directory,`${run.run}-clients.log`),'utf8').split(/\r?\n/).filter(line=>line.startsWith('{')).map(JSON.parse);
+    assert.equal(events.filter(e=>e.type==='ready' && e.detail===javaLoadVersion).length,1);
+    assert(!events.some(e=>e.type==='fault'),'Hidden moving client codec failure');
+    assert.equal(run.actors.length,32);
+    for (let i=0;i<32;i++) {
+      const actor=run.actors[i]; assert.equal(actor.name,`WesoLoad${String(i).padStart(2,'0')}`);
+      const own=events.filter(e=>e.name===actor.name);
+      for (const type of ['joined','ended']) assert.equal(own.filter(e=>e.type===type).length,1);
+      assert.equal(own.filter(e=>e.type==='teleport').length,actor.teleports); assert(actor.teleports>=2);
+      assert.equal(own.filter(e=>e.type==='payload' && e.channel==='worldedit:cui').length,actor.cui); assert(actor.cui>0);
+      assert.equal(own.filter(e=>e.type==='payload' && e.channel==='worldedit_selection_overlay:bridge').length,actor.bridgeFrames);
+      if (i>=proof.bridgePlayers || run.run.endsWith('-absent')) assert.equal(actor.bridgeFrames,0);
+    }
+    if (installed) {
+      assert(run.disconnected);
+      for (const key of ['connections','pending','dispatchTasks','expired']) assert.equal(run.disconnected[key],0);
+      const replies=events.filter(e=>e.type==='payload' && e.channel==='worldedit_selection_overlay:bridge');
+      assert.equal(replies.length,run.disconnected.replies,'Lifetime host/wire reply counts differ');
+      assert.equal(replies.reduce((n,e)=>n+Buffer.from(e.data,'base64').length,0),run.disconnected.bytes,'Lifetime host/wire bytes differ');
+      assert.equal(run.disconnected.reads+proof.bridgePlayers,run.disconnected.replies,'Unexpected non-metadata reply');
+      assert.equal(run.disconnected.admitted,run.disconnected.replies,'Admitted fixture request lost');
+    } else assert.equal(run.disconnected,null);
+  }
+  const libraries=profilerConfigLibraries(directory);
+  const parsed=spawnSync(join(proof.javaHome,'bin/java.exe'),['-Xmx128m','-XX:ActiveProcessorCount=2','-cp',libraries.map(a=>a.file).join(delimiter),
+    join(import.meta.dirname,'PaperProfilerConfiguration.java'),...runs.map(run=>join(directory,`${run}-paper-global.effective.yml`))],
+    {windowsHide:true,encoding:'utf8',timeout:60000,maxBuffer:1024*1024});
+  assert.equal(parsed.status,0,parsed.stderr || parsed.error?.message);
+  effectiveConfigurationDigest=verifyEffectiveProfilerConfigurations(JSON.parse(parsed.stdout),[false,false,false,false]);
+}
 if (mode === 'gameplay') {
   assert.deepEqual(runs, Array.from({ length: proof.repetitions }, (_, i) =>
     (i % 2 ? ['installed', 'absent'] : ['absent', 'installed']).map(kind => `${i + 1}-${kind}`)).flat());
@@ -26,6 +89,11 @@ if (mode === 'gameplay') {
       const raw = JSON.parse(readFileSync(join(directory, 'measurements', run, `${window.label}.json`), 'utf8'));
       verifyLoadEvidence(raw, window, { players: proof.players, samples: proof.samples,
         installed: run.endsWith('-installed'), baselineOnly: false, gameplay: true, bridgePlayers: proof.bridgePlayers });
+      if (version === '26.2') {
+        assert.deepEqual(raw.teleports,window.teleports); assert.equal(raw.teleports.length,32); assert(raw.teleports.every(n=>n===0));
+        assert.deepEqual(raw.bridgeFrames,window.bridgeFrames); assert.equal(raw.bridgeFrames.length,32);
+        if (['silent','idle','recovery'].includes(window.label)) assert(raw.bridgeFrames.every(n=>n===0));
+      }
     }
   }
 }
@@ -95,7 +163,7 @@ if (mode === 'gameplay') {
     }
   }
 }
-const report = { checkedAt: proof.checkedAt, mode, withoutSpark, worldDigest: proof.worldDigest, rows, profiles, tickOutliers,
+const report = { checkedAt: proof.checkedAt, minecraft:version, mode, withoutSpark, effectiveConfigurationDigest, worldDigest: proof.worldDigest, rows, profiles, tickOutliers,
   matchedComparisons,
   warning: 'Local bounded headless workloads on a shared laptop. Sampled allocation weights are estimates, not exact call costs. Frozen starting worlds reduce confounds but do not establish production performance acceptance or native-client lifecycle behavior.' };
 writeFileSync(join(directory, 'load-analysis.json'), JSON.stringify(report, null, 2));

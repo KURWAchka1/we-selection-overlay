@@ -26,8 +26,9 @@ export class FrozenFixtureWorld {
     assert(inside && !isAbsolute(inside) && inside !== '..' && !inside.startsWith(`..${sep}`));
     const editDiagnostics = ['bridge-edit-diagnostics','bridge-edit-profiler-control'].includes(basename(dirname(this.root)))
       && ['1.21.11', '26.1.2', '26.2'].includes(basename(this.root));
-    assert(editDiagnostics || ['bridge-baseline-proof', 'bridge-tick-timeline-proof', 'bridge-gameplay-proof', 'bridge-gameplay-control-proof'].includes(basename(this.root)), 'Not a named frozen fixture');
-    this.modern = editDiagnostics && basename(this.root) !== '1.21.11';
+    const modernGameplay = basename(dirname(this.root)) === 'bridge-gameplay-control-proof' && basename(this.root) === '26.2';
+    assert(editDiagnostics || modernGameplay || ['bridge-baseline-proof', 'bridge-tick-timeline-proof', 'bridge-gameplay-proof', 'bridge-gameplay-control-proof'].includes(basename(this.root)), 'Not a named frozen fixture');
+    this.modern = modernGameplay || editDiagnostics && basename(this.root) !== '1.21.11';
     this.worlds = Object.freeze(this.modern ? ['bridge-fixture'] : [...worlds]);
     assert.equal(realpathSync(this.root).toLowerCase(), this.root.toLowerCase(), 'Fixture root must not resolve through links');
     this.snapshot = join(this.root, 'frozen-world');

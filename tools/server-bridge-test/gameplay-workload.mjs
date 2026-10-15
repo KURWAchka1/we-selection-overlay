@@ -30,6 +30,16 @@ export function validateGameplayWindow(data, { players, samples, installed, brid
   assert.equal(data.movementPackets.length, players);
   assert(data.movementPackets.every((n, i) => Number.isSafeInteger(n) && n >= g.acceptedMoves[i]), 'Movement evidence mismatch');
   assert.equal(data.chunkLoads, 0, 'Gameplay left the preloaded area');
+  if ('teleports' in data || 'bridgeFrames' in data) {
+    for (const values of [data.teleports,data.bridgeFrames]) {
+      assert.equal(values?.length,players);
+      assert(values.every(n=>Number.isSafeInteger(n) && n>=0),'Invalid moving transport counters');
+    }
+    assert(data.teleports.every(n=>n===0),'Server corrected/teleported a measured moving actor');
+    assert(data.bridgeFrames.slice(bridgePlayers).every(n=>n===0),'Unnegotiated player received a bridge frame');
+    if (!installed || ['silent','idle','recovery'].includes(data.label))
+      assert(data.bridgeFrames.every(n=>n===0),'Unsolicited idle/absent bridge frames');
+  }
   assert(data.sent.slice(bridgePlayers).every(n => n === 0), 'Ordinary player sent application requests');
   assert(data.received.slice(bridgePlayers).every(n => n === 0), 'Unnegotiated player received application data');
   assert.equal(data.connections, installed && data.label !== 'silent' ? bridgePlayers : 0);

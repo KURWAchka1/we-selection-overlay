@@ -78,11 +78,13 @@ for (const [index, run] of proof.runs.entries()) {
   if (version === '26.2') {
     assert.equal(run.transport.implementation, 'MCProtocolLib'); assert.equal(run.transport.version, javaLoadVersion);
     assert.equal(run.transport.protocol, 776);
-    assert.deepEqual(run.transport.artifacts.map(a => a.name).sort(), readdirSync(join(root, 'tools/bridge-load-clients/build/install/weso-bridge-load-clients/lib')).filter(name => name.endsWith('.jar')).sort());
+    const artifactDirectory = existsSync(join(directory,'load-client-artifacts')) ? join(directory,'load-client-artifacts')
+      : join(root, 'tools/bridge-load-clients/build/install/weso-bridge-load-clients/lib');
+    assert.deepEqual(run.transport.artifacts.map(a => a.name).sort(), readdirSync(artifactDirectory).filter(name => name.endsWith('.jar')).sort());
     assert.equal(run.transport.artifacts.find(a => a.name === `protocol-${javaLoadVersion}.jar`)?.sha256, javaLoadSha256);
     for (const artifact of run.transport.artifacts) {
       assert.match(artifact.name, /^[A-Za-z0-9._+-]+\.jar$/);
-      assert.equal(hash(join(root, 'tools/bridge-load-clients/build/install/weso-bridge-load-clients/lib', artifact.name)), artifact.sha256);
+      assert.equal(hash(join(artifactDirectory, artifact.name)), artifact.sha256);
     }
     const helperEvents = readFileSync(join(directory, `edit-${run.round}-clients.log`), 'utf8').split(/\r?\n/)
       .filter(line => line.startsWith('{')).map(line => JSON.parse(line));

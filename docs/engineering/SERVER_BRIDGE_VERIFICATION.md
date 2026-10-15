@@ -1,7 +1,7 @@
 # Server Bridge Verification Gates
 
 Status: **release gates, with partial foundation evidence**.
-Updated: 2026-10-14. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
+Updated: 2026-10-15. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
 contains Java 21/25 tests, six native-codec checks and a real Paper wire proof.
 Headless protocol clients are not Fabric/NeoForge gameplay clients. A subsequent
 [six-client native Paper 1.21.11 matrix](NATIVE_PAPER_REGRESSION_2026-10-11.md)
@@ -87,6 +87,18 @@ This bounded foundation evidence permits the next isolated development stage,
 not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
+
+The [2026-10-15 exact 26.2 moving-gameplay comparison](BRIDGE_26_2_GAMEPLAY_2026-10-15.md)
+passes four fresh absent/installed, installed/absent JVMs, 9,600 reconciled ticks,
+75,104 accepted movements and 245,760 fixture WorldEdit cell changes. Complete
+effective global configuration, original helper artifacts, raw actor events and
+host reply counters independently reconcile. CUI-only non-consumers receive no
+bridge data; idle source work, measured chunk I/O/generation and final resources
+are zero. No measured tick exceeded 50 ms, but the 0.5 ms soft dispatcher target
+is still exceeded and two local pairs do not establish universal overhead.
+This closes bounded exact-host moving metadata behavior, not concurrent moving
+cuboid mutation, native rendering/input, heavy remote features or release cost
+acceptance. Production/player artifacts remain unchanged.
 
 The [2026-10-15 exact 26.2 profiler control](BRIDGE_26_2_PROFILER_CONTROL_2026-10-15.md)
 passes four fresh, identically instrumented on/off/off/on JVMs, 2,519 canonical

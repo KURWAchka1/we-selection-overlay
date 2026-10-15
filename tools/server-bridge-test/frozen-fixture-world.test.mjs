@@ -15,7 +15,7 @@ function fixture(t, name = 'bridge-baseline-proof') {
   });
   const directory = join(scratch, name);
   const modern = ['bridge-edit-diagnostics/26.2','bridge-edit-diagnostics/26.1.2',
-    'bridge-edit-profiler-control/26.2','bridge-edit-profiler-control/26.1.2'].includes(name);
+    'bridge-edit-profiler-control/26.2','bridge-edit-profiler-control/26.1.2','bridge-gameplay-control-proof/26.2'].includes(name);
   for (const name of modern ? ['bridge-fixture'] : ['bridge-fixture', 'bridge-fixture_nether', 'bridge-fixture_the_end']) {
     mkdirSync(join(directory, name, 'region'), { recursive: true });
     writeFileSync(join(directory, name, 'level.dat'), name);
@@ -126,4 +126,11 @@ test('junction inside a target refuses recursive restore before deletion', t => 
   symlinkSync(join(directory, 'frozen-world'), join(directory, 'bridge-fixture/link'), 'junction');
   assert.throws(() => frozen.restore(), /No links/);
   assert(existsSync(join(directory, 'bridge-fixture/level.dat')));
+});
+
+test('exact 26.2 moving gameplay restores modern dimensions without accepting untested hosts', t => {
+  const {directory,frozen}=fixture(t,'bridge-gameplay-control-proof/26.2'),digest=frozen.capture();
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
+  assert.equal(frozen.restore(),digest);
+  for (const name of ['26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);
 });

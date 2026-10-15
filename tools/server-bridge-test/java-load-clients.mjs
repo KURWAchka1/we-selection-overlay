@@ -47,6 +47,10 @@ export function observeLoadClients(child, log) {
         const peer = peers.get(event.name); assert(peer, 'Unknown helper actor');
         if (event.type === 'joined') { assert(!peer.joined && !peer.ended); peer.joined = true; peer.emit('playerJoin'); }
         else if (event.type === 'ended') { assert(!peer.ended); peer.ended = true; peer.emit('end'); }
+        else if (event.type === 'teleport') {
+          assert(peer.joined && !peer.ended, 'Teleport before play or after disconnect');
+          peer.teleports++; peer.emit('positionReady');
+        }
         else if (event.type === 'fault') fail(new Error(`Load helper ${event.name}: ${event.detail}`));
         else {
           assert.equal(event.type, 'payload'); assert(!peer.ended);
@@ -73,9 +77,17 @@ export function observeLoadClients(child, log) {
     assert.equal(options.version, '26.2'); assert.equal(options.auth, 'offline');
     assert.match(options.username, /^WesoLoad(?:[0-2][0-9]|3[01])$/);
     assert(!peers.has(options.username) && peers.size < 32);
-    const peer = new EventEmitter(); peer.joined = peer.ended = false;
+    const peer = new EventEmitter(); peer.joined = peer.ended = false; peer.teleports = 0;
     peer.write = (type, packet) => {
-      assert.equal(type, 'custom_payload'); assert(peer.joined && !peer.ended);
+      assert(peer.joined && !peer.ended);
+      if (type === 'position') {
+        assert(peer.teleports > 0, 'Movement before initial server position');
+        const { x, y, z, flags } = packet, index = Number(options.username.slice(8));
+        assert([x, y, z].every(Number.isFinite) && x >= 10 && x <= 22 && z >= 10 && z <= 22 && y === 80 + index % 2);
+        assert.deepEqual(flags, { onGround: false, hasHorizontalCollision: false });
+        send({ op: 'move', name: options.username, x, y, z }); return;
+      }
+      assert.equal(type, 'custom_payload');
       assert([channel, 'worldedit:cui', 'minecraft:register'].includes(packet.channel));
       assert(Buffer.isBuffer(packet.data) && packet.data.length <= 256);
       send({ op: 'send', name: options.username, channel: packet.channel, data: packet.data.toString('base64') });
