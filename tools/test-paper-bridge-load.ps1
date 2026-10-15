@@ -15,14 +15,18 @@ param(
     [switch]$AcceptEula,
     [string]$Java25,
     [ValidateSet('1.21.11', '26.1.2', '26.2')][string]$Minecraft = '1.21.11',
-    [switch]$MatchedEditDiagnostics
+    [switch]$MatchedEditDiagnostics,
+    [switch]$EditProfilerControl
 )
 $ErrorActionPreference = 'Stop'
 if (!$AcceptEula) { throw 'Owner acceptance of https://www.minecraft.net/eula is required' }
 if ($Minecraft -ne '1.21.11' -and (!$EditLoad -or !$Java25)) { throw '26.x load proof currently requires EditLoad and Java25' }
 if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $GameplayLoad, $LifecycleLoad, $EditLoad).Where({ $_ }).Count -gt 1) { throw 'Choose one workload mode: frozen baseline, restart load, tick timeline, fair dispatch, gameplay, active lifecycle or edit load' }
 if ($EditLoad -and ($Players -ne 32 -or $Samples -ne 400)) { throw 'Edit load requires 32 actors and 400 ticks per phase' }
-if ($MatchedEditDiagnostics -and (!$EditLoad -or $Repetitions -ne 4 -or $SliceDiagnostics -or $WithoutSpark)) { throw 'Matched edit diagnostics require EditLoad, four repetitions and default spark policy in both arms' }
+if ($MatchedEditDiagnostics -and $EditProfilerControl) { throw 'Choose one edit study: instrumentation or profiler control' }
+if ($EditProfilerControl -and $Minecraft -ne '26.2') { throw 'Edit profiler control is currently pinned to the exact 26.2 host' }
+$editStudy = $MatchedEditDiagnostics -or $EditProfilerControl
+if ($editStudy -and (!$EditLoad -or $Repetitions -ne 4 -or $SliceDiagnostics -or $WithoutSpark)) { throw 'Matched edit studies require EditLoad and four repetitions; no unrelated profiler/diagnostic overrides' }
 if ($GameplayLoad -and ($Players -lt 4 -or $Samples % 20 -ne 0)) { throw 'Gameplay requires at least 4 players and a sample count divisible by 20' }
 if ($LifecycleLoad -and ($Players -ne 32 -or $Samples % 20 -ne 0)) { throw 'Active lifecycle requires 32 players and a sample count divisible by 20' }
 if ($SliceDiagnostics -and !$LifecycleLoad) { throw 'Slice diagnostics require the active lifecycle workload' }
@@ -31,8 +35,9 @@ $root = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $root 'build/bridge-paper-proof'
 $server = Join-Path $root $(if ($EditLoad) { 'build/bridge-edit-load-proof' } elseif ($WithoutSpark -and $GameplayLoad) { 'build/bridge-gameplay-control-proof' } elseif ($WithoutSpark) { 'build/bridge-slice-diagnostics-no-spark' } elseif ($SliceDiagnostics) { 'build/bridge-slice-diagnostics' } elseif ($ControlledBaseline) { 'build/bridge-baseline-proof' } elseif ($RestartLoad) { 'build/bridge-restart-load-proof' } elseif ($TickTimeline) { 'build/bridge-tick-timeline-proof' } elseif ($FairDispatch) { 'build/bridge-fair-dispatch-proof' } elseif ($GameplayLoad) { 'build/bridge-gameplay-proof' } elseif ($LifecycleLoad) { 'build/bridge-active-lifecycle-proof' } else { 'build/bridge-load-proof' })
 if ($MatchedEditDiagnostics) { $server = Join-Path $root 'build/bridge-edit-diagnostics' }
+if ($EditProfilerControl) { $server = Join-Path $root 'build/bridge-edit-profiler-control' }
 if ($Minecraft -eq '1.21.11') {
-    if ($MatchedEditDiagnostics) { $server = Join-Path $server $Minecraft }
+    if ($editStudy) { $server = Join-Path $server $Minecraft }
     $paper = Join-Path $source 'server.jar'
     $worldEdit = Join-Path $source 'plugins/worldedit.jar'
     $bootstrap = $source
@@ -42,6 +47,13 @@ if ($Minecraft -eq '1.21.11') {
     $paper = Join-Path $downloads $(if ($Minecraft -eq '26.1.2') { 'paper-26.1.2-74.jar' } else { 'paper-26.2-133.jar' })
     $worldEdit = Join-Path $downloads $(if ($Minecraft -eq '26.1.2') { 'worldedit-bukkit-7.4.3.jar' } else { 'worldedit-bukkit-7.4.5.jar' })
     $bootstrap = Join-Path $root "build/bridge-native-fault-proof/$Minecraft"
+}
+if ($editStudy) {
+    foreach ($name in @('edit-load-proof.json','edit-load-failure.json','edit-0.log','edit-1.log')) {
+        if (Test-Path -LiteralPath (Join-Path $server $name)) {
+            throw "Archive existing edit study before build/copy: $server"
+        }
+    }
 }
 $dependencies = @((Join-Path $Java21 'bin/java.exe'), $paper, $worldEdit)
 if ($Minecraft -ne '1.21.11') { $dependencies += (Join-Path $Java25 'bin/java.exe') }
@@ -61,7 +73,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Pinned 26.2 load-client build/verification failed' }
         $env:JAVA_HOME = $Java21
     }
-    if ($SliceDiagnostics -or $MatchedEditDiagnostics) {
+    if ($SliceDiagnostics -or $editStudy) {
         & .\WEaddon_fabric_1.21.11\gradlew.bat -p tools/bridge-slice-agent check --offline --no-daemon --max-workers=2 --console=plain
         if ($LASTEXITCODE -ne 0) { throw 'Slice diagnostic agent checks failed' }
     }
@@ -84,6 +96,7 @@ try {
     [string[]]$diagnosticArguments = @(if ($SliceDiagnostics) { '--slice-diagnostics' }; if ($WithoutSpark) { '--without-spark' })
     if ($EditLoad) { $diagnosticArguments += $Minecraft }
     if ($MatchedEditDiagnostics) { $diagnosticArguments += '--matched-slices' }
+    if ($EditProfilerControl) { $diagnosticArguments += '--spark-control' }
     $serverJava = if ($Minecraft -eq '1.21.11') { $Java21 } else { $Java25 }
     & node (Join-Path $PSScriptRoot $runner) $serverJava $server $Players $Samples $Repetitions $mode @diagnosticArguments
     if ($LASTEXITCODE -ne 0) { throw "Paper load proof failed; inspect $server" }

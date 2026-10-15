@@ -17,6 +17,10 @@ The [26.2 attribution follow-up](BRIDGE_26_2_EDIT_ATTRIBUTION_2026-10-14.md)
 separates active/cold methods in four matched-workload diagnostic/control runs.
 It corrects the old reader's missing safepoint category without treating every
 long call as profiler interference or closing the soft-budget/cost gates.
+The [matched 26.2 profiler control](BRIDGE_26_2_PROFILER_CONTROL_2026-10-15.md)
+then verifies effective configuration and observed sampler on/off intervention
+without production changes. GC-associated and unexplained spark-off intervals
+remain separate findings; representative workload/cost gates are still open.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).

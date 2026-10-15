@@ -24,7 +24,7 @@ export class FrozenFixtureWorld {
     this.root = resolve(directory);
     const inside = relative(build, this.root);
     assert(inside && !isAbsolute(inside) && inside !== '..' && !inside.startsWith(`..${sep}`));
-    const editDiagnostics = basename(dirname(this.root)) === 'bridge-edit-diagnostics'
+    const editDiagnostics = ['bridge-edit-diagnostics','bridge-edit-profiler-control'].includes(basename(dirname(this.root)))
       && ['1.21.11', '26.1.2', '26.2'].includes(basename(this.root));
     assert(editDiagnostics || ['bridge-baseline-proof', 'bridge-tick-timeline-proof', 'bridge-gameplay-proof', 'bridge-gameplay-control-proof'].includes(basename(this.root)), 'Not a named frozen fixture');
     this.modern = editDiagnostics && basename(this.root) !== '1.21.11';

@@ -88,6 +88,17 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [2026-10-15 exact 26.2 profiler control](BRIDGE_26_2_PROFILER_CONTROL_2026-10-15.md)
+passes four fresh, identically instrumented on/off/off/on JVMs, 2,519 canonical
+applies and 4,800 raw/JFR ticks. Structured effective global configurations differ
+only in the profiler bit; startup and recorded sampler presence/absence agree.
+An 18.4637 ms drain overlaps GC, while a 3.4107 ms apply remains unexplained in
+a spark-off arm. The quiet 38.6932 ms GC-associated tick is retained with zero
+bridge work. This closes that bounded observer-control stage, not the soft
+budget, representative gameplay, other hosts or production cost gates. Production
+artifacts remain unchanged. Move to the distinct representative workload gates,
+not repeated stationary runs presented as release acceptance.
+
 The [26.2 edit-attribution cycle](BRIDGE_26_2_EDIT_ATTRIBUTION_2026-10-14.md)
 passes four frozen-world control/instrumented JVM runs, 2,483 applies and 4,800
 raw/JFR ticks without production changes. Lifetime method/counter reconciliation

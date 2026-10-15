@@ -15,13 +15,14 @@ import { verifyEditLoadWindow } from './edit-load-window.mjs';
 import { gestureTuple } from './gesture-tuples.mjs';
 import { startJavaLoadClients } from './java-load-clients.mjs';
 import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
+import { editDiagnosticPolicy, editRunPolicy, paperProfilerConfig, verifyProfilerLog } from './edit-diagnostic-policy.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode, version = '1.21.11', ...options] = process.argv.slice(2);
-assert(options.length <= 1 && options.every(option => option === '--matched-slices'));
-const matchedSlices = options.includes('--matched-slices');
+const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl} = study;
+if (sparkControl) assert.equal(version,'26.2','Profiler-control configuration pins currently cover only exact 26.2');
 const tuple = gestureTuple(version);
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory), repetitions = Number(repeatArgument);
-assert.equal(relative(root, serverDir), matchedSlices ? join('build', 'bridge-edit-diagnostics', version)
+assert.equal(relative(root, serverDir), matchedSlices ? join('build', study.rootName, version)
   : join('build', 'bridge-edit-load-proof', ...(version === '1.21.11' ? [] : [version])));
 assert.equal(Number(playerArgument), 32); assert.equal(Number(sampleArgument), 400);
 assert(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 4);
@@ -154,7 +155,15 @@ async function run(round) {
   copyFileSync(join(serverDir, 'companion.jar'), join(serverDir, 'plugins/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar'));
   const config = join(serverDir, 'plugins/WorldEditSelectionOverlayBridge'); mkdirSync(config, { recursive: true });
   writeFileSync(join(config, 'config.yml'), 'limits:\n  max-connections: 1024\n  global-requests-per-second: 100\n  global-burst: 100\n  player-requests-per-second: 4\n  player-burst: 8\n');
-  const instrumented = matchedSlices && (round === 2 || round === 3);
+  const {instrumented,sparkEnabled} = editRunPolicy(study,round);
+  let profilerConfigSha256;
+  if (sparkControl) {
+    const config = join(serverDir,'config'); mkdirSync(config,{recursive:true});
+    const input = join(serverDir,`edit-${round}-paper-global.input.json`);
+    writeFileSync(input,JSON.stringify(paperProfilerConfig(sparkEnabled),null,2));
+    copyFileSync(input,join(config,'paper-global.yml'));
+    profilerConfigSha256 = hash(input);
+  }
   const child = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-XX:ActiveProcessorCount=2', '-Dweso.bridge.fixture=true', '-Dweso.bridge.editFixture=true', '-Dweso.bridge.measureTicks=400',
     ...(instrumented ? ['-Dweso.bridge.sliceDiagnostics=true', `-javaagent:${agent}`] : []),
     `-XX:StartFlightRecording=filename=edit-${round}.jfr,settings=${recordingSettings},dumponexit=true,maxsize=32m`, '-jar', 'server.jar', '--nogui'], { cwd: serverDir, windowsHide: true, stdio: ['pipe','pipe','pipe'] });
@@ -164,6 +173,11 @@ async function run(round) {
     await waitFor(() => server.lines.some(s => /Done \(/.test(s)), 'Paper startup', 180000);
     assert(!server.lines.some(s => /Error occurred while enabling/.test(s)));
     assert(!server.lines.some(s => s.includes('[WorldEditSelectionOverlayBridge]') && /Disabling|ERROR/.test(s)), 'Bridge failed closed at startup');
+    if (sparkControl) {
+      await waitFor(()=>server.lines.some(s=>s.includes(sparkEnabled ? 'built-in Java engine will be used instead.'
+        : 'spark profiler will not be enabled because it is currently disabled')),'explicit profiler startup policy');
+      verifyProfilerLog(server.lines.join('\n'),sparkEnabled);
+    }
     if (round === 0) { await action('control', 'baseline'); return; }
     if (version === '26.2') {
       transport = startJavaLoadClients(javaHome, join(serverDir, `edit-${round}-clients.log`));
@@ -194,7 +208,9 @@ async function run(round) {
     }
     await waitFor(() => peers.every(p => p.ended), 'all disconnects'); await delay(250);
     const final = await metrics(); assert.equal(final.connections, 0); assert.equal(final.pending, 0); assert.equal(final.tasks, 0);
-    const result = { round, ...(matchedSlices ? {instrumented, frozenDigest} : {}), transport: transport.evidence, idle, active, recovered, final, staleConflict: true, foreignConflict: true, duplicateAppliedOnce: true, revokedDenied: true };
+    const result = { round, ...(matchedSlices ? {instrumented, frozenDigest} : {}),
+      ...(sparkControl ? {sparkEnabled,profilerConfigSha256} : {}),
+      transport: transport.evidence, idle, active, recovered, final, staleConflict: true, foreignConflict: true, duplicateAppliedOnce: true, revokedDenied: true };
     writeFileSync(join(serverDir, `edit-${round}-result.json`), JSON.stringify(result, null, 2));
     console.log(`EDIT LOAD PASS: run ${round}, ${active.after.applied-active.before.applied} commits, 32 actors`); return result;
   } finally {
@@ -203,7 +219,13 @@ async function run(round) {
       for (const p of peers) if (!p.ended) { p.closing = true; p.client.end('Fixture cleanup'); }
       await transport?.close?.();
     } finally {
-      try { await server.lifecycle.stop({graceMillis:20000}); } finally { if (server.exited) await server.drained; }
+      try { await server.lifecycle.stop({graceMillis:20000}); } finally {
+        if (server.exited) {
+          await server.drained;
+          if (sparkControl && existsSync(join(serverDir,'config/paper-global.yml')))
+            copyFileSync(join(serverDir,'config/paper-global.yml'),join(serverDir,`edit-${round}-paper-global.effective.yml`));
+        }
+      }
     }
   }
 }
@@ -218,7 +240,8 @@ try {
   }
   assert.equal(hash(join(serverDir, 'companion.jar')), hashes.companion);
   writeFileSync(proof, JSON.stringify({ checkedAt:new Date().toISOString(), baseline, minecraft:version, hashes, actors:32, repetitions,
-    ...(matchedSlices ? {matchedSlices, frozenDigest, order:['control','instrumented','instrumented','control'],
-      profiler:'Paper default spark + JFR default with zero-threshold ExecuteVMOperation/SafepointBegin'} : {}), runs }, null, 2));
+    ...(matchedSlices ? {matchedSlices, frozenDigest, order:study.order,
+      ...(sparkControl ? {sparkControl} : {}),
+      profiler:`Paper ${sparkControl ? 'spark on/off/off/on' : 'default spark'} + JFR default with zero-threshold ExecuteVMOperation/SafepointBegin`} : {}), runs }, null, 2));
   console.log('PAPER EDIT LOAD PROOF PASS; owned servers stopped');
 } catch (error) { writeFileSync(failure, JSON.stringify({ checkedAt:new Date().toISOString(), hashes, error:String(error), runs }, null, 2)); console.error(error); process.exitCode=1; }

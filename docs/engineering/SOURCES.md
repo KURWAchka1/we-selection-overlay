@@ -899,6 +899,43 @@ the complete `bridge-fixture` tree, requiring all three vanilla dimension
 directories. Legacy fixtures retain their old schema/layout. No user world is
 migrated, and a failed snapshot cannot silently become a matched-world proof.
 
+## S60 Exact 26.2 Profiler Control
+
+Checked **2026-10-15**. The retained Paper startup identifies build **26.2-133**
+and commit **58e6e45d67c998909581f9079189ef51eb6f1267**. Its exact
+[GlobalConfiguration](https://github.com/PaperMC/Paper/blob/58e6e45d67c998909581f9079189ef51eb6f1267/paper-server/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java)
+defaults `spark.enabled` to true and `enableImmediately` to false. Exact
+[SparksFly](https://github.com/PaperMC/Paper/blob/58e6e45d67c998909581f9079189ef51eb6f1267/paper-server/src/main/java/io/papermc/paper/SparksFly.java)
+checks that setting before enabling and logs the disabled-configuration outcome.
+The [public configuration reference](https://docs.papermc.io/paper/reference/global-configuration/#spark)
+documents both settings. Use the normal configuration, not reflection into the
+profiler or patched host code. These facts do not establish the source of any
+earlier timing outlier.
+
+The new test-only study keeps the ten-method observer, JFR settings, offered
+workload, heap/processor flags and frozen starting world fixed while changing
+the bundled-profiler enable bit in an on/off/off/on sequence. Both arms start
+from identical minimal version-31 Paper configuration input; complete normalized
+effective configurations are compared afterwards, excluding only `spark.enabled`.
+The startup messages and actual whole-recording sampler ThreadDump callers must
+independently agree. This is an intervention on observer policy, **not** an
+absent-companion production-cost measurement or advice to disable user profiling.
+
+Effective configuration is parsed offline with the fixture's existing pinned
+**SnakeYAML 2.6** and **Gson 2.14.0**, not ad hoc YAML string editing. The
+[LoaderOptions API](https://javadoc.io/static/org.yaml/snakeyaml/2.6/org/yaml/snakeyaml/LoaderOptions.html)
+provides duplicate-key, collection-alias, nesting and input limits. Exact local
+`javap` confirms these methods; actual Java 21/25 tests exercise `SafeConstructor`,
+reject custom tags/duplicates/malformed or oversized files, and preserve the
+parsed boolean types. These libraries are already present in the exact Paper
+fixture and do not enter player/plugin JARs. SHA-256: SnakeYAML
+`c8f7a98e7394adda02f6317249710e4d1b4c7a25aa8c7eace0c2eea52eb8bf85`,
+Gson `2cbd119bf1961c28788310963dc80ba65f58cdeec1dd139c8bdb1240faa2c36f`.
+The reader study is deliberately guarded to exact 26.2, not inferred support
+for future configuration schemas. Wrapper source discovery and policy self-tests
+precede the experiment. Fixed AB/BA on one shared laptop is not randomized
+replication or a basis for universal speedup/latency claims; see S51.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

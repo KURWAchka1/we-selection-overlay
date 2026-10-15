@@ -14,7 +14,8 @@ function fixture(t, name = 'bridge-baseline-proof') {
     rmSync(path, { recursive: true, force: true });
   });
   const directory = join(scratch, name);
-  const modern = ['bridge-edit-diagnostics/26.2','bridge-edit-diagnostics/26.1.2'].includes(name);
+  const modern = ['bridge-edit-diagnostics/26.2','bridge-edit-diagnostics/26.1.2',
+    'bridge-edit-profiler-control/26.2','bridge-edit-profiler-control/26.1.2'].includes(name);
   for (const name of modern ? ['bridge-fixture'] : ['bridge-fixture', 'bridge-fixture_nether', 'bridge-fixture_the_end']) {
     mkdirSync(join(directory, name, 'region'), { recursive: true });
     writeFileSync(join(directory, name, 'level.dat'), name);
@@ -109,6 +110,16 @@ test('mutable helper properties cannot redirect a recursive restore outside name
   frozen.worlds = ['..'];
   assert.throws(()=>frozen.restore(),/Invalid fixture world targets/);
   assert.equal(readFileSync(join(directory,'bridge-fixture/level.dat'),'utf8'),'bridge-fixture');
+});
+test('profiler-control roots preserve exact modern and legacy layouts without broadening version support', t => {
+  for (const version of ['1.21.11','26.1.2','26.2']) {
+    const {directory,frozen} = fixture(t,`bridge-edit-profiler-control/${version}`), digest = frozen.capture();
+    writeFileSync(join(directory,'bridge-fixture/level.dat'),'modified');
+    assert.equal(frozen.restore(),digest);
+    assert.equal(readFileSync(join(directory,'bridge-fixture/level.dat'),'utf8'),'bridge-fixture');
+    assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'../26.3')),/Not a named/);
+    assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'../latest')),/Not a named/);
+  }
 });
 test('junction inside a target refuses recursive restore before deletion', t => {
   const { directory, frozen } = fixture(t); frozen.capture();

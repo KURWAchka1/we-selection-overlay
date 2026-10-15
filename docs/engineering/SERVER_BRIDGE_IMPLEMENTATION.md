@@ -38,6 +38,14 @@ does not replace the busy-server release gate or explain the earlier long tick.
 
 ## Implemented Boundary
 
+The [2026-10-15 exact 26.2 profiler control](BRIDGE_26_2_PROFILER_CONTROL_2026-10-15.md)
+reconciles 2,519 applies, 4,800 ticks and all ten methods across four matched
+instrumented JVMs with spark on/off/off/on. Effective configurations and actual
+sampler events verify the intervention. Some peaks overlap GC; a 3.4107 ms apply
+without spark remains unassigned. No production fix, speedup or cost acceptance
+is claimed; the bounded observer-control stage is complete and representative
+moving/native workload comparisons remain a distinct next gate.
+
 The [2026-10-14 Paper 26.2 attribution cycle](BRIDGE_26_2_EDIT_ATTRIBUTION_2026-10-14.md)
 adds four frozen-world control/instrumented launches and reconciles 2,483 applies,
 4,800 ticks and ten method counters without changing production artifacts.

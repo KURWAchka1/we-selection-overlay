@@ -68,7 +68,7 @@ function Assert-PaperArtifact {
 }
 
 try {
-    $nodeTests = @('owned-server.test.mjs', 'frozen-fixture-world.test.mjs', 'wire-codec.test.mjs', 'load-window.test.mjs', 'load-evidence.test.mjs', 'gameplay-workload.test.mjs', 'active-lifecycle.test.mjs', 'fault-relay.test.mjs', 'edit-load-window.test.mjs', 'gesture-evidence.test.mjs', 'gesture-tuples.test.mjs', 'native-lifecycle-evidence.test.mjs', 'native-fault-evidence.test.mjs', 'java-load-clients.test.mjs') |
+    $nodeTests = @('owned-server.test.mjs', 'frozen-fixture-world.test.mjs', 'wire-codec.test.mjs', 'load-window.test.mjs', 'load-evidence.test.mjs', 'gameplay-workload.test.mjs', 'active-lifecycle.test.mjs', 'fault-relay.test.mjs', 'edit-load-window.test.mjs', 'gesture-evidence.test.mjs', 'gesture-tuples.test.mjs', 'native-lifecycle-evidence.test.mjs', 'native-fault-evidence.test.mjs', 'java-load-clients.test.mjs', 'edit-diagnostic-policy.test.mjs') |
             ForEach-Object { Join-Path $root "tools/server-bridge-test/$_" }
     & node --test @nodeTests 2>&1 | Tee-Object -FilePath (Join-Path $logs 'harness-node.log')
     if ($LASTEXITCODE -ne 0) { throw 'Bridge harness self-tests failed' }
