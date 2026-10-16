@@ -21,6 +21,10 @@ The [matched 26.2 profiler control](BRIDGE_26_2_PROFILER_CONTROL_2026-10-15.md)
 then verifies effective configuration and observed sampler on/off intervention
 without production changes. GC-associated and unexplained spark-off intervals
 remain separate findings; representative workload/cost gates are still open.
+The later [26.2 combined moving-edit workload](BRIDGE_26_2_MOVING_EDITS_2026-10-16.md)
+verifies concurrent headless XYZ selection edits with actual motion/entity/
+WorldEdit work, not native-client load or production cost acceptance. Existing
+published artifacts and production bridge behavior remain unchanged.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).

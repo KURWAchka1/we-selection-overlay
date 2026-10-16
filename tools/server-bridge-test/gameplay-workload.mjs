@@ -13,9 +13,7 @@ export function movement(index, step) {
     flags: { onGround: false, hasHorizontalCollision: false } };
 }
 
-export function validateGameplayWindow(data, { players, samples, installed, bridgePlayers }) {
-  assert.equal(bridgePlayers, bridgeConsumerCount(players), 'Gameplay roles differ from the declared workload');
-  assert(['silent', 'idle', 'one', 'many', 'flood', 'recovery'].includes(data.label), 'Unknown gameplay phase');
+export function validateGameplayActivity(data, { players, samples, movementPackets }) {
   const g = data.gameplay;
   assert.equal(g?.version, 1, 'Gameplay instrumentation missing');
   assert.equal(g.ticks, samples);
@@ -27,9 +25,15 @@ export function validateGameplayWindow(data, { players, samples, installed, brid
   assert.equal(g.invalidMoves, 0, 'Movement escaped the fixture route');
   assert.equal(g.acceptedMoves.length, players);
   assert(g.acceptedMoves.every(n => Number.isSafeInteger(n) && n >= Math.floor(samples / 20)), 'A gameplay actor stopped moving');
-  assert.equal(data.movementPackets.length, players);
-  assert(data.movementPackets.every((n, i) => Number.isSafeInteger(n) && n >= g.acceptedMoves[i]), 'Movement evidence mismatch');
+  assert.equal(movementPackets.length, players);
+  assert(movementPackets.every((n, i) => Number.isSafeInteger(n) && n >= g.acceptedMoves[i]), 'Movement evidence mismatch');
   assert.equal(data.chunkLoads, 0, 'Gameplay left the preloaded area');
+}
+
+export function validateGameplayWindow(data, { players, samples, installed, bridgePlayers }) {
+  assert.equal(bridgePlayers, bridgeConsumerCount(players), 'Gameplay roles differ from the declared workload');
+  assert(['silent', 'idle', 'one', 'many', 'flood', 'recovery'].includes(data.label), 'Unknown gameplay phase');
+  validateGameplayActivity(data,{players,samples,movementPackets:data.movementPackets});
   if ('teleports' in data || 'bridgeFrames' in data) {
     for (const values of [data.teleports,data.bridgeFrames]) {
       assert.equal(values?.length,players);

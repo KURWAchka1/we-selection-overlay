@@ -378,6 +378,21 @@ percentiles, verifies matching starting-world digests and rejects recorded JFR
 data loss or observed spark sampling. See the [matched-control report](../docs/engineering/BRIDGE_MATCHED_CONTROL_2026-10-13.md)
 for executed scope, timing variation and remaining acceptance limits.
 
+The separate exact **26.2 moving-edit** scenario combines 32 accepted flight
+routes, eight concurrent XYZ move/resize editors, metadata/flood/non-consumer
+roles, live entities and real fixed WorldEdit work:
+
+```powershell
+.\tools\test-paper-bridge-load.ps1 -Java21 'C:\path\to\jdk21' -Java25 'C:\path\to\jdk25' -Minecraft 26.2 -EditLoad -MovingEditLoad -Players 32 -Samples 400 -Repetitions 2 -AcceptEula
+node tools/server-bridge-test/analyze-edit-load-proof.mjs 'C:\path\to\jdk25' 26.2 --moving-gameplay
+```
+
+Its guarded root is `build/bridge-moving-edit-proof/26.2/`; archive prior attempts
+before reuse. The [executed report](../docs/engineering/BRIDGE_26_2_MOVING_EDITS_2026-10-16.md)
+records 1,244 applies and independent CUI/canonical/undo/control-area audits,
+not native-client concurrent gameplay or production cost acceptance. The soft
+dispatcher target remains exceeded; production/player JARs are unchanged.
+
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge
 clients discover the channel only when advertised. No player gets the new

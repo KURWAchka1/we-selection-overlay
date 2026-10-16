@@ -16,7 +16,8 @@ param(
     [string]$Java25,
     [ValidateSet('1.21.11', '26.1.2', '26.2')][string]$Minecraft = '1.21.11',
     [switch]$MatchedEditDiagnostics,
-    [switch]$EditProfilerControl
+    [switch]$EditProfilerControl,
+    [switch]$MovingEditLoad
 )
 $ErrorActionPreference = 'Stop'
 if (!$AcceptEula) { throw 'Owner acceptance of https://www.minecraft.net/eula is required' }
@@ -24,10 +25,11 @@ if ($Minecraft -ne '1.21.11' -and (!$Java25 -or !($EditLoad -or ($Minecraft -eq 
 if ($Minecraft -eq '26.2' -and $GameplayLoad -and ($Players -ne 32 -or $Samples -ne 400 -or $Repetitions -ne 2)) { throw '26.2 gameplay requires 32 actors, 400 ticks and two reversed-order pairs' }
 if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $GameplayLoad, $LifecycleLoad, $EditLoad).Where({ $_ }).Count -gt 1) { throw 'Choose one workload mode: frozen baseline, restart load, tick timeline, fair dispatch, gameplay, active lifecycle or edit load' }
 if ($EditLoad -and ($Players -ne 32 -or $Samples -ne 400)) { throw 'Edit load requires 32 actors and 400 ticks per phase' }
-if ($MatchedEditDiagnostics -and $EditProfilerControl) { throw 'Choose one edit study: instrumentation or profiler control' }
+if (@($MatchedEditDiagnostics,$EditProfilerControl,$MovingEditLoad).Where({$_}).Count -gt 1) { throw 'Choose one edit study: instrumentation, profiler control or moving gameplay' }
 if ($EditProfilerControl -and $Minecraft -ne '26.2') { throw 'Edit profiler control is currently pinned to the exact 26.2 host' }
 $editStudy = $MatchedEditDiagnostics -or $EditProfilerControl
 if ($editStudy -and (!$EditLoad -or $Repetitions -ne 4 -or $SliceDiagnostics -or $WithoutSpark)) { throw 'Matched edit studies require EditLoad and four repetitions; no unrelated profiler/diagnostic overrides' }
+if ($MovingEditLoad -and (!$EditLoad -or $Minecraft -ne '26.2' -or $Repetitions -ne 2 -or $SliceDiagnostics -or $WithoutSpark)) { throw 'Moving edits require exact 26.2, EditLoad and two repetitions; profiler policy is fixed' }
 if ($GameplayLoad -and ($Players -lt 4 -or $Samples % 20 -ne 0)) { throw 'Gameplay requires at least 4 players and a sample count divisible by 20' }
 if ($LifecycleLoad -and ($Players -ne 32 -or $Samples % 20 -ne 0)) { throw 'Active lifecycle requires 32 players and a sample count divisible by 20' }
 if ($SliceDiagnostics -and !$LifecycleLoad) { throw 'Slice diagnostics require the active lifecycle workload' }
@@ -37,6 +39,7 @@ $source = Join-Path $root 'build/bridge-paper-proof'
 $server = Join-Path $root $(if ($EditLoad) { 'build/bridge-edit-load-proof' } elseif ($WithoutSpark -and $GameplayLoad) { 'build/bridge-gameplay-control-proof' } elseif ($WithoutSpark) { 'build/bridge-slice-diagnostics-no-spark' } elseif ($SliceDiagnostics) { 'build/bridge-slice-diagnostics' } elseif ($ControlledBaseline) { 'build/bridge-baseline-proof' } elseif ($RestartLoad) { 'build/bridge-restart-load-proof' } elseif ($TickTimeline) { 'build/bridge-tick-timeline-proof' } elseif ($FairDispatch) { 'build/bridge-fair-dispatch-proof' } elseif ($GameplayLoad) { 'build/bridge-gameplay-proof' } elseif ($LifecycleLoad) { 'build/bridge-active-lifecycle-proof' } else { 'build/bridge-load-proof' })
 if ($MatchedEditDiagnostics) { $server = Join-Path $root 'build/bridge-edit-diagnostics' }
 if ($EditProfilerControl) { $server = Join-Path $root 'build/bridge-edit-profiler-control' }
+if ($MovingEditLoad) { $server = Join-Path $root 'build/bridge-moving-edit-proof' }
 if ($Minecraft -eq '1.21.11') {
     if ($editStudy) { $server = Join-Path $server $Minecraft }
     $paper = Join-Path $source 'server.jar'
@@ -49,7 +52,7 @@ if ($Minecraft -eq '1.21.11') {
     $worldEdit = Join-Path $downloads $(if ($Minecraft -eq '26.1.2') { 'worldedit-bukkit-7.4.3.jar' } else { 'worldedit-bukkit-7.4.5.jar' })
     $bootstrap = Join-Path $root "build/bridge-native-fault-proof/$Minecraft"
 }
-if ($editStudy) {
+if ($editStudy -or $MovingEditLoad) {
     foreach ($name in @('edit-load-proof.json','edit-load-failure.json','edit-0.log','edit-1.log')) {
         if (Test-Path -LiteralPath (Join-Path $server $name)) {
             throw "Archive existing edit study before build/copy: $server"
@@ -104,6 +107,7 @@ try {
     if ($GameplayLoad -and $Minecraft -eq '26.2') { $diagnosticArguments += $Minecraft }
     if ($MatchedEditDiagnostics) { $diagnosticArguments += '--matched-slices' }
     if ($EditProfilerControl) { $diagnosticArguments += '--spark-control' }
+    if ($MovingEditLoad) { $diagnosticArguments += '--moving-gameplay' }
     $serverJava = if ($Minecraft -eq '1.21.11') { $Java21 } else { $Java25 }
     & node (Join-Path $PSScriptRoot $runner) $serverJava $server $Players $Samples $Repetitions $mode @diagnosticArguments
     if ($LASTEXITCODE -ne 0) { throw "Paper load proof failed; inspect $server" }

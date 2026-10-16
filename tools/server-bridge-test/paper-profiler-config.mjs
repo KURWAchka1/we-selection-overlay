@@ -15,7 +15,7 @@ export function profilerConfigLibraries(directory) {
 }
 
 export function verifyEffectiveProfilerConfigurations(configurations, enabled) {
-  assert.equal(configurations.length,4); assert.equal(enabled.length,4);
+  assert([2,4].includes(configurations.length)); assert.equal(enabled.length,configurations.length);
   const normalized = configurations.map((configuration,i) => {
     const copy = structuredClone(configuration);
     assert.equal(copy._version,31); assert.equal(copy.spark.enabled,enabled[i]);

@@ -963,6 +963,38 @@ method limitations remain those in S51, not a statistical performance guarantee.
 Exact modern dimension layout follows S59. This new moving workload does not
 retroactively explain the stationary profiler-study outliers.
 
+## S62 Concurrent Moving Selection Edits And Tick Boundaries
+
+Checked **2026-10-16**. Reuse the exact S61 MCProtocolLib 776 transport and
+public Paper [PlayerMoveEvent](https://jd.papermc.io/paper/26.2/org/bukkit/event/player/PlayerMoveEvent.html).
+Its `hasChangedPosition()` detects sub-block movement; cancellation and teleport
+are distinct from successful ordinary motion. The existing fixture listens at
+MONITOR with cancelled events ignored and excludes teleports, while the helper
+independently retains correction packets. No synthetic Bukkit event is injected
+to manufacture accepted movement.
+
+EngineHub's [edit-session lifecycle](https://worldedit.enginehub.org/en/latest/api/concepts/edit-sessions/)
+requires closing sessions to flush queued work and creating a new session for
+subsequent edits. The existing fixed fixture follows that lifecycle; selection
+transactions remain a separate metadata path. The initially attempted examples
+URL was inaccessible; the linked concepts page is the inspected reference.
+
+The exact Paper **58e6e45**
+[MinecraftServer patch](https://github.com/PaperMC/Paper/blob/58e6e45d67c998909581f9079189ef51eb6f1267/paper-server/patches/sources/net/minecraft/server/MinecraftServer.java.patch)
+calls start-of-tick task processing before `tickServer` and its public start
+event; the end event duration uses `currentTickStart`, not that listener's start.
+The fixture bracket is therefore not the full reported tick interval. This
+source check establishes different boundaries, not the cause of the newly
+observed gaps. Raw source was inspected when GitHub's rendered search omitted
+the event text. Production code adds no internal timing hook. See S44/S59 and
+the [moving-edit evidence](BRIDGE_26_2_MOVING_EDITS_2026-10-16.md).
+
+The graph/snippet of `BridgeServer.editCommit` distinguishes host invocation
+from early authority/revision rejection and cached replies. Tests and offline
+wire reconciliation explicitly preserve those boundaries; an acknowledgment is
+not by itself evidence of another call to `host.applyEdit`. No async WorldEdit
+access, permission caching or quota increase is justified by this source review.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

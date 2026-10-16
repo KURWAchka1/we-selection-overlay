@@ -25,7 +25,9 @@ records delayed requests, late acknowledgments and pre-delivery edit revocation
 on each completed exact tuple. The subsequent
 [26.x concurrent edit load](BRIDGE_26X_EDIT_LOAD_2026-10-14.md) passes the bounded
 32-actor functional scenarios on those exact hosts, with raw/JFR reconciliation.
-Ungraceful loss, representative gameplay and production cost gates remain separate. Clipboard
+The [combined moving-edit workload](BRIDGE_26_2_MOVING_EDITS_2026-10-16.md) later
+passes 1,244 applies and 2,400 verified ticks on exact Paper 26.2; native
+concurrent gameplay, ungraceful loss and production cost gates remain separate. Clipboard
 synchronization, command simulation and other dedicated hosts remain unimplemented.
 Published client 1.8.0 is unchanged and has no bridge protocol support.
 Existing CUI-only servers must keep working without installing a companion.
@@ -58,6 +60,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [26.2 edit attribution](BRIDGE_26_2_EDIT_ATTRIBUTION_2026-10-14.md) | Four frozen-world control/diagnostic runs, ten wrapped methods, 4,800 verified ticks, corrected safepoint observation and remaining unassigned intervals |
 | [26.2 profiler control](BRIDGE_26_2_PROFILER_CONTROL_2026-10-15.md) | Four instrumented on/off/off/on runs, effective-config reconciliation, 2,519 applies, GC-associated and still-unassigned intervals; no production cost acceptance |
 | [26.2 moving gameplay](BRIDGE_26_2_GAMEPLAY_2026-10-15.md) | Four matched absent/installed JVMs, 32 moving actors, 9,600 ticks, actual WorldEdit/entity workload, independent transport/configuration reconciliation; soft-budget and production cost gates remain open |
+| [26.2 concurrent moving edits](BRIDGE_26_2_MOVING_EDITS_2026-10-16.md) | Two fresh servers, 1,244 XYZ move/resize applies, 2,400 ticks and 64 canonical/CUI/control-area/undo audits; native-load and cost acceptance remain open |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |

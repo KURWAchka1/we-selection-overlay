@@ -1,7 +1,7 @@
 # Server Bridge Verification Gates
 
 Status: **release gates, with partial foundation evidence**.
-Updated: 2026-10-15. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
+Updated: 2026-10-16. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
 contains Java 21/25 tests, six native-codec checks and a real Paper wire proof.
 Headless protocol clients are not Fabric/NeoForge gameplay clients. A subsequent
 [six-client native Paper 1.21.11 matrix](NATIVE_PAPER_REGRESSION_2026-10-11.md)
@@ -87,6 +87,20 @@ This bounded foundation evidence permits the next isolated development stage,
 not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
+
+The [2026-10-16 exact 26.2 concurrent moving-edit workload](BRIDGE_26_2_MOVING_EDITS_2026-10-16.md)
+passes two fresh servers, 1,244 XYZ move/resize applies, 2,400 verified ticks,
+18,816 accepted moves and 61,440 independent fixture WorldEdit cell changes.
+All 32 actors per run pass canonical/CUI/control-area/undo audits. Stale/foreign
+revisions, cached replay and pre-request edit revocation retain their boundaries;
+the latter checks occur while motion/world workload continue, after competing
+application workers stop, not inside a saturated active queue. Raw wire replies
+and bytes reconcile with final console counters. Idle work, measured chunk
+I/O/generation and final resources remain zero. Soft-budget overruns and large
+reported-tick/public-bracket gaps remain unassigned performance observations.
+This closes that exact headless combined functional gate, not native concurrent
+gameplay, independent replication or release cost acceptance. Production remains
+unchanged; the strengthened test tools do not require a player fix release.
 
 The [2026-10-15 exact 26.2 moving-gameplay comparison](BRIDGE_26_2_GAMEPLAY_2026-10-15.md)
 passes four fresh absent/installed, installed/absent JVMs, 9,600 reconciled ticks,

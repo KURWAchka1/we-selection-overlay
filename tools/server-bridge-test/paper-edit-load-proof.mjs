@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { constants, setPriority } from 'node:os';
@@ -16,17 +16,22 @@ import { gestureTuple } from './gesture-tuples.mjs';
 import { startJavaLoadClients } from './java-load-clients.mjs';
 import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 import { editDiagnosticPolicy, editRunPolicy, paperProfilerConfig, verifyProfilerLog } from './edit-diagnostic-policy.mjs';
+import { movement } from './gameplay-workload.mjs';
+import { movingEditKinds, movingEditTarget, verifyMovingEditWindow } from './moving-edit-window.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode, version = '1.21.11', ...options] = process.argv.slice(2);
-const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl} = study;
+const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl,movingGameplay} = study;
+const frozenStudy = matchedSlices || movingGameplay, profilerStudy = sparkControl || movingGameplay;
 if (sparkControl) assert.equal(version,'26.2','Profiler-control configuration pins currently cover only exact 26.2');
+if (movingGameplay) assert.equal(version,'26.2','Moving edit transport is pinned to the exact 26.2 host');
 const tuple = gestureTuple(version);
 const root = resolve(import.meta.dirname, '../..'), serverDir = resolve(directory), repetitions = Number(repeatArgument);
-assert.equal(relative(root, serverDir), matchedSlices ? join('build', study.rootName, version)
+assert.equal(relative(root, serverDir), frozenStudy ? join('build', study.rootName, version)
   : join('build', 'bridge-edit-load-proof', ...(version === '1.21.11' ? [] : [version])));
 assert.equal(Number(playerArgument), 32); assert.equal(Number(sampleArgument), 400);
 assert(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 4);
 if (matchedSlices) assert.equal(repetitions, 4);
+if (movingGameplay) assert.equal(repetitions,2,'Moving edit proof requires two fresh repeated JVMs');
 const properties = readFileSync(join(serverDir, 'server.properties'), 'utf8');
 for (const line of ['server-ip=127.0.0.1', 'server-port=25579', 'online-mode=false', 'max-players=32']) assert(properties.split(/\r?\n/).includes(line));
 assert.match(readFileSync(join(serverDir, 'eula.txt'), 'utf8'), /^eula=true\s*$/);
@@ -37,10 +42,12 @@ const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex
 const hashes = { paper: hash(join(serverDir, 'server.jar')), worldedit: hash(join(serverDir, 'plugins/worldedit.jar')),
   companion: hash(join(serverDir, 'companion.jar')), fixture: hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar')) };
 const agent = join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-agent.jar');
-const recordingSettings = matchedSlices ? join(serverDir, 'edit-diagnostics.jfc') : 'default';
-if (matchedSlices) {
-  hashes.agent = hash(agent);
-  hashes.bootstrap = hash(join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-bootstrap.jar'));
+const recordingSettings = frozenStudy ? join(serverDir, 'edit-diagnostics.jfc') : 'default';
+if (frozenStudy) {
+  if (matchedSlices) {
+    hashes.agent = hash(agent);
+    hashes.bootstrap = hash(join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-bootstrap.jar'));
+  }
   assert(!existsSync(join(serverDir, 'edit-load-proof.json')), 'Archive a previous diagnostic cycle before rerunning');
   for (const file of ['edit-load-failure.json','edit-0.log','edit-1.log'])
     assert(!existsSync(join(serverDir,file)), 'Archive previous diagnostic attempts before rerunning');
@@ -50,7 +57,7 @@ if (matchedSlices) {
   assert.equal(configured.status,0,configured.stderr || configured.error?.message);
   hashes.jfrSettings = hash(recordingSettings);
 }
-const frozen = matchedSlices ? new FrozenFixtureWorld(serverDir) : null;
+const frozen = frozenStudy ? new FrozenFixtureWorld(serverDir) : null;
 let frozenDigest;
 assert.equal(hashes.paper, tuple.paperSha256);
 assert.equal(createHash(tuple.worldeditAlgorithm).update(readFileSync(join(serverDir, 'plugins/worldedit.jar'))).digest('hex'), tuple.worldeditHash);
@@ -58,12 +65,15 @@ const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, windowsHid
 assert.equal(revision.status, 0); const baseline = revision.stdout.trim(); assert.match(baseline, /^[0-9a-f]{40}$/);
 const proof = join(serverDir, 'edit-load-proof.json'), failure = join(serverDir, 'edit-load-failure.json');
 for (const file of [proof, failure]) if (existsSync(file)) unlinkSync(file);
-let server, transport, cancelled = false, stopping = true, peers = [], workers = [], fault;
+let server, transport, cancelled = false, stopping = true, peers = [], workers = [], fault, movementTimer;
 const runs = [];
 process.on('SIGINT', () => { cancelled = true; }); process.on('SIGTERM', () => { cancelled = true; });
 async function waitFor(predicate, label, timeout = 15000) {
   const end = Date.now() + timeout;
-  while (!predicate()) { assert(!fault && !transport?.fault && !cancelled && !server?.exited && Date.now() < end, `${label}: ${fault ?? transport?.fault ?? 'timeout/stop'}`); await delay(10); }
+  while (!predicate()) {
+    assert(!server?.lines.some(s=>/Command exception: \/wesofixture|Gameplay workload edit failed|Unpaired fixture tick|Cannot write fixture|generated an exception whilst handling plugin message/.test(s)),'Fixture failed');
+    assert(!fault && !transport?.fault && !cancelled && !server?.exited && Date.now() < end, `${label}: ${fault ?? transport?.fault ?? 'timeout/stop'}`); await delay(10);
+  }
 }
 async function metrics() {
   const start = server.lines.length; server.child.stdin.write('wesobridge\n');
@@ -73,7 +83,8 @@ async function metrics() {
   return { connections: n('connections=', 'connections'), admitted: n('connections=', 'admitted'), throttled: n('connections=', 'throttled'),
     reads: n('Selection metadata reads=', 'reads'), replies: n('Selection metadata reads=', 'replies'),
     captures: n('Cuboid captures=', 'captures'), commits: n('Cuboid captures=', 'commits'), applied: n('Cuboid captures=', 'applied'),
-    pending: n('Queue pending=', 'pending'), peak: n('Queue pending=', 'peak'), tasks: n('Queue pending=', 'tasks') };
+    pending: n('Queue pending=', 'pending'), peak: n('Queue pending=', 'peak'), tasks: n('Queue pending=', 'tasks'),
+    ...(movingGameplay ? {bytes:n('Selection metadata reads=','reply bytes'),expired:n('Queue pending=','expired')} : {}) };
 }
 async function action(action, name) {
   const start = server.lines.length; server.child.stdin.write(`wesofixture ${action} ${name}\n`);
@@ -83,7 +94,8 @@ async function connect(index) {
   const name = `WesoLoad${String(index).padStart(2, '0')}`;
   const client = transport.createClient({ host: '127.0.0.1', port: 25579, username: name, auth: 'offline', version, profilesFolder: false, disableChatSigning: true, clientSettings: { viewDistance: 2 } });
   const p = { name, client, index, role: index < 8 ? 'editor' : index < 16 ? 'reader' : index < 28 ? 'flood' : 'silent', frames: [], cui: [], play: false, ended: false,
-    id: 0, sent: 0, applied: 0, reads: 0, latencies: [], bounds: [100 + index * 16, 64, 20, 105 + index * 16, 70, 27] };
+    id: 0, sent: 0, applied: 0, reads: 0, latencies: [], movementPackets:0, editKinds:Object.fromEntries(movingEditKinds.map(k=>[k,0])),
+    bounds: [100 + index * 16, 64, 20, 105 + index * 16, 70, 27] };
   peers.push(p);
   client.on('playerJoin', () => { p.play = true; });
   client.on('error', error => { if (!p.closing) fault = error; });
@@ -116,11 +128,14 @@ async function capture(p) {
 }
 function actorSummary() {
   return peers.sort((a,b) => a.index - b.index).map(p => ({ name: p.name, role: p.role, sent: p.sent, frames: p.frames.length,
-    applied: p.applied, reads: p.reads, latencies: p.latencies, bounds: p.bounds }));
+    applied: p.applied, reads: p.reads, latencies: p.latencies, bounds: p.bounds,
+    ...(movingGameplay ? {editKinds:p.editKinds} : {}) }));
 }
 async function measure(label, active) {
+  if (movingGameplay) await delay(5000);
   const before = await metrics(), start = server.lines.length, started = performance.now();
-  for (const p of peers) { p.sent = p.applied = p.reads = 0; p.latencies = []; }
+  const movementBefore=peers.map(p=>p.movementPackets),teleportsBefore=peers.map(p=>p.client.teleports),framesBefore=peers.map(p=>p.frames.length);
+  for (const p of peers) { p.sent = p.applied = p.reads = 0; p.latencies = []; p.editKinds=Object.fromEntries(movingEditKinds.map(k=>[k,0])); }
   server.child.stdin.write(`wesofixture measure ${label}\n`);
   await waitFor(() => server.lines.slice(start).some(s => s.includes(`WESO_MEASURE_START ${label}`)), 'measurement start');
   stopping = !active;
@@ -132,10 +147,12 @@ async function measure(label, active) {
       else if (p.role === 'reader') { const reply = (await p.exchange(request(p.epoch, ++p.id))).value; assert.deepEqual(reply.bounds, p.bounds); p.reads++; }
       else {
         const x = 100 + p.index * 16 + (p.index === 0 ? 1 : 0) + (++round % 2);
-        const target = [x, 64, 20, x + 5, 70, 27], frame = editCommit(p.epoch, ++p.id, p.revision, target);
+        const planned=movingGameplay ? movingEditTarget(p.index,round) : null;
+        const target = planned?.bounds ?? [x, 64, 20, x + 5, 70, 27], frame = editCommit(p.epoch, ++p.id, p.revision, target);
         const response = await p.exchange(frame), reply = response.value;
         assert.equal(reply.commitStatus, 0); assert.deepEqual(reply.bounds, target);
         p.revision = reply.revision; p.bounds = target; p.applied++; p.latencies.push(performance.now() - at);
+        if (planned) p.editKinds[planned.kind]++;
         p.lastFrame = frame; p.lastAck = response.bytes;
       }
       await delay(Math.max(0, (p.role === 'flood' ? 80 : 250) - (performance.now() - at)));
@@ -146,8 +163,14 @@ async function measure(label, active) {
   stopping = true; await Promise.all(workers); workers = [];
   await delay(500);
   const after = await metrics(), ticks = JSON.parse(readFileSync(join(serverDir, `plugins/WesoBridgeTestFixture/load-${label}.json`)));
-  const window = { active, before, after, actors: actorSummary(), durationMillis: performance.now() - started, ticks };
-  verifyEditLoadWindow(window); return window;
+  const window = { active, before, after, actors: actorSummary(), durationMillis: performance.now() - started, ticks,
+    ...(movingGameplay ? {moving:{movementPackets:peers.map((p,i)=>p.movementPackets-movementBefore[i]),
+      teleports:peers.map((p,i)=>p.client.teleports-teleportsBefore[i]),bridgeFrames:peers.map((p,i)=>p.frames.length-framesBefore[i])}} : {}) };
+  const evidence=join(serverDir,`${label}-window.json`);
+  if (movingGameplay) writeFileSync(evidence,JSON.stringify({validated:false,window},null,2));
+  (movingGameplay ? verifyMovingEditWindow : verifyEditLoadWindow)(window);
+  if (movingGameplay) writeFileSync(evidence,JSON.stringify({validated:true,window},null,2));
+  return window;
 }
 async function run(round) {
   peers = []; fault = null; stopping = true; transport = null;
@@ -157,7 +180,7 @@ async function run(round) {
   writeFileSync(join(config, 'config.yml'), 'limits:\n  max-connections: 1024\n  global-requests-per-second: 100\n  global-burst: 100\n  player-requests-per-second: 4\n  player-burst: 8\n');
   const {instrumented,sparkEnabled} = editRunPolicy(study,round);
   let profilerConfigSha256;
-  if (sparkControl) {
+  if (profilerStudy) {
     const config = join(serverDir,'config'); mkdirSync(config,{recursive:true});
     const input = join(serverDir,`edit-${round}-paper-global.input.json`);
     writeFileSync(input,JSON.stringify(paperProfilerConfig(sparkEnabled),null,2));
@@ -173,7 +196,7 @@ async function run(round) {
     await waitFor(() => server.lines.some(s => /Done \(/.test(s)), 'Paper startup', 180000);
     assert(!server.lines.some(s => /Error occurred while enabling/.test(s)));
     assert(!server.lines.some(s => s.includes('[WorldEditSelectionOverlayBridge]') && /Disabling|ERROR/.test(s)), 'Bridge failed closed at startup');
-    if (sparkControl) {
+    if (profilerStudy) {
       await waitFor(()=>server.lines.some(s=>s.includes(sparkEnabled ? 'built-in Java engine will be used instead.'
         : 'spark profiler will not be enabled because it is currently disabled')),'explicit profiler startup policy');
       verifyProfilerLog(server.lines.join('\n'),sparkEnabled);
@@ -182,12 +205,32 @@ async function run(round) {
     if (version === '26.2') {
       transport = startJavaLoadClients(javaHome, join(serverDir, `edit-${round}-clients.log`));
       await waitFor(() => transport.ready, 'exact 26.2 load codec', 15000);
+      if (movingGameplay) {
+        const archive=join(serverDir,'load-client-artifacts');
+        if (!existsSync(archive)) cpSync(join(root,'tools/bridge-load-clients/build/install/weso-bridge-load-clients/lib'),archive,{recursive:true,force:false,errorOnExist:true});
+        for (const artifact of transport.evidence.artifacts) assert.equal(hash(join(archive,artifact.name)),artifact.sha256);
+      }
     } else transport = { createClient: options => minecraft.createClient(options), evidence: {
       implementation: 'minecraft-protocol', version: '1.68.0', protocol: require('minecraft-data')(version).version.version } };
     await Promise.all(Array.from({length:32}, (_,i) => connect(i)));
-    await action('control', 'baseline'); await delay(5000);
+    await action('control', 'baseline');
+    if (movingGameplay) {
+      const positions=peers.map(p=>p.client.teleports);
+      await action('control','gameplay');
+      await waitFor(()=>peers.every((p,i)=>p.client.teleports>positions[i]),'all gameplay position acknowledgments');
+      let step=0;
+      movementTimer=setInterval(()=>{
+        for (const p of peers) {
+          try { p.client.write('position',movement(p.index,step)); p.movementPackets++; }
+          catch (error) { fault=error; }
+        }
+        step++;
+      },200);
+      await delay(15000);
+    } else await delay(5000);
     const editors = peers.filter(p => p.role === 'editor');
-    for (const p of editors) { await action('edit-audit-start', p.name); await capture(p); }
+    if (movingGameplay) for (const p of peers) await action('edit-audit-start',p.name);
+    for (const p of editors) { if (!movingGameplay) await action('edit-audit-start', p.name); await capture(p); }
     await action('edit-command', editors[0].name);
     const stale = (await editors[0].exchange(editCommit(editors[0].epoch, ++editors[0].id, editors[0].revision, editors[0].bounds))).value;
     assert.equal(stale.commitStatus, 1); editors[0].bounds = editors[0].bounds.map((v,i) => i === 0 || i === 3 ? v+1 : v); await capture(editors[0]);
@@ -200,8 +243,18 @@ async function run(round) {
     const victim = editors[2]; await action('editrevoke', victim.name);
     const denied = (await victim.exchange(editCommit(victim.epoch, ++victim.id, victim.revision, victim.bounds))).value;
     assert.equal(denied.commitStatus, 2); assert.equal(denied.status, 3); assert.equal(denied.bounds, undefined);
-    for (const p of editors) await action('edit-audit-end', p.name);
+    const canonical=[];
+    for (const p of (movingGameplay ? peers : editors)) {
+      if (movingGameplay) {
+        const start=server.lines.length; await action('edit-bounds',p.name);
+        const line=server.lines.slice(start).find(s=>s.includes(`WESO_FIXTURE_BOUNDS ${p.name} `)); assert(line,'No independent canonical bounds');
+        const bounds=line.slice(line.indexOf(`${p.name} `)+p.name.length+1).split(',').map(Number);
+        assert.deepEqual(bounds,p.bounds,'Server canonical state differs from acknowledgment'); canonical.push({name:p.name,bounds});
+      }
+      await action('edit-audit-end', p.name);
+    }
     const recovered = await measure(`edit-${round}-recovered`, false);
+    if (movementTimer) { clearInterval(movementTimer); movementTimer=null; }
     for (const p of peers) {
       assert(p.cui.filter(s => s.startsWith('p|0|')).every(s => { const x=Number(s.split('|')[2]); return x >= 100+p.index*16 && x <= 102+p.index*16; }), 'Foreign CUI selection');
       p.closing = true; p.client.end('Verification complete');
@@ -209,11 +262,14 @@ async function run(round) {
     await waitFor(() => peers.every(p => p.ended), 'all disconnects'); await delay(250);
     const final = await metrics(); assert.equal(final.connections, 0); assert.equal(final.pending, 0); assert.equal(final.tasks, 0);
     const result = { round, ...(matchedSlices ? {instrumented, frozenDigest} : {}),
-      ...(sparkControl ? {sparkEnabled,profilerConfigSha256} : {}),
+      ...(movingGameplay ? {movingGameplay,frozenDigest,canonical,actors:peers.map(p=>({name:p.name,frames:p.frames.length,cui:p.cui.length,
+        teleports:p.client.teleports,movementPackets:p.movementPackets}))} : {}),
+      ...(profilerStudy ? {sparkEnabled,profilerConfigSha256} : {}),
       transport: transport.evidence, idle, active, recovered, final, staleConflict: true, foreignConflict: true, duplicateAppliedOnce: true, revokedDenied: true };
     writeFileSync(join(serverDir, `edit-${round}-result.json`), JSON.stringify(result, null, 2));
     console.log(`EDIT LOAD PASS: run ${round}, ${active.after.applied-active.before.applied} commits, 32 actors`); return result;
   } finally {
+    if (movementTimer) { clearInterval(movementTimer); movementTimer=null; }
     stopping = true; await Promise.allSettled(workers); workers = [];
     try {
       for (const p of peers) if (!p.ended) { p.closing = true; p.client.end('Fixture cleanup'); }
@@ -222,7 +278,7 @@ async function run(round) {
       try { await server.lifecycle.stop({graceMillis:20000}); } finally {
         if (server.exited) {
           await server.drained;
-          if (sparkControl && existsSync(join(serverDir,'config/paper-global.yml')))
+          if (profilerStudy && existsSync(join(serverDir,'config/paper-global.yml')))
             copyFileSync(join(serverDir,'config/paper-global.yml'),join(serverDir,`edit-${round}-paper-global.effective.yml`));
         }
       }
@@ -242,6 +298,7 @@ try {
   writeFileSync(proof, JSON.stringify({ checkedAt:new Date().toISOString(), baseline, minecraft:version, hashes, actors:32, repetitions,
     ...(matchedSlices ? {matchedSlices, frozenDigest, order:study.order,
       ...(sparkControl ? {sparkControl} : {}),
-      profiler:`Paper ${sparkControl ? 'spark on/off/off/on' : 'default spark'} + JFR default with zero-threshold ExecuteVMOperation/SafepointBegin`} : {}), runs }, null, 2));
+      profiler:`Paper ${sparkControl ? 'spark on/off/off/on' : 'default spark'} + JFR default with zero-threshold ExecuteVMOperation/SafepointBegin`} : {}),
+    ...(movingGameplay ? {movingGameplay,frozenDigest,order:study.order,profiler:'Paper spark disabled + identical JFR; no method agent'} : {}),runs }, null, 2));
   console.log('PAPER EDIT LOAD PROOF PASS; owned servers stopped');
 } catch (error) { writeFileSync(failure, JSON.stringify({ checkedAt:new Date().toISOString(), hashes, error:String(error), runs }, null, 2)); console.error(error); process.exitCode=1; }

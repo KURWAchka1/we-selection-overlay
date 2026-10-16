@@ -37,3 +37,12 @@ test('matched effective configuration rejects changes outside the one profiler b
   configs[1].spark.enabled=false; configs[2].misc.extra=null;
   assert.throws(()=>verifyEffectiveProfilerConfigurations(configs,enabled),/Non-profiler/);
 });
+
+test('two moving-edit JVMs require fully equal effective configuration and reject unpaired evidence', () => {
+  const configuration={_version:31,spark:{enabled:false,'enable-immediately':false},misc:{enabled:true}};
+  const copies=[structuredClone(configuration),structuredClone(configuration)];
+  assert.match(verifyEffectiveProfilerConfigurations(copies,[false,false]),/^[0-9a-f]{64}$/);
+  assert.throws(()=>verifyEffectiveProfilerConfigurations(copies,[false]));
+  assert.throws(()=>verifyEffectiveProfilerConfigurations([copies[0]],[false]));
+  copies[1].misc.enabled=false; assert.throws(()=>verifyEffectiveProfilerConfigurations(copies,[false,false]),/Non-profiler/);
+});

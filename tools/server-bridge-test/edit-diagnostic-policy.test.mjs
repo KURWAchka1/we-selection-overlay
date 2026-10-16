@@ -20,6 +20,16 @@ test('spark controls instrument every measured arm and reverse profiler order', 
     {instrumented:true,sparkEnabled:false},{instrumented:true,sparkEnabled:true}]);
   assert.deepEqual(editRunPolicy(study,0),{instrumented:false,sparkEnabled:true});
 });
+
+test('moving edit study is isolated, repeated without method instrumentation and fixed spark policy', () => {
+  const study=editDiagnosticPolicy(['--moving-gameplay']);
+  assert.equal(study.rootName,'bridge-moving-edit-proof'); assert.equal(study.movingGameplay,true);
+  assert.equal(study.matchedSlices,false); assert.equal(study.sparkControl,false);
+  assert.deepEqual(study.order,['moving','moving']);
+  for (const round of [0,1,2]) assert.deepEqual(editRunPolicy(study,round),{instrumented:false,sparkEnabled:false});
+  for (const flag of ['--spark-control','--matched-slices','--without-spark','--moving-gameplay'])
+    assert.throws(()=>editDiagnosticPolicy(['--moving-gameplay',flag]));
+});
 test('ambiguous flags, unknown studies, invalid rounds and accidental policy mutation fail', () => {
   for (const options of [['--spark-control','--matched-slices'],['--spark-control','--spark-control'],['--without-spark'],['26.3'],null])
     assert.throws(()=>editDiagnosticPolicy(options));
