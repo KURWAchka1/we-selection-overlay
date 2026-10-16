@@ -88,6 +88,32 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [minimal-observer control](BRIDGE_DRAIN_OBSERVER_2026-10-16.md) verifies
+that nested diagnostic instrumentation changes service; it does not explain
+all remaining overruns. The [revision-ID comparison](BRIDGE_REVISION_IDS_2026-10-16.md)
+and [request-local world comparison](BRIDGE_WORLD_READ_2026-10-16.md) retain
+specific unnecessary-work removals with actual-peer authority and ordinary
+progress preserved. All three studies independently pass 4,800 raw/JFR ticks
+and actor audits. Mixed wall/CPU results and unknown pauses are retained.
+The [guard-band trial](BRIDGE_GUARD_BAND_2026-10-16.md) predeclares <=0.5 ms
+candidate p95 in both pairs, >=95% progress for every ordinary actor and <=100 ms
+ack-p95 regression. Functional evidence alone cannot pass that performance gate.
+Both static-floor candidates are rejected. The separate
+[combined hot-path trial](BRIDGE_HOTPATH_2026-10-16.md) verifies only retained
+work reductions against the original reservation baseline with those same gates.
+The [priority control](BRIDGE_PRIORITY_CONTROL_2026-10-16.md) retains the original
+fixture priority after mixed results. The later
+[encoding trial](BRIDGE_ENCODING_2026-10-16.md) passes all functional and
+per-actor/ack gates with lower allocation, but candidate p95 0.5054 ms fails the
+unchanged 0.5 ms limit. Rebuild all six development runtimes and both universal
+packages for this shared-code change; published 1.8.0 artifacts stay immutable.
+The same candidate then passes **six fresh ordinary-load JVMs** across exact
+1.21.11/26.1.2/26.2 Paper/WorldEdit tuples: 3,519 applies, 7,200 reconciled ticks,
+48 editor audits and zero final connections/queue/tasks. That is cross-host
+functional regression, not a replacement performance baseline or native test.
+None of these exact-host studies substitutes for native concurrent gameplay,
+absent/installed production cost baselines or unsupported platform matrices.
+
 The [2026-10-16 dispatcher comparison](BRIDGE_DISPATCH_BUDGET_2026-10-16.md)
 changes only the unpublished companion after a deterministic old-code failure.
 Four identically instrumented previous/candidate/candidate/previous moving-load

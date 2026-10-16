@@ -35,9 +35,10 @@ class JfrBridgeSlices {
         Detail(Call root) { this.root = root; }
     }
     public static void main(String[] args) throws Exception {
-        if ((args.length != 2 && args.length != 4) || !Set.of("production", "probe", "edit").contains(args[1]))
-            throw new IllegalArgumentException("Expected recording, production/probe/edit and optional phase/count");
+        if ((args.length != 2 && args.length != 4) || !Set.of("production", "probe", "edit", "drain").contains(args[1]))
+            throw new IllegalArgumentException("Expected recording, production/probe/edit/drain and optional phase/count");
         boolean production = !args[1].equals("probe");
+        boolean drainOnly = args[1].equals("drain");
         Path path = Path.of(args[0]);
         Instant phaseStart = null, phaseEnd = null;
         if (args.length == 4) {
@@ -76,6 +77,7 @@ class JfrBridgeSlices {
                 if (!event.getEventType().getName().equals("weso.diagnostic.Call")) continue;
                 if (++seen > 1_000_000) throw new IllegalStateException("Diagnostic event ceiling exceeded");
                 Call call = call(event);
+                if (drainOnly && call.parent != 0) throw new IllegalStateException("Non-root drain in drain-only recording");
                 if (phaseStart != null && (call.start.isBefore(phaseStart) || call.end.isAfter(phaseEnd))) continue;
                 count++;
                 Group group = groups.computeIfAbsent(call.operation, ignored -> new Group());
@@ -89,7 +91,9 @@ class JfrBridgeSlices {
                 coreMax = Math.max(coreMax, call.after);
             }
         }
-        if (args.length == 2 && (count == 0 || production && (!groups.keySet().containsAll(BASE)
+        if (drainOnly && !Set.of("drain").containsAll(groups.keySet()))
+            throw new IllegalStateException("Nested calls in a drain-only recording");
+        if (args.length == 2 && (count == 0 || production && !drainOnly && (!groups.keySet().containsAll(BASE)
                 || !BASE.containsAll(groups.keySet().stream().filter(s -> !EDIT.contains(s)).toList())
                 || args[1].equals("edit") && !groups.keySet().containsAll(EDIT))))
             throw new IllegalStateException("Missing diagnostic method evidence");

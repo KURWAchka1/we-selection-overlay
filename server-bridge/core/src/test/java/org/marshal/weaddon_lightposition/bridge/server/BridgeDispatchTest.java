@@ -98,6 +98,20 @@ class BridgeDispatchTest {
         assertEquals(1, server.pendingCount()); assertEquals(400_000, server.queueMetrics().maxSliceNanos());
     }
 
+    @Test void cheapVisitsUseAvailableBudgetWithoutAnUnmeasuredFloor() {
+        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { time.addAndGet(50_000); return false; }
+            public SelectionState readSelection(UUID id) { fail("No read expected"); return null; }
+        }, BridgeServer.Limits.defaults(), time::get, UUID::randomUUID);
+        var order = new ArrayList<UUID>();
+        for (int i = 0; i < 8; i++) target.enqueue(new UUID(5, i), BridgeCodec.encode(hello(i)));
+        assertEquals(8, target.drain((id, frame) -> order.add(id)));
+        assertEquals(400_000, target.queueMetrics().maxSliceNanos()); assertEquals(0, target.pendingCount());
+        assertEquals(0, target.drain((id, frame) -> order.add(id)));
+        assertEquals(0, target.pendingCount()); assertEquals(8, target.metrics().admitted());
+        for (int i=0;i<8;i++) assertEquals(new UUID(5, i), order.get(i));
+    }
+
     @Test void expensiveVisitCannotPoisonLaterSlicesOrStopOrdinaryProgress() {
         var calls = new AtomicLong();
         BridgeServer target = new BridgeServer(new BridgeServer.Host() {

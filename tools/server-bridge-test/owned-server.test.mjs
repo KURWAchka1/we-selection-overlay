@@ -3,7 +3,26 @@ import { spawn } from 'node:child_process';
 import { EventEmitter, once } from 'node:events';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
-import { observeOwnedServer } from './owned-server.mjs';
+import { constants, getPriority, setPriority } from 'node:os';
+import { observeOwnedServer, observedOwnedDepartures } from './owned-server.mjs';
+
+test('client completion cannot replace all 32 owning-server quit observations',()=>{
+  const names=Array.from({length:32},(_,i)=>`WesoLoad${String(i).padStart(2,'0')}`);
+  const lines=names.map(n=>`[18:55:47 INFO]: ${n} left the game`);
+  assert(!observedOwnedDepartures(lines.slice(0,30),names));
+  assert(observedOwnedDepartures(lines,names));
+  assert(observedOwnedDepartures(lines.map(line=>'> \r  \r'+line.replace(']: ',']: \u001b[93m')+'\u001b[0m'),names));
+  assert(!observedOwnedDepartures(lines.map(s=>s.replace('left the game','lost connection: Disconnected')),names));
+});
+
+test('duplicate or foreign log messages cannot complete missing server quits',()=>{
+  const names=['WesoLoad00','WesoLoad01'];
+  assert(!observedOwnedDepartures(['[INFO]: WesoLoad00 left the game','[INFO]: WesoLoad00 left the game'],names));
+  assert(!observedOwnedDepartures(['[INFO]: FakeWesoLoad00 left the game','[INFO]: WesoLoad01 left the game'],names));
+  assert.throws(()=>observedOwnedDepartures([],[]));
+  assert.throws(()=>observedOwnedDepartures([],['WesoLoad00','WesoLoad00']));
+  assert.throws(()=>observedOwnedDepartures([],['WesoLoad00\n']));
+});
 
 function fake(onStop, onKill = child => child.emit('close', null, 'SIGTERM')) {
   const child = new EventEmitter();
@@ -24,6 +43,16 @@ function ownedNode(t, program) {
   });
   return { child, server };
 }
+
+test('owned Windows process can verify below-normal and normal priorities without foreground control',
+  {skip:process.platform!=='win32'},async t=>{
+    const {child,server}=ownedNode(t,"process.stdin.once('data',()=>process.exit(0));process.stdout.write('ready');");
+    await once(child.stdout,'data');
+    for(const priority of [constants.priority.PRIORITY_BELOW_NORMAL,constants.priority.PRIORITY_NORMAL]) {
+      setPriority(child.pid,priority);assert.equal(getPriority(child.pid),priority);
+    }
+    await server.stop({graceMillis:5000,killMillis:5000});
+  });
 
 test('normal shutdown waits for close, retains final output and is idempotent', async t => {
   const { child, server } = ownedNode(t,

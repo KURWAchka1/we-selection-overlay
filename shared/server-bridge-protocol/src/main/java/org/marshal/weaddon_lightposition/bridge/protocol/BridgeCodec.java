@@ -2,7 +2,6 @@ package org.marshal.weaddon_lightposition.bridge.protocol;
 
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.UUID;
 
 import static org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.*;
@@ -20,7 +19,7 @@ public final class BridgeCodec {
     private BridgeCodec() { }
 
     public static byte[] encode(BridgeMessage message) {
-        ByteBuffer out = ByteBuffer.allocate(MAX_FRAME_BYTES);
+        ByteBuffer out = ByteBuffer.allocate(encodedSize(message));
         out.putInt(MAGIC).put((byte) ENVELOPE_VERSION);
         switch (message) {
             case Hello value -> {
@@ -63,8 +62,25 @@ public final class BridgeCodec {
                 out.put((byte) value.status().ordinal()); editSnapshot(out, value.snapshot());
             }
         }
-        return Arrays.copyOf(out.array(), out.position());
+        if (out.hasRemaining()) throw new IllegalStateException("Bridge frame size differs from schema");
+        return out.array();
     }
+
+    private static int encodedSize(BridgeMessage message) {
+        return switch (message) {
+            case Hello ignored -> 30;
+            case Welcome ignored -> 49;
+            case SelectionRequest ignored -> 30;
+            case SelectionReply value -> 30 + selectionSize(value.selection());
+            case SessionClosed ignored -> 38;
+            case EditReadRequest ignored -> 30;
+            case EditReadReply value -> 46 + selectionSize(value.snapshot().selection());
+            case EditCommitRequest ignored -> 70;
+            case EditCommitReply value -> 47 + selectionSize(value.snapshot().selection());
+        };
+    }
+
+    private static int selectionSize(SelectionState state) { return state.status() == SelectionStatus.READY ? 34 : 1; }
 
     public static BridgeMessage decode(byte[] frame, Direction direction) {
         if (frame == null || frame.length < MIN_FRAME_BYTES || frame.length > MAX_FRAME_BYTES || direction == null)

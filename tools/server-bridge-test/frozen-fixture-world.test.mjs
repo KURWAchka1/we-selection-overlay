@@ -15,7 +15,7 @@ function fixture(t, name = 'bridge-baseline-proof') {
   });
   const directory = join(scratch, name);
   const modern = ['bridge-edit-diagnostics/26.2','bridge-edit-diagnostics/26.1.2',
-    'bridge-edit-profiler-control/26.2','bridge-edit-profiler-control/26.1.2','bridge-gameplay-control-proof/26.2','bridge-moving-edit-proof/26.2','bridge-dispatch-budget-proof/26.2'].includes(name);
+    'bridge-edit-profiler-control/26.2','bridge-edit-profiler-control/26.1.2','bridge-gameplay-control-proof/26.2','bridge-moving-edit-proof/26.2','bridge-dispatch-budget-proof/26.2','bridge-drain-observer-proof/26.2','bridge-revision-proof/26.2','bridge-world-read-proof/26.2','bridge-guard-band-proof/26.2','bridge-hotpath-proof/26.2','bridge-priority-proof/26.2','bridge-encoding-proof/26.2'].includes(name);
   for (const name of modern ? ['bridge-fixture'] : ['bridge-fixture', 'bridge-fixture_nether', 'bridge-fixture_the_end']) {
     mkdirSync(join(directory, name, 'region'), { recursive: true });
     writeFileSync(join(directory, name, 'level.dat'), name);
@@ -144,6 +144,55 @@ test('moving edit study keeps a separate modern snapshot and refuses unknown hos
 
 test('budget comparison cannot restore another version or use a legacy world layout', t => {
   const {directory,frozen}=fixture(t,'bridge-dispatch-budget-proof/26.2'),digest=frozen.capture();
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
+  assert.equal(frozen.restore(),digest);
+  for (const name of ['1.21.11','26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);
+});
+
+test('drain observer study cannot reuse another evidence root or host version', t => {
+  const {directory,frozen}=fixture(t,'bridge-drain-observer-proof/26.2'),digest=frozen.capture();
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
+  assert.equal(frozen.restore(),digest);
+  for (const name of ['1.21.11','26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);
+});
+
+test('revision comparison restores only its named exact-host world', t => {
+  const {directory,frozen}=fixture(t,'bridge-revision-proof/26.2'),digest=frozen.capture();
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
+  assert.equal(frozen.restore(),digest);
+  for (const name of ['1.21.11','26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);
+});
+
+test('world-read comparison cannot restore an unrelated tuple', t => {
+  const {directory,frozen}=fixture(t,'bridge-world-read-proof/26.2'),digest=frozen.capture();
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
+  assert.equal(frozen.restore(),digest);
+  for (const name of ['1.21.11','26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);
+});
+
+test('guard-band comparison refuses other hosts and preserves exact frozen bytes', t => {
+  const {directory,frozen}=fixture(t,'bridge-guard-band-proof/26.2'),digest=frozen.capture();
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
+  assert.equal(frozen.restore(),digest);
+  for (const name of ['1.21.11','26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);
+});
+
+test('combined hot-path trial cannot restore another evidence root or host tuple',t=>{
+  const {directory,frozen}=fixture(t,'bridge-hotpath-proof/26.2'),digest=frozen.capture();
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
+  assert.equal(frozen.restore(),digest);
+  for (const name of ['1.21.11','26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);
+});
+
+test('priority control restores only its separately named 26.2 fixture',t=>{
+  const {directory,frozen}=fixture(t,'bridge-priority-proof/26.2'),digest=frozen.capture();
+  writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
+  assert.equal(frozen.restore(),digest);
+  for (const name of ['1.21.11','26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);
+});
+
+test('encoding comparison restores only its separately named 26.2 fixture',t=>{
+  const {directory,frozen}=fixture(t,'bridge-encoding-proof/26.2'),digest=frozen.capture();
   writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
   assert.equal(frozen.restore(),digest);
   for (const name of ['1.21.11','26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);

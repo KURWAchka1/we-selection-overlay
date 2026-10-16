@@ -88,6 +88,7 @@ public final class BridgeServer {
     private final LinkedHashMap<UUID, Peer> pending = new LinkedHashMap<>();
     private long admitted, throttled, malformed, selectionReads, replies, encodedReplyBytes;
     private long editCaptures, editCommits, editsApplied;
+    private RevisionSequence revisions;
     private long queued, expired, cancelled, maxWaitNanos, maxSliceNanos;
     private int peakPending;
     private boolean draining;
@@ -260,7 +261,11 @@ public final class BridgeServer {
 
     private EditSnapshot retainCapture(Peer peer, EditCapture capture) {
         peer.edit = capture.token() == null ? null : capture;
-        peer.editRevision = peer.edit == null ? NO_EPOCH : UUID.randomUUID();
+        if (peer.edit == null) peer.editRevision = NO_EPOCH;
+        else {
+            if (revisions == null) revisions = new RevisionSequence(peer.epoch);
+            peer.editRevision = revisions.next();
+        }
         return new EditSnapshot(peer.editRevision, capture.selection());
     }
 

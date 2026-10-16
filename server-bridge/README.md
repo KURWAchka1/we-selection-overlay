@@ -402,6 +402,28 @@ from 19.21% to 7.30% with 11.44% less
 saturated edit throughput and increased acknowledgment latency. This does not
 close the soft-target/release cost gate or replace the native-client checks.
 
+The [observer comparison](../docs/engineering/BRIDGE_DRAIN_OBSERVER_2026-10-16.md)
+keeps the companion fixed and compares nested/root-only diagnostics. Its separate
+headless helper uses MCProtocolLib's supported inline callbacks, with original
+simultaneous 32-client joins and no extra decoded-packet queue. The
+[revision-ID](../docs/engineering/BRIDGE_REVISION_IDS_2026-10-16.md) and
+[request-local world](../docs/engineering/BRIDGE_WORLD_READ_2026-10-16.md)
+comparisons then retain specific unnecessary-work removals in the unpublished
+companion, with actual-peer authority and ordinary progress preserved. They do
+not prove universal CPU/wall improvements or explain every atomic/JVM pause.
+The [guard-band trial](../docs/engineering/BRIDGE_GUARD_BAND_2026-10-16.md)
+records rejected candidates as well as predeclared per-actor/latency/p95 gates.
+Each study has its own guarded root and exact artifact pins; do not overwrite
+completed or failed attempts. Published/player artifacts are unchanged.
+
+The later [priority control](../docs/engineering/BRIDGE_PRIORITY_CONTROL_2026-10-16.md)
+keeps BelowNormal as the fixture default after mixed results. The
+[exact-sized encoding trial](../docs/engineering/BRIDGE_ENCODING_2026-10-16.md)
+removes a temporary array/copy in the shared codec with identical wire bytes.
+Allocation falls, but one candidate p95 is 0.5054 ms: the strict cost gate remains
+open. Unlike the preceding server-only optimizations, this change rebuilds
+development client packages on all six runtimes. Published 1.8.0 remains intact.
+
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge
 clients discover the channel only when advertised. No player gets the new

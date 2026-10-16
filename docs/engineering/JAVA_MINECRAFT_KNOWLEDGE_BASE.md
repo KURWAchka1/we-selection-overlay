@@ -193,6 +193,38 @@ Do not interrupt/retry an atomic host operation or hide raw overruns. Subtract
 `nanoTime` values rather than adding absolute deadlines; see
 [clock/thread constraints](SOURCES.md#s63-dispatcher-clock-and-thread-constraints).
 
+Measure observer cost explicitly. The [nested/root observer control](BRIDGE_DRAIN_OBSERVER_2026-10-16.md)
+shows that per-method diagnostics change observed service under this workload;
+root-only observation still has overhead. Fix the observer when comparing
+production candidates. Retain both valid failures and all raw pauses; do not
+infer CPU-free work from a quantized zero or attribute every outlier to GC.
+See [S64](SOURCES.md#s64-observer-cost-and-minimal-drain-measurement).
+
+Correlation handles are not authorization. The [revision experiment](BRIDGE_REVISION_IDS_2026-10-16.md)
+removes per-result cryptographic generation while preserving random connection
+epochs and actual-peer/capture/live-grant checks. Never turn those opaque IDs
+into global bearer tokens. Resolve a WorldEdit world once within a synchronous
+read when possible; the [world-reference comparison](BRIDGE_WORLD_READ_2026-10-16.md)
+reduces redundant wrapper allocation but does not establish a general CPU or
+wall-time improvement. Do not retain live worlds or permissions across requests.
+
+Do not turn a nominal time target into an unmeasured static headroom floor.
+The [guard-band trials](BRIDGE_GUARD_BAND_2026-10-16.md) reject both tested floors
+on predeclared progress/latency/p95 gates and restore the original measured-visit
+policy. Keep negative results and compare the retained hot-path changes in the
+separate [combined trial](BRIDGE_HOTPATH_2026-10-16.md). No safe API allows an
+arbitrary already-running host call/JVM pause to be interrupted to meet a hard
+deadline; raw duration and unknown causes must remain visible.
+
+The [priority control](BRIDGE_PRIORITY_CONTROL_2026-10-16.md) does not justify
+boosting production or changing unrelated desktop processes. BelowNormal stays
+the fixture default. [Exact-sized encoding](BRIDGE_ENCODING_2026-10-16.md)
+removes one temporary array/copy per frame with exclusive ownership and unchanged
+wire bytes. Retain its measured allocation reduction, not a CPU/p95-speedup
+claim: one candidate p95 is 0.5054 ms and the strict cost gate remains open.
+Because the codec is shared, rebuild development clients on all six native
+runtimes; never silently replace published 1.8.0 artifacts.
+
 ## Network Facts That Affect This Project
 
 | Verified fact | Engineering decision |

@@ -39,9 +39,12 @@ class BridgeEditTest {
     }, new BridgeServer.Limits(10, 1000, 1000, 100, 100), now::get, UUID::randomUUID);
     private SelectionState state() { return new SelectionState(SelectionStatus.READY, actual, -64, 319, 7); }
     private BridgeMessage exchange(UUID id, BridgeMessage message) {
+        return exchange(server, id, message);
+    }
+    private BridgeMessage exchange(BridgeServer target, UUID id, BridgeMessage message) {
         var result = new AtomicReference<BridgeMessage>();
-        assertTrue(server.enqueue(id, BridgeCodec.encode(message)));
-        server.drain((actor, bytes) -> { assertEquals(id, actor); result.set(BridgeCodec.decode(bytes, BridgeCodec.Direction.TO_CLIENT)); });
+        assertTrue(target.enqueue(id, BridgeCodec.encode(message)));
+        target.drain((actor, bytes) -> { assertEquals(id, actor); result.set(BridgeCodec.decode(bytes, BridgeCodec.Direction.TO_CLIENT)); });
         return result.get();
     }
     private Welcome hello(UUID id) { return (Welcome) exchange(id, new Hello(nonce, 1, 2, 7)); }
@@ -71,6 +74,38 @@ class BridgeEditTest {
         assertNull(exchange(other, new EditCommitRequest(a, 2, original.revision(), shifted)));
         assertEquals(CommitStatus.CONFLICT, ((EditCommitReply) exchange(other, new EditCommitRequest(b, 2, original.revision(), shifted))).status());
         assertEquals(0, applies); assertEquals(initial, actual);
+    }
+
+    @Test void serverWideRevisionsStayDistinctEvenWithEqualEpochsAndContextRenewal() {
+        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { return true; }
+            public boolean mayEditSelection(UUID id) { return true; }
+            public SelectionState readSelection(UUID id) { return state(); }
+            public BridgeServer.EditCapture captureEdit(UUID id) { return new BridgeServer.EditCapture(new Origin(id, actual), state()); }
+            public BridgeServer.EditOutcome applyEdit(UUID id, Object token, Bounds bounds) { fail("Foreign/stale handle reached host"); return null; }
+        }, new BridgeServer.Limits(10, 1000, 1000, 100, 100), now::get, () -> nonce);
+        for (var id : new UUID[]{player, other}) exchange(target, id, new Hello(nonce, 1, 2, 7));
+        var a = ((EditReadReply) exchange(target, player, new EditReadRequest(nonce, 1))).snapshot();
+        var b = ((EditReadReply) exchange(target, other, new EditReadRequest(nonce, 1))).snapshot();
+        assertNotEquals(a.revision(), b.revision());
+        assertEquals(CommitStatus.CONFLICT, ((EditCommitReply) exchange(target, other,
+                new EditCommitRequest(nonce, 2, a.revision(), shifted))).status());
+        target.resetContext(player); exchange(target, player, new Hello(nonce, 1, 2, 7));
+        var fresh = ((EditReadReply) exchange(target, player, new EditReadRequest(nonce, 1))).snapshot();
+        assertNotEquals(a.revision(), fresh.revision()); assertNotEquals(b.revision(), fresh.revision());
+        assertEquals(CommitStatus.CONFLICT, ((EditCommitReply) exchange(target, player,
+                new EditCommitRequest(nonce, 2, a.revision(), shifted))).status());
+    }
+
+    @Test void aKnownRevisionCannotCreateACaptureOrBypassRevocation() {
+        var epoch = hello(player).epoch();
+        assertEquals(CommitStatus.CONFLICT, ((EditCommitReply) exchange(player,
+                new EditCommitRequest(epoch, 1, new UUID(epoch.getMostSignificantBits(), epoch.getLeastSignificantBits() + 1), shifted))).status());
+        assertEquals(0, applies); assertEquals(0, captures);
+        var snapshot = capture(player, epoch, 2); editing = false;
+        assertEquals(CommitStatus.DENIED, ((EditCommitReply) exchange(player,
+                new EditCommitRequest(epoch, 3, snapshot.revision(), shifted))).status());
+        assertEquals(0, applies);
     }
     @Test void currentHostStateWinsOverAStaleCapturedBounds() {
         var epoch = hello(player).epoch(); var original = capture(player, epoch, 1); actual = shifted;

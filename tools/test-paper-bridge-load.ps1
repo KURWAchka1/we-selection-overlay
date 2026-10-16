@@ -18,7 +18,14 @@ param(
     [switch]$MatchedEditDiagnostics,
     [switch]$EditProfilerControl,
     [switch]$MovingEditLoad,
-    [switch]$BudgetComparison
+    [switch]$BudgetComparison,
+    [switch]$DrainObserverControl,
+    [switch]$RevisionComparison,
+    [switch]$WorldReadComparison,
+    [switch]$GuardBandComparison,
+    [switch]$HotPathComparison,
+    [switch]$PriorityControl,
+    [switch]$EncodingComparison
 )
 $ErrorActionPreference = 'Stop'
 if (!$AcceptEula) { throw 'Owner acceptance of https://www.minecraft.net/eula is required' }
@@ -26,10 +33,17 @@ if ($Minecraft -ne '1.21.11' -and (!$Java25 -or !($EditLoad -or ($Minecraft -eq 
 if ($Minecraft -eq '26.2' -and $GameplayLoad -and ($Players -ne 32 -or $Samples -ne 400 -or $Repetitions -ne 2)) { throw '26.2 gameplay requires 32 actors, 400 ticks and two reversed-order pairs' }
 if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $GameplayLoad, $LifecycleLoad, $EditLoad).Where({ $_ }).Count -gt 1) { throw 'Choose one workload mode: frozen baseline, restart load, tick timeline, fair dispatch, gameplay, active lifecycle or edit load' }
 if ($EditLoad -and ($Players -ne 32 -or $Samples -ne 400)) { throw 'Edit load requires 32 actors and 400 ticks per phase' }
-if (@($MatchedEditDiagnostics,$EditProfilerControl,$MovingEditLoad,$BudgetComparison).Where({$_}).Count -gt 1) { throw 'Choose one edit study: instrumentation, profiler control, moving gameplay or budget comparison' }
+if (@($MatchedEditDiagnostics,$EditProfilerControl,$MovingEditLoad,$BudgetComparison,$DrainObserverControl,$RevisionComparison,$WorldReadComparison,$GuardBandComparison,$HotPathComparison,$PriorityControl,$EncodingComparison).Where({$_}).Count -gt 1) { throw 'Choose one edit study' }
 if ($EditProfilerControl -and $Minecraft -ne '26.2') { throw 'Edit profiler control is currently pinned to the exact 26.2 host' }
-$editStudy = $MatchedEditDiagnostics -or $EditProfilerControl -or $BudgetComparison
+$editStudy = $MatchedEditDiagnostics -or $EditProfilerControl -or $BudgetComparison -or $DrainObserverControl -or $RevisionComparison -or $WorldReadComparison -or $GuardBandComparison -or $HotPathComparison -or $PriorityControl -or $EncodingComparison
 if ($BudgetComparison -and $Minecraft -ne '26.2') { throw 'Budget comparison is pinned to exact 26.2' }
+if ($DrainObserverControl -and $Minecraft -ne '26.2') { throw 'Drain observer control is pinned to exact 26.2' }
+if ($RevisionComparison -and $Minecraft -ne '26.2') { throw 'Revision comparison is pinned to exact 26.2' }
+if ($WorldReadComparison -and $Minecraft -ne '26.2') { throw 'World-read comparison is pinned to exact 26.2' }
+if ($GuardBandComparison -and $Minecraft -ne '26.2') { throw 'Guard-band comparison is pinned to exact 26.2' }
+if ($HotPathComparison -and $Minecraft -ne '26.2') { throw 'Hot-path comparison is pinned to exact 26.2' }
+if ($PriorityControl -and $Minecraft -ne '26.2') { throw 'Priority control is pinned to exact 26.2' }
+if ($EncodingComparison -and $Minecraft -ne '26.2') { throw 'Encoding comparison is pinned to exact 26.2' }
 if ($editStudy -and (!$EditLoad -or $Repetitions -ne 4 -or $SliceDiagnostics -or $WithoutSpark)) { throw 'Matched edit studies require EditLoad and four repetitions; no unrelated profiler/diagnostic overrides' }
 if ($MovingEditLoad -and (!$EditLoad -or $Minecraft -ne '26.2' -or $Repetitions -ne 2 -or $SliceDiagnostics -or $WithoutSpark)) { throw 'Moving edits require exact 26.2, EditLoad and two repetitions; profiler policy is fixed' }
 if ($GameplayLoad -and ($Players -lt 4 -or $Samples % 20 -ne 0)) { throw 'Gameplay requires at least 4 players and a sample count divisible by 20' }
@@ -43,6 +57,13 @@ if ($MatchedEditDiagnostics) { $server = Join-Path $root 'build/bridge-edit-diag
 if ($EditProfilerControl) { $server = Join-Path $root 'build/bridge-edit-profiler-control' }
 if ($MovingEditLoad) { $server = Join-Path $root 'build/bridge-moving-edit-proof' }
 if ($BudgetComparison) { $server = Join-Path $root 'build/bridge-dispatch-budget-proof' }
+if ($DrainObserverControl) { $server = Join-Path $root 'build/bridge-drain-observer-proof' }
+if ($RevisionComparison) { $server = Join-Path $root 'build/bridge-revision-proof' }
+if ($WorldReadComparison) { $server = Join-Path $root 'build/bridge-world-read-proof' }
+if ($GuardBandComparison) { $server = Join-Path $root 'build/bridge-guard-band-proof' }
+if ($HotPathComparison) { $server = Join-Path $root 'build/bridge-hotpath-proof' }
+if ($PriorityControl) { $server = Join-Path $root 'build/bridge-priority-proof' }
+if ($EncodingComparison) { $server = Join-Path $root 'build/bridge-encoding-proof' }
 if ($Minecraft -eq '1.21.11') {
     if ($editStudy) { $server = Join-Path $server $Minecraft }
     $paper = Join-Path $source 'server.jar'
@@ -62,9 +83,10 @@ if ($editStudy -or $MovingEditLoad) {
         }
     }
 }
-if ($BudgetComparison) {
+if ($BudgetComparison -or $RevisionComparison -or $WorldReadComparison -or $GuardBandComparison -or $HotPathComparison -or $EncodingComparison) {
     $previous = Join-Path $server 'previous-companion.jar'
-    if (!(Test-Path -LiteralPath $previous -PathType Leaf) -or (Get-FileHash -LiteralPath $previous -Algorithm SHA256).Hash.ToLower() -ne '7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956') { throw 'Preserve the exact pre-change companion before building a budget comparison' }
+    $expected = if ($GuardBandComparison -or $EncodingComparison) {'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6'} elseif ($WorldReadComparison) {'42528d3b606e6e2cba9142a482d5ba6e95a589ec16fc3b693a57dfe1af9186cd'} elseif ($RevisionComparison -or $HotPathComparison) {'78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1'} else {'7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956'}
+    if (!(Test-Path -LiteralPath $previous -PathType Leaf) -or (Get-FileHash -LiteralPath $previous -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Preserve the exact pre-change companion before building a comparison' }
 }
 if ($Minecraft -eq '26.2' -and $GameplayLoad) {
     foreach ($name in @('load-proof.json','load-failure.json','prepare.log','1-absent.log')) {
@@ -116,6 +138,13 @@ try {
     if ($EditProfilerControl) { $diagnosticArguments += '--spark-control' }
     if ($MovingEditLoad) { $diagnosticArguments += '--moving-gameplay' }
     if ($BudgetComparison) { $diagnosticArguments += '--budget-control' }
+    if ($DrainObserverControl) { $diagnosticArguments += '--drain-control' }
+    if ($RevisionComparison) { $diagnosticArguments += '--revision-control' }
+    if ($WorldReadComparison) { $diagnosticArguments += '--world-control' }
+    if ($GuardBandComparison) { $diagnosticArguments += '--guard-control' }
+    if ($HotPathComparison) { $diagnosticArguments += '--hotpath-control' }
+    if ($PriorityControl) { $diagnosticArguments += '--priority-control' }
+    if ($EncodingComparison) { $diagnosticArguments += '--encoding-control' }
     $serverJava = if ($Minecraft -eq '1.21.11') { $Java21 } else { $Java25 }
     & node (Join-Path $PSScriptRoot $runner) $serverJava $server $Players $Samples $Repetitions $mode @diagnosticArguments
     if ($LASTEXITCODE -ne 0) { throw "Paper load proof failed; inspect $server" }

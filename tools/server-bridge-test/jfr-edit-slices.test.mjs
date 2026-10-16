@@ -54,3 +54,18 @@ test('tick attribution counts root drains, not nested apply calls', t => {
   assert(rows.every(row=>row.inferredDrainCount>=1 && row.inferredDrainOverlapMillis>0
     && row.inferredDrainOverlapMillis<=row.paperMillis && row.inferredSafepointBeginMillis>=0));
 });
+
+test('drain-only reader requires exact roots and cannot silently accept nested or incomplete full diagnostics', t => {
+  const path=recording(t,'drain');
+  const drainRead=(file,...args)=>invoke([join(import.meta.dirname,'JfrBridgeSlices.java'),file,'drain',...args]);
+  for (const [args,count] of [[[],3],[['active','2'],2],[['idle','2'],0]]) {
+    const result=drainRead(path,...args); assert.equal(result.status,0,result.stderr);
+    const [totals,...intervals]=result.stdout.trim().split(/\r?\n/).map(JSON.parse);
+    assert.equal(totals.calls,count); assert(totals.groups.every(g=>g.operation==='drain'));
+    assert(intervals.every(i=>i.children.length===0));
+  }
+  for (const result of [read(path),drainRead(recording(t)),drainRead(path,'active','3'),
+    drainRead(recording(t,'drain-parent')),drainRead(recording(t,'drain-failed'))]) {
+    assert.notEqual(result.status,0); assert.equal(result.stdout,'');
+  }
+});

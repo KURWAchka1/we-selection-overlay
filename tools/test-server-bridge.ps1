@@ -70,6 +70,7 @@ function Assert-PaperArtifact {
 try {
     $nodeTests = @('owned-server.test.mjs', 'frozen-fixture-world.test.mjs', 'wire-codec.test.mjs', 'load-window.test.mjs', 'load-evidence.test.mjs', 'gameplay-workload.test.mjs', 'gameplay-host.test.mjs', 'moving-edit-window.test.mjs', 'active-lifecycle.test.mjs', 'fault-relay.test.mjs', 'edit-load-window.test.mjs', 'gesture-evidence.test.mjs', 'gesture-tuples.test.mjs', 'native-lifecycle-evidence.test.mjs', 'native-fault-evidence.test.mjs', 'java-load-clients.test.mjs', 'edit-diagnostic-policy.test.mjs') |
             ForEach-Object { Join-Path $root "tools/server-bridge-test/$_" }
+    $nodeTests += Join-Path $root 'tools/server-bridge-test/guard-acceptance.test.mjs'
     & node --test @nodeTests 2>&1 | Tee-Object -FilePath (Join-Path $logs 'harness-node.log')
     if ($LASTEXITCODE -ne 0) { throw 'Bridge harness self-tests failed' }
     Invoke-BridgeGradle 'server-bridge' $Java21 'unit-java21' @('check', 'assemble', '--rerun-tasks', '-PtestJavaVersion=21')
@@ -87,6 +88,9 @@ try {
         & node --test (Join-Path $root 'tools/server-bridge-test/jfr-load-summary.test.mjs') 2>&1 |
             Tee-Object -FilePath (Join-Path $logs "harness-summary-$($target.Name).log")
         if ($LASTEXITCODE -ne 0) { throw "JFR load summary self-tests failed: $($target.Name)" }
+        & node --test (Join-Path $root 'tools/server-bridge-test/paper-profiler-config.test.mjs') 2>&1 |
+            Tee-Object -FilePath (Join-Path $logs "harness-profiler-config-$($target.Name).log")
+        if ($LASTEXITCODE -ne 0) { throw "Effective profiler configuration self-tests failed: $($target.Name)" }
         & node --test (Join-Path $root 'tools/server-bridge-test/jfr-tick-timeline.test.mjs') 2>&1 |
             Tee-Object -FilePath (Join-Path $logs "harness-jfr-$($target.Name).log")
         if ($LASTEXITCODE -ne 0) { throw "JFR timeline self-tests failed: $($target.Name)" }

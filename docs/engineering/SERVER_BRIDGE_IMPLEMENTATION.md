@@ -38,6 +38,30 @@ does not replace the busy-server release gate or explain the earlier long tick.
 
 ## Implemented Boundary
 
+The [2026-10-16 observer control](BRIDGE_DRAIN_OBSERVER_2026-10-16.md) separates
+nested diagnostic overhead from a root-only observer in four fresh moving-load
+servers. Three rejected helper attempts remain retained; the accepted fixture
+uses MCProtocolLib's supported inline ordered callbacks, not a larger/drop queue.
+The [revision-ID comparison](BRIDGE_REVISION_IDS_2026-10-16.md) then removes
+per-result cryptographic generation with actual-peer authority unchanged.
+The [request-local world comparison](BRIDGE_WORLD_READ_2026-10-16.md) reduces
+redundant adaptation/allocation without claiming consistent wall/CPU improvement.
+Each completed study independently reconciles 4,800 raw/JFR ticks and all actor
+audits; these server-only changes do not alter published or development player
+JARs. The [guard-band trial](BRIDGE_GUARD_BAND_2026-10-16.md) has separate,
+predeclared numerical acceptance gates and rejects both static floors. The
+separate [combined hot-path trial](BRIDGE_HOTPATH_2026-10-16.md) verifies only the
+retained work reductions against the original reservation-only companion;
+its exact result and release boundaries are recorded there.
+
+The subsequent [priority control](BRIDGE_PRIORITY_CONTROL_2026-10-16.md)
+rejects a fixture priority change as a complete cost fix. The
+[exact-sized encoder study](BRIDGE_ENCODING_2026-10-16.md) preserves every wire
+field and exclusive array ownership while removing a staging array/copy.
+It passes 2,380 applies and 4,800 raw/JFR tick pairs, reduces measured allocation,
+but misses one strict p95 gate (0.5054 ms). This shared-code change requires
+new development client packages; it does not replace published 1.8.0 JARs.
+
 The [2026-10-15 exact 26.2 profiler control](BRIDGE_26_2_PROFILER_CONTROL_2026-10-15.md)
 reconciles 2,519 applies, 4,800 ticks and all ten methods across four matched
 instrumented JVMs with spark on/off/off/on. Effective configurations and actual

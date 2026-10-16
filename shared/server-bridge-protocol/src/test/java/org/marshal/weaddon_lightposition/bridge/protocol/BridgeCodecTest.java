@@ -18,6 +18,36 @@ class BridgeCodecTest {
                 HexFormat.of().formatHex(BridgeCodec.encode(new Hello(nonce, 1, 0, 1))));
     }
 
+    @Test void allEnvelopeSizesAreExactAndEachEncodeOwnsItsBytes() {
+        var ready = new SelectionState(SelectionStatus.READY, new Bounds(-2, -64, 3, 4, 319, 5), -64, 319, 7);
+        List<BridgeMessage> fixed = List.of(new Hello(nonce, 1, 2, 7),
+                new Welcome(nonce, epoch, WelcomeStatus.READY, 1, 2, 7, 256),
+                new SelectionRequest(epoch, 1), new SessionClosed(nonce, epoch),
+                new EditReadRequest(epoch, 1), new EditCommitRequest(epoch, 1, nonce, ready.bounds()));
+        int[] lengths = {30, 49, 30, 38, 30, 70};
+        for (int i=0;i<fixed.size();i++) assertOwnedFrame(fixed.get(i), lengths[i]);
+        for (SelectionStatus status : SelectionStatus.values()) {
+            var state = status == SelectionStatus.READY ? ready : SelectionState.unavailable(status);
+            var snapshot = status == SelectionStatus.READY ? new EditSnapshot(nonce, state) : EditSnapshot.unavailable(status);
+            assertOwnedFrame(new SelectionReply(epoch, 1, state), status == SelectionStatus.READY ? 64 : 31);
+            assertOwnedFrame(new EditReadReply(epoch, 1, snapshot), status == SelectionStatus.READY ? 80 : 47);
+            for (CommitStatus commit : CommitStatus.values())
+                if (commit != CommitStatus.APPLIED || snapshot.ready())
+                    assertOwnedFrame(new EditCommitReply(epoch, 1, commit, snapshot), status == SelectionStatus.READY ? 81 : 48);
+        }
+    }
+
+    private void assertOwnedFrame(BridgeMessage message, int length) {
+        byte[] first = BridgeCodec.encode(message), second = BridgeCodec.encode(message);
+        assertEquals(length, first.length); assertEquals(length, second.length);
+        assertNotSame(first, second); assertArrayEquals(first, second);
+        first[0] ^= 1;
+        assertArrayEquals(second, BridgeCodec.encode(message));
+        var direction = message instanceof Hello || message instanceof SelectionRequest || message instanceof EditReadRequest
+                || message instanceof EditCommitRequest ? BridgeCodec.Direction.TO_SERVER : BridgeCodec.Direction.TO_CLIENT;
+        assertEquals(message, BridgeCodec.decode(second, direction));
+    }
+
     @Test void negotiatedSessionCloseHasStableWireBytesAndRejectsZeroEpoch() {
         assertEquals("5745534f01050000000000000000000000000000000100000000000000020000000000000003",
                 HexFormat.of().formatHex(BridgeCodec.encode(new SessionClosed(nonce, epoch))));

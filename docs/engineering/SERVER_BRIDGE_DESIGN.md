@@ -29,6 +29,18 @@ The subsequent [dispatcher reservation study](BRIDGE_DISPATCH_BUDGET_2026-10-16.
 changes only the unpublished companion. Four matched moving-load JVMs show less
 over-target service at a measurable throughput/ack-latency cost; the soft-target
 and production cost gates are not closed by this server-first backoff.
+The later [observer comparison](BRIDGE_DRAIN_OBSERVER_2026-10-16.md) separates
+nested instrumentation overhead. [Revision IDs](BRIDGE_REVISION_IDS_2026-10-16.md)
+and [request-local worlds](BRIDGE_WORLD_READ_2026-10-16.md) remove specific
+unnecessary work. [Static headroom floors](BRIDGE_GUARD_BAND_2026-10-16.md) are
+rejected rather than retained at an observed service cost. The
+[combined verification](BRIDGE_HOTPATH_2026-10-16.md) records final scope and
+unchanged numerical acceptance gates, not a promise of hard real-time behavior.
+The [priority control](BRIDGE_PRIORITY_CONTROL_2026-10-16.md) leaves fixture
+priority unchanged after mixed results. [Exact-sized encoding](BRIDGE_ENCODING_2026-10-16.md)
+then removes a frame copy in the shared codec, preserving ownership and protocol
+bytes. It reduces allocation but does not pass both strict p95 gates. This later
+change requires rebuilt development clients, not overwritten release artifacts.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).

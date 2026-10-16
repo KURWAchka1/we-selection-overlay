@@ -8,10 +8,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.kyori.adventure.key.Key;
 import org.geysermc.mcprotocollib.network.ClientSession;
@@ -42,8 +40,8 @@ public final class LoadClients {
     private static final String BRIDGE = "worldedit_selection_overlay:bridge";
     private static final Map<String, ClientSession> CLIENTS = new ConcurrentHashMap<>();
     private static final Set<String> POSITION_READY = ConcurrentHashMap.newKeySet();
-    private static final ThreadPoolExecutor HANDLERS = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
-            new ArrayBlockingQueue<>(4096), task -> { var thread = new Thread(task, "WesoLoadPackets"); thread.setDaemon(true); return thread; });
+    // MCProtocolLib's supported inline mode: ordered channel callbacks, no extra decoded-packet queue.
+    private static final Executor HANDLER = Runnable::run;
 
     public static void main(String[] args) {
         int code = 0;
@@ -64,7 +62,6 @@ public final class LoadClients {
         } catch (Throwable ex) { ex.printStackTrace(System.err); code = 1; }
         finally {
             CLIENTS.values().forEach(session -> session.disconnect("Owned fixture shutdown"));
-            HANDLERS.shutdown();
         }
         System.exit(code);
     }
@@ -112,7 +109,7 @@ public final class LoadClients {
 
     private static void connect(String name) {
         var session = ClientNetworkSessionFactory.factory().setAddress("127.0.0.1", 25579)
-                .setProtocol(new MinecraftProtocol(name)).setPacketHandlerExecutor(HANDLERS).create();
+                .setProtocol(new MinecraftProtocol(name)).setPacketHandlerExecutor(HANDLER).create();
         require(CLIENTS.putIfAbsent(name, session) == null, "Duplicate actor");
         session.setFlag(MinecraftConstants.FOLLOW_TRANSFERS, false);
         session.addListener(new SessionAdapter() {
@@ -172,6 +169,19 @@ public final class LoadClients {
             require(bytes.readableBytes() == 25, "Unexpected movement codec size");
             require(packet.equals(new ServerboundMovePlayerPosPacket(bytes)) && !bytes.isReadable(), "Movement codec round trip");
         } finally { bytes.release(); }
-        System.out.println("LOAD CLIENT GUARDS PASS: exact 776 codec, bounded wire/movement input, movement round trip, explicit channels and offline loopback identities");
+        verifyHandler();
+        System.out.println("LOAD CLIENT GUARDS PASS: exact 776 codec, bounded wire/movement input, movement round trip, explicit channels, inline ordered callbacks and offline loopback identities");
+    }
+
+    private static void verifyHandler() {
+        Thread caller = Thread.currentThread(); int[] calls = {0};
+        for (int i = 0; i < 32; i++) {
+            final int expected = i;
+            HANDLER.execute(() -> require(Thread.currentThread() == caller && calls[0]++ == expected, "Queued or reordered callback"));
+        }
+        require(calls[0] == 32, "Lost callback");
+        var original = new IllegalArgumentException("original");
+        try { HANDLER.execute(() -> { throw original; }); throw new AssertionError("Suppressed callback failure"); }
+        catch (IllegalArgumentException failure) { require(failure == original, "Callback exception changed"); }
     }
 }

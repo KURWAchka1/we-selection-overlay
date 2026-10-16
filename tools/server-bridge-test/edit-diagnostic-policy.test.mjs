@@ -51,6 +51,82 @@ test('ambiguous flags, unknown studies, invalid rounds and accidental policy mut
   assert.throws(()=>{ study.order[0]='spark-off'; });
   assert.throws(()=>{ study.rootName='minecraft'; });
 });
+
+test('drain observer control keeps the companion fixed and changes only nested/root instrumentation', () => {
+  const study=editDiagnosticPolicy(['--drain-control']);
+  assert.equal(study.rootName,'bridge-drain-observer-proof'); assert.equal(study.drainControl,true);
+  assert.equal(study.movingGameplay,true); assert.equal(study.matchedSlices,true); assert.equal(study.budgetControl,false);
+  assert.deepEqual(study.order,['nested','drain','drain','nested']);
+  for (const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:round===2 || round===3 ? 'drain' : 'nested'});
+  assert.deepEqual(editRunPolicy(study,0),{instrumented:false,sparkEnabled:false,diagnosticProfile:'nested'});
+  for (const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--drain-control',flag]));
+});
+
+test('revision comparison uses the same minimal observer in every old/candidate arm', () => {
+  const study=editDiagnosticPolicy(['--revision-control']);
+  assert.equal(study.rootName,'bridge-revision-proof'); assert.equal(study.revisionControl,true);
+  assert.equal(study.budgetControl,true); assert.equal(study.drainControl,false);
+  assert.deepEqual(study.order,['previous','candidate','candidate','previous']);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--revision-control',flag]));
+});
+
+test('request-local world comparison changes only its companion with identical minimal observers', () => {
+  const study=editDiagnosticPolicy(['--world-control']);
+  assert.equal(study.rootName,'bridge-world-read-proof'); assert.equal(study.worldControl,true);
+  assert.equal(study.budgetControl,true); assert.equal(study.drainControl,false); assert.equal(study.revisionControl,false);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control','--world-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--world-control',flag]));
+});
+
+test('guard-band study keeps its own baseline and identical minimal observers', () => {
+  const study=editDiagnosticPolicy(['--guard-control']);
+  assert.equal(study.rootName,'bridge-guard-band-proof'); assert.equal(study.guardControl,true); assert.equal(study.budgetControl,true);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control','--world-control','--guard-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--guard-control',flag]));
+});
+test('combined hot-path comparison pins its own root and unchanged minimal-observer policy',()=>{
+  const study=editDiagnosticPolicy(['--hotpath-control']);
+  assert.equal(study.rootName,'bridge-hotpath-proof'); assert.equal(study.hotPathControl,true);
+  assert.equal(study.guardControl,false); assert.equal(study.budgetControl,true);
+  assert.deepEqual(study.order,['previous','candidate','candidate','previous']);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control','--world-control','--guard-control','--hotpath-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--hotpath-control',flag]));
+});
+
+test('priority control changes only normal versus below-normal with one fixed companion',()=>{
+  const study=editDiagnosticPolicy(['--priority-control']);
+  assert.equal(study.rootName,'bridge-priority-proof'); assert.equal(study.priorityControl,true);
+  assert.equal(study.budgetControl,false); assert.equal(study.hotPathControl,false);assert.equal(study.drainControl,false);
+  assert.deepEqual(study.order,['below-normal','normal','normal','below-normal']);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous',
+      processPriority:round===2 || round===3 ? 'normal' : 'below-normal'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control','--world-control','--guard-control','--hotpath-control','--priority-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--priority-control',flag]));
+});
+
+test('encoding comparison fixes the minimal observer and changes only the companion',()=>{
+  const study=editDiagnosticPolicy(['--encoding-control']);
+  assert.equal(study.rootName,'bridge-encoding-proof'); assert.equal(study.encodingControl,true);
+  assert.equal(study.priorityControl,false); assert.equal(study.budgetControl,true);
+  assert.deepEqual(study.order,['previous','candidate','candidate','previous']);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control','--world-control','--guard-control','--hotpath-control','--priority-control','--encoding-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--encoding-control',flag]));
+});
+
 test('Paper input defaults are identical except for the profiler enable bit', () => {
   const enabled = paperProfilerConfig(true), disabled = paperProfilerConfig(false);
   assert.deepEqual(enabled,{_version:31,spark:{enabled:true,'enable-immediately':false}});

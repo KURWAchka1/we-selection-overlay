@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { delimiter, join, resolve } from 'node:path';
+import { constants } from 'node:os';
 import { verifyEditLoadWindow } from './edit-load-window.mjs';
 import { gestureTuple } from './gesture-tuples.mjs';
 import { javaLoadVersion, javaLoadSha256 } from './java-load-clients.mjs';
@@ -11,10 +12,12 @@ import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 import { editDiagnosticPolicy, editRunPolicy, paperProfilerConfig, verifyProfilerLog, verifyProfilerSamples } from './edit-diagnostic-policy.mjs';
 import { profilerConfigLibraries, verifyEffectiveProfilerConfigurations } from './paper-profiler-config.mjs';
 import { verifyMovingEditWindow, verifyMovingEditTargets, reconcileMovingEditReplies, movingEditHostCounters } from './moving-edit-window.mjs';
+import { guardAcceptance } from './guard-acceptance.mjs';
+import { observedOwnedDepartures } from './owned-server.mjs';
 
 const javaHome = process.argv[2]; assert(javaHome, 'Explicit JDK home required');
 const version = process.argv[3] ?? '1.21.11', tuple = gestureTuple(version);
-const study = editDiagnosticPolicy(process.argv.slice(4)), {matchedSlices,sparkControl,movingGameplay,budgetControl} = study;
+const study = editDiagnosticPolicy(process.argv.slice(4)), {matchedSlices,sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl} = study;
 const frozenStudy=matchedSlices || movingGameplay,profilerStudy=sparkControl || movingGameplay;
 if (movingGameplay) assert.equal(version,'26.2');
 const root = resolve(import.meta.dirname, '../..'), directory = frozenStudy ? join(root, 'build',study.rootName, version)
@@ -27,13 +30,29 @@ assert.equal(!!proof.matchedSlices, matchedSlices);
 assert.equal(!!proof.sparkControl,sparkControl);
 assert.equal(!!proof.movingGameplay,movingGameplay);
 assert.equal(!!proof.budgetControl,budgetControl);
+assert.equal(!!proof.drainControl,drainControl);
+assert.equal(!!proof.revisionControl,revisionControl);
+assert.equal(!!proof.worldControl,worldControl);
+assert.equal(!!proof.guardControl,guardControl);
+assert.equal(!!proof.hotPathControl,hotPathControl);
+assert.equal(!!proof.priorityControl,priorityControl);
+assert.equal(!!proof.encodingControl,encodingControl);
+if(guardControl || hotPathControl || priorityControl || encodingControl) assert.equal(proof.cleanupBarrier,'server-quit-log');
+if(hotPathControl || priorityControl) assert.equal(proof.hashes.companion,'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6');
+if(drainControl || revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl) {
+  assert.deepEqual(proof.joinPreparation,{batch:32,gapMillis:0});
+  assert.equal(hash(join(root,'tools/bridge-slice-agent/build/libs/bridge-drain-agent.jar')),proof.hashes.drainAgent);
+}
+if (drainControl) {
+  assert.equal(proof.hashes.companion,'78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1');
+}
 if (budgetControl) {
   assert.equal(hash(join(directory,'previous-companion.jar')),proof.hashes.previousCompanion);
-  assert.equal(proof.hashes.previousCompanion,'7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956');
+  assert.equal(proof.hashes.previousCompanion,guardControl || encodingControl ? 'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6' : worldControl ? '42528d3b606e6e2cba9142a482d5ba6e95a589ec16fc3b693a57dfe1af9186cd' : revisionControl || hotPathControl ? '78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1' : '7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956');
   assert.notEqual(proof.hashes.companion,proof.hashes.previousCompanion);
 }
 if (frozenStudy) {
-  assert.equal(proof.repetitions, movingGameplay && !budgetControl ? 2 : 4); assert.deepEqual(proof.order, study.order);
+  assert.equal(proof.repetitions, movingGameplay && !budgetControl && !drainControl && !priorityControl ? 2 : 4); assert.deepEqual(proof.order, study.order);
   assert.match(proof.frozenDigest, /^[0-9a-f]{64}$/);
   assert.equal(new FrozenFixtureWorld(directory).digest(), proof.frozenDigest);
   assert.equal(hash(join(directory,'edit-diagnostics.jfc')), proof.hashes.jfrSettings);
@@ -65,18 +84,37 @@ for (const [index, run] of proof.runs.entries()) {
   assert.deepEqual(JSON.parse(readFileSync(join(directory, `edit-${run.round}-result.json`))), run, 'Per-run evidence differs from final proof');
   const serverLog = readFileSync(join(directory, `edit-${run.round}.log`), 'utf8');
   assert(serverLog.includes('Stopping server'), 'Missing owned server stop');
+  if(proof.cleanupBarrier!==undefined) {
+    assert.equal(proof.cleanupBarrier,'server-quit-log');
+    const finalMetrics=serverLog.lastIndexOf('WESO Bridge'); assert(finalMetrics>=0);
+    assert(observedOwnedDepartures(serverLog.slice(0,finalMetrics).split(/\r?\n/),
+      Array.from({length:32},(_,i)=>`WesoLoad${String(i).padStart(2,'0')}`)),
+    'Final metrics precede owning-server player quits');
+  }
   assert(!serverLog.includes('Error occurred while enabling') && !serverLog.includes('Command exception: /wesofixture'), 'Fixture/server failure hidden by summary');
   assert.equal([...serverLog.matchAll(/WESO_FIXTURE_OK edit-audit-end WesoLoad\d\d/g)].length, movingGameplay ? 32 : 8, 'Missing world/undo audits');
   const dispatch = [...serverLog.matchAll(/max wait nanos=(\d+), max slice nanos=(\d+), dispatch tasks=(\d+)/g)].at(-1);
   assert(dispatch, 'Missing raw dispatcher metrics'); assert.equal(Number(dispatch[3]), 0);
   if (frozenStudy) {
     const policy = editRunPolicy(study,run.round);
+    assert.equal(run.diagnosticProfile,policy.diagnosticProfile);
     verifyProfilerLog(serverLog,policy.sparkEnabled);
     if (matchedSlices) assert.equal(run.instrumented, policy.instrumented);
-    if (movingGameplay) { assert.equal(run.movingGameplay,true); if (!budgetControl) assert.equal(run.instrumented,undefined); }
+    if (movingGameplay) { assert.equal(run.movingGameplay,true); if (!matchedSlices) assert.equal(run.instrumented,undefined); }
     if (budgetControl) {
       assert.equal(run.variant,policy.variant);
       assert.equal(run.companionHash,policy.variant==='previous' ? proof.hashes.previousCompanion : proof.hashes.companion);
+    }
+    if(priorityControl) {
+      assert.equal(run.variant,policy.variant); assert.equal(run.processPriority,policy.processPriority);
+      const expected=policy.processPriority==='normal' ? constants.priority.PRIORITY_NORMAL : constants.priority.PRIORITY_BELOW_NORMAL;
+      assert.equal(run.actualProcessPriority,expected);
+      assert.deepEqual(run.priorityReadings,Array(4).fill(expected));
+      assert.equal(run.companionHash,proof.hashes.companion);
+    }
+    if (drainControl) {
+      assert.equal(run.diagnosticProfile,policy.diagnosticProfile);
+      assert.equal(run.companionHash,proof.hashes.companion);
     }
     if (profilerStudy) {
       assert.equal(run.sparkEnabled,policy.sparkEnabled);
@@ -86,8 +124,11 @@ for (const [index, run] of proof.runs.entries()) {
       assert(existsSync(join(directory,`edit-${run.round}-paper-global.effective.yml`)));
     }
     assert.equal(run.frozenDigest, proof.frozenDigest);
-    assert.equal((serverLog.match(/WESO_SLICE_INSTRUMENTED /g) ?? []).length, run.instrumented ? 3 : 0);
-    if (run.instrumented) for (const text of ['BridgeServer methods=3', 'WorldEditOverlayBridgePlugin methods=2', 'WorldEditOverlayBridgePlugin$SelectionHost methods=5'])
+    const drainOnly=run.diagnosticProfile==='drain';
+    assert.equal((serverLog.match(/WESO_DRAIN_INSTRUMENTED /g) ?? []).length,drainOnly ? 1 : 0);
+    if (drainOnly) assert(serverLog.includes('WESO_DRAIN_INSTRUMENTED org/marshal/weaddon_lightposition/bridge/server/BridgeServer methods=1'));
+    assert.equal((serverLog.match(/WESO_SLICE_INSTRUMENTED /g) ?? []).length, run.instrumented && !drainOnly ? 3 : 0);
+    if (run.instrumented && !drainOnly) for (const text of ['BridgeServer methods=3', 'WorldEditOverlayBridgePlugin methods=2', 'WorldEditOverlayBridgePlugin$SelectionHost methods=5'])
       assert(serverLog.includes(text), 'Exact wrapper plan not loaded');
   }
   if (version === '26.2') {
@@ -184,24 +225,31 @@ for (const [index, run] of proof.runs.entries()) {
   }
   let slices;
   if (run.instrumented) {
+    const drainOnly=run.diagnosticProfile==='drain';
     const readSlices = extra => invoke(join(javaHome,'bin/java.exe'), ['-Xmx256m','-XX:ActiveProcessorCount=2',
-      join(root,'tools/server-bridge-test/JfrBridgeSlices.java'),recording,'edit',...extra]).trim().split(/\r?\n/).map(line=>JSON.parse(line));
+      join(root,'tools/server-bridge-test/JfrBridgeSlices.java'),recording,drainOnly ? 'drain' : 'edit',...extra]).trim().split(/\r?\n/).map(line=>JSON.parse(line));
     const [totals, ...intervals] = readSlices([]);
     const sparkDumps = verifyProfilerSamples(totals,editRunPolicy(study,run.round).sparkEnabled);
     const groups = Object.fromEntries(totals.groups.map(group => [group.operation, group]));
-    assert.equal(groups.process.count, run.final.admitted);
-    assert.equal(groups.read.count, run.final.reads);
-    assert.equal(groups.capture.count, run.final.captures);
-    assert.equal(groups.apply.count, run.final.commits);
-    assert.equal(groups.send.count, run.final.replies);
+    if (drainOnly) { assert.deepEqual(Object.keys(groups),['drain']); assert(groups.drain.count>0); }
+    else {
+      assert.equal(groups.process.count, run.final.admitted);
+      assert.equal(groups.read.count, run.final.reads);
+      assert.equal(groups.capture.count, run.final.captures);
+      assert.equal(groups.apply.count, run.final.commits);
+      assert.equal(groups.send.count, run.final.replies);
+    }
     const queued = [...serverLog.matchAll(/Queue pending=\d+, peak=\d+, queued=(\d+), expired=(\d+), cancelled=(\d+)/g)].at(-1);
     assert(queued,'Missing raw ingress counters'); assert.equal(Number(queued[2]),0); assert.equal(Number(queued[3]),0);
-    assert.equal(groups.enqueue.count,Number(queued[1])+run.final.throttled);
-    assert.equal(groups.ingress.count,groups.enqueue.count);
+    if (!drainOnly) {
+      assert.equal(groups.enqueue.count,Number(queued[1])+run.final.throttled);
+      assert.equal(groups.ingress.count,groups.enqueue.count);
+    }
     assert(Math.abs(totals.coreMaxMillis - Number(dispatch[2])/1e6) < .000001);
     const phases = windows.map((window,i) => {
       const [totals, ...intervals] = readSlices([`edit-${run.round}-${['idle','active','recovered'][i]}`,'400']);
       if (i !== 1) assert.equal(totals.calls,0,'Diagnostic calls occurred in a quiet measured window');
+      if (drainOnly && i===1) assert(totals.calls>0 && totals.calls<=400,'Unexpected drain calls per tick');
       return {phase:['idle','active','recovered'][i],totals,intervals};
     });
     slices = {totals,intervals,phases,...(sparkControl ? {sparkDumps} : {})};
@@ -209,32 +257,44 @@ for (const [index, run] of proof.runs.entries()) {
   results.push({ round:run.round, markers:1200, recordedDataLoss:0,
     ...(matchedSlices ? {instrumented:run.instrumented,slices} : {}),
     ...(budgetControl ? {variant:run.variant,companionHash:run.companionHash} : {}),
+    ...(priorityControl ? {variant:run.variant,processPriority:run.processPriority,actualProcessPriority:run.actualProcessPriority,priorityReadings:run.priorityReadings} : {}),
+    ...(drainControl || revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl ? {diagnosticProfile:run.diagnosticProfile,companionHash:run.companionHash} : {}),
     applied:active.after.applied-active.before.applied, latencyP95:latencies[Math.ceil(latencies.length*.95)-1], latencyMax:latencies.at(-1),
     ...(movingGameplay ? {movingGameplay,gameplayProfile,windows:windows.map((w,i)=>({phase:['idle','active','recovered'][i],
       p95:w.ticks.p95,p99:w.ticks.p99,max:w.ticks.max,ticksOver50:w.ticks.tickMillis.filter(n=>n>50).length,
       acceptedMoves:w.ticks.gameplay.acceptedMoves,editBatches:w.ticks.gameplay.editBatches,changedBlocks:w.ticks.gameplay.changedBlocks}))} : {}),
     dispatcherMaxWaitNanos:Number(dispatch[1]), dispatcherMaxSliceNanos:Number(dispatch[2]), outliers:rows });
 }
-let budgetComparison;
-if (budgetControl) {
+let dispatchComparison;
+if (budgetControl || drainControl || priorityControl) {
   const arms=results.map(result=>{
     const drain=result.slices.phases.find(p=>p.phase==='active').totals.groups.find(g=>g.operation==='drain');
     assert(drain.count>0);
     const actors=proof.runs[result.round-1].active.actors;
-    return {round:result.round,variant:result.variant,applied:result.applied,
+    return {round:result.round,variant:result.variant ?? result.diagnosticProfile,applied:result.applied,
       editorMinimum:Math.min(...actors.filter(a=>a.role==='editor').map(a=>a.applied)),
       readerMinimum:Math.min(...actors.filter(a=>a.role==='reader').map(a=>a.reads)),
       drain,overTargetFraction:drain.overSoftTarget/drain.count,
       latencyP95:result.latencyP95,latencyMax:result.latencyMax,maxWaitMillis:result.dispatcherMaxWaitNanos/1e6};
   });
-  budgetComparison={arms,pairs:[[0,1],[3,2]].map(([old,next])=>({previousRound:arms[old].round,candidateRound:arms[next].round,
+  dispatchComparison={arms,pairs:[[0,1],[3,2]].map(([old,next])=>({
+    ...(priorityControl ? {belowNormalRound:arms[old].round,normalRound:arms[next].round} : budgetControl ? {previousRound:arms[old].round,candidateRound:arms[next].round} : {nestedRound:arms[old].round,drainRound:arms[next].round}),
     appliedRatio:arms[next].applied/arms[old].applied,
     overTargetFractionDelta:arms[next].overTargetFraction-arms[old].overTargetFraction,
     drainP95DeltaMillis:arms[next].drain.p95Millis-arms[old].drain.p95Millis,
     latencyP95DeltaMillis:arms[next].latencyP95-arms[old].latencyP95}))};
 }
+const guardPerformance=guardControl || hotPathControl || priorityControl || encodingControl ? guardAcceptance(results,proof.runs) : undefined;
 writeFileSync(output,JSON.stringify({checkedAt:new Date().toISOString(),minecraft:version,hashes:proof.hashes,
-  ...(budgetControl ? {budgetComparison} : {}),
+  ...(guardControl ? {guardAcceptance:guardPerformance} : {}),
+  ...(hotPathControl ? {hotPathAcceptance:guardPerformance} : {}),
+  ...(priorityControl ? {priorityAcceptance:guardPerformance,priorityComparison:dispatchComparison} : {}),
+  ...(encodingControl ? {encodingAcceptance:guardPerformance} : {}),
+  ...(budgetControl ? {budgetComparison:dispatchComparison} : {}),...(drainControl ? {observerComparison:dispatchComparison} : {}),
   ...(frozenStudy ? {matchedSlices,frozenDigest:proof.frozenDigest,order:proof.order,
-    ...(profilerStudy ? {sparkControl,movingGameplay,budgetControl,effectiveConfigurationDigest,configurationReaderLibraries} : {})} : {}),results},null,2));
+    ...(profilerStudy ? {sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,effectiveConfigurationDigest,configurationReaderLibraries} : {})} : {}),results},null,2));
 console.log(`EDIT LOAD ANALYSIS PASS: ${results.length*1200} matched JFR ticks, exact raw summaries, no recorded data loss`);
+if(guardControl || hotPathControl || priorityControl || encodingControl) {
+  console.log(`${encodingControl ? 'ENCODING' : priorityControl ? 'PRIORITY' : hotPathControl ? 'HOTPATH' : 'GUARD'} PERFORMANCE ${guardPerformance.accepted ? 'PASS' : 'REJECTED'}: ${JSON.stringify(guardPerformance.pairs.map(p=>({previous:p.previousRound,candidate:p.candidateRound,gates:p.gates})))}`);
+  if(!guardPerformance.accepted) process.exitCode=2;
+}

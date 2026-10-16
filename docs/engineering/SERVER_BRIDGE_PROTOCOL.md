@@ -80,7 +80,11 @@ timeout, disconnect or context loss while committing also has UNKNOWN outcome.
 ## Cuboid Transaction Boundary
 
 An explicit edit read retains one server-owned original snapshot per negotiated
-peer, referenced by a random opaque revision. The client never sends a selector,
+peer, referenced by an opaque revision. The current server allocates revisions
+from one owner-thread 128-bit sequence seeded by an existing random epoch; it
+does not reset that sequence on peer renewal. Revisions are correlation handles,
+not secrets or bearer credentials. Connection epochs/nonces remain random and
+the authority/context checks below are unchanged. The client never sends a selector,
 player/world identity or Java object. A commit supplies only that revision and
 proposed bounds. Read and commit share the same monotonic request-ID space,
 single pending slot, quotas, fair dispatcher and timeout as metadata requests.

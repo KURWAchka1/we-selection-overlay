@@ -265,16 +265,17 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
                 LocalSession session = WorldEdit.getInstance().getSessionManager().getIfPresent(actor);
                 if (session == null || session.getSelectionWorld() == null)
                     return SelectionState.unavailable(SelectionStatus.EMPTY);
-                if (session.hasWorldOverride() || !actor.getWorld().equals(session.getSelectionWorld()))
+                var world = actor.getWorld();
+                if (session.hasWorldOverride() || !world.equals(session.getSelectionWorld()))
                     return SelectionState.unavailable(SelectionStatus.UNSUPPORTED);
-                var region = session.getSelection(actor.getWorld());
+                var region = session.getSelection(world);
                 var a = region.getMinimumPoint();
                 var b = region.getMaximumPoint();
                 int permissions = (actor.hasPermission("worldedit.selection.expand") ? 1 : 0)
                         | (actor.hasPermission("worldedit.selection.contract") ? 2 : 0)
                         | (actor.hasPermission("worldedit.selection.shift") ? 4 : 0);
                 return new SelectionState(SelectionStatus.READY, new Bounds(a.x(), a.y(), a.z(), b.x(), b.y(), b.z()),
-                        actor.getWorld().getMinY(), actor.getWorld().getMaxY(), permissions);
+                        world.getMinY(), world.getMaxY(), permissions);
             } catch (IncompleteRegionException ex) {
                 return SelectionState.unavailable(SelectionStatus.EMPTY);
             } catch (RuntimeException | LinkageError ex) {

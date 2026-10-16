@@ -1019,6 +1019,169 @@ but cannot predict or preempt a sudden atomic call or JVM/OS pause. The
 [matched old/candidate experiment](BRIDGE_DISPATCH_BUDGET_2026-10-16.md)
 retains raw outliers and measures the effect on actual player progress.
 
+## S64 Observer Cost And Minimal Drain Measurement
+
+Checked **2026-10-16**. Oracle Java 25's
+[`ThreadMXBean`](https://docs.oracle.com/en/java/javase/25/docs/api/java.management/java/lang/management/ThreadMXBean.html)
+specifies CPU-time precision separately from accuracy and notes that enabling
+CPU measurement can be expensive on some JVM implementations. This is not a
+claim that a particular permission/read outlier was caused by a counter call.
+Oracle's [Flight Recorder API guide](https://docs.oracle.com/en/java/javase/21/jfapi/flight-recorder-api-programmers-guide.pdf)
+and Java 25 [`Event`](https://docs.oracle.com/en/java/javase/25/docs/api/jdk.jfr/jdk/jfr/Event.html)
+describe event begin/end, enabled checks and conditional commit. Event payload
+construction/counter reads around application methods are additional observer
+work; filtering short events cannot recover the unobserved execution time.
+
+Local source inspection finds that `SliceProbe` reads CPU/allocation at every
+method boundary and commits each nested call. In a wrapped drain, those child
+operations execute inside its elapsed-time budget. The separate fixture-only
+drain agent reuses the exact existing ASM weaver/recorder but omits child
+wrappers. Original agent/bootstrap hashes remain unchanged. Both agents require
+explicit fixture opt-in, exact method descriptors and bootstrap isolation;
+the new mode adds its own flag and does not support attaching to user JVMs.
+
+The [nested/drain observer experiment](BRIDGE_DRAIN_OBSERVER_2026-10-16.md)
+holds the companion and workload fixed across four fresh reversed-order JVMs.
+It tests observer influence, not whether all overrun causes are known. Minimal
+measurement is still measurement; no time is subtracted from raw recorded calls
+and no hard real-time guarantee follows from a successful local percentile.
+
+## S65 Bounded Ordered Load Helper Callbacks
+
+Checked **2026-10-16** against S61's exact MCProtocolLib source artifact
+`26.2-20261012.101744-21`. `NetworkSession.channelRead0` submits game-thread
+packet callbacks to the supplied `Executor`. The public client factory accepts
+that executor. Its default implementation assigns `PACKET_EVENT_LOOP.next()`
+per session; it does not force all sessions through one shared worker. The
+source artifact and hash are recorded in [S61](#s61-exact-262-moving-gameplay-transport).
+
+Oracle Java 25's
+[`ThreadPoolExecutor`](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/ThreadPoolExecutor.html)
+describes fixed worker counts, bounded queues and rejection. An unbounded queue
+or discard policy would hide overload. A plain two-worker pool does not promise
+per-session serial execution. The rejected striped variant instead assigned
+each actor to one of two fixed single-worker stripes with bounded FIFO queues.
+Its total queued capacity stayed 4,096, with no caller-runs or silent packet drop.
+
+Stripes and paced preparation both failed and are retained, not presented as
+solutions. The same exact `DefaultPacketHandlerExecutor` source explicitly
+returns `Runnable::run` when its separate packet loop is disabled. The helper
+now uses that supported inline executor through the public factory. Its small
+callbacks run in channel order on the client's Netty loop, with no extra decoded
+packet queue/threads; transport can apply normal TCP backpressure. Decoder and
+callback faults are still visible. This is test-client I/O, not permission/world
+work on a server network thread. The original simultaneous 32-login policy is
+restored. The [four-arm repeat](BRIDGE_DRAIN_OBSERVER_2026-10-16.md) must still
+pass actual packet/order/cleanup gates; it is not a general connection-storm proof.
+
+## S66 Opaque Revision Identifiers And Authority
+
+Checked **2026-10-16**. Oracle Java 25's
+[`UUID.randomUUID`](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/UUID.html#randomUUID())
+uses a cryptographically strong generator. Its public `(long, long)` constructor
+accepts arbitrary 128-bit data; this does not make an incrementing container an
+RFC random/time-based UUID implementation. Our experimental wire already checks
+opaque nonzero values, not UUID version bits.
+
+The [OWASP IDOR guidance](https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html)
+treats complex identifiers as defense in depth, not a substitute for authorization.
+It does not certify our protocol. Here a revision does not select a global
+resource or carry authority: the host capture belongs to the actual connection's
+peer and current grants/epoch/selector/original points are revalidated. The
+candidate preserves those boundaries, including cached replay and revocation;
+tests deliberately guess handles and reuse mock epochs across actors/renewals.
+
+A lazy server-wide, owner-thread 128-bit sequence is seeded from an existing
+random epoch. It avoids another cryptographic generator call for each ready
+result; it skips zero and carries across word boundaries, never resets on peer
+renewal and fails terminally on a complete cycle. It is an opaque correlation
+identifier, **not** a secret/bearer capability or a claimed UUID-v7 implementation.
+Non-version-four handles also round-trip through the existing codec in tests.
+Random nonce/epoch creation is unchanged. The
+[matched revision experiment](BRIDGE_REVISION_IDS_2026-10-16.md) must establish
+cost/progress effects before any performance claim. A sampled `HashDrbg` frame
+within a long drain is evidence of executed code, not attribution of the entire
+interval or proof that every remaining pause has that cause.
+
+## S67 Request-Local WorldEdit World Adaptation
+
+Checked **2026-10-16** at EngineHub WorldEdit **7.4.5**:
+[`BukkitPlayer`](https://github.com/EngineHub/WorldEdit/blob/7.4.5/worldedit-bukkit/src/main/java/com/sk89q/worldedit/bukkit/BukkitPlayer.java)
+adapts its Bukkit world; [`BukkitWorld`](https://github.com/EngineHub/WorldEdit/blob/7.4.5/worldedit-bukkit/src/main/java/com/sk89q/worldedit/bukkit/BukkitWorld.java)
+constructs a weak reference and asks the installed adapter for native world
+access. Repeated adaptation is therefore not just a primitive getter. Source
+inspection is not proof of its entire sampled wall cost.
+
+The candidate reuses one local `World` only for a single owning-thread metadata
+read, keeping selection-world checks and world-height bounds on that reference.
+It is not a world/session cache, chunk load, permission cache or async handoff.
+Publication/context guards remain after the host boundary. The
+[matched comparison](BRIDGE_WORLD_READ_2026-10-16.md) fixes observer/workload inputs
+and reports both service and cost. The sampled Paper messenger path is not a
+reason to bypass public `sendPluginMessage`, registration or validation.
+
+## S68 Owning-Server Quit Barrier And ANSI Normalization
+
+Checked **2026-10-16**. In the retained guard-band failure, client `ended`
+events and a 250 ms sleep precede two owning-server player quits and final
+metrics still show two connections. Client socket completion is therefore not
+a proven server cleanup barrier. The repeat waits at most 5 seconds for all
+32 named server quit log entries, then still requires zero actual connections,
+pending slots and tasks. Logs alone do not substitute for those final metrics;
+the offline analyzer independently checks their ordering. Only post-measurement
+synchronization changes, not active workload, quotas or acceptance thresholds.
+
+The first barrier parser rejected real colored player names. Node's documented
+[`util.stripVTControlCharacters`](https://nodejs.org/download/release/v22.23.3/docs/api/util.html#utilstripvtcontrolcharactersstr)
+removes ANSI escapes; the API dates to Node 16.11. The Node 24 fixture normalizes
+a copy with that built-in API, preserving original logs. Tests cover the exact
+prompt/color format, incomplete/duplicate/foreign departures and raw replay.
+Both failed attempts remain in the [guard-band report](BRIDGE_GUARD_BAND_2026-10-16.md),
+not converted into successful cleanup/performance evidence.
+
+## S69 Windows Scheduling Control
+
+Checked **2026-10-16**. Microsoft's
+[Scheduling Priorities](https://learn.microsoft.com/en-us/windows/win32/procthread/scheduling-priorities)
+describes ready-thread scheduling by priority and distinguishes BelowNormal from
+Normal process classes. This makes the fixture's explicit BelowNormal setting a
+factor worth controlling; it does **not** identify the cause of any previously
+recorded pause, nor establish that Normal is a hard real-time class.
+
+The [separate scheduling trial](BRIDGE_PRIORITY_CONTROL_2026-10-16.md) holds the
+production JAR, observer and workload fixed and changes only the owned server's
+class in BelowNormal/Normal/Normal/BelowNormal order. Node's public
+[`os.setPriority/getPriority`](https://nodejs.org/download/release/v22.23.3/docs/api/os.html#ossetprioritypid-priority)
+are round-tripped on an actual owned Windows child
+in regression tests and checked at four boundaries in each server run. The
+existing default studies stay BelowNormal. No user process, foreground/cursor
+control, AboveNormal/High/Realtime priority or production plugin policy changes.
+Keep the predeclared gate and raw negative results even if Normal improves the
+local wall distribution; do not explain unknown intervals solely by zero
+quantized CPU or by the documentation's general scheduling rule.
+
+## S70 Exact-Sized Array-Backed Encoding
+
+Checked **2026-10-16**. Oracle Java 21 documents
+[`ByteBuffer.allocate`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/ByteBuffer.html#allocate(int))
+as an array-backed allocation and
+[`array`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/ByteBuffer.html#array())
+as access to that backing storage. Initial byte order is big-endian. The
+[`Arrays.copyOf`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/Arrays.html#copyOf(byte%5B%5D,int))
+contract copies into a new array. Direct buffers are not justified for these
+small, short-lived frames; they have a separate allocation/lifetime tradeoff.
+
+The current sealed bridge schema permits exact 30..81-byte envelope sizes.
+Allocate once at that exact size, leave writes unchanged, require a filled
+buffer and return its owned array. Never share a mutable static/thread-local
+buffer across calls or retain a caller-owned frame to avoid a required copy.
+The remaining ingress/transport ownership boundaries are unchanged. All status
+variants, exact lengths, golden bytes, mutation isolation, fuzz/truncation and
+six native adapters must pass before retaining the shared codec change. The
+[matched encoding experiment](BRIDGE_ENCODING_2026-10-16.md) isolates that change
+with the same observer, priority, workload and predeclared performance gates.
+Source-level array removal is not itself proof of universal wall/CPU speedup.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

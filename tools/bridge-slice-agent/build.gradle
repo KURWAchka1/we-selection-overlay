@@ -4,6 +4,12 @@ plugins {
 }
 repositories { mavenCentral() }
 dependencies { implementation 'org.ow2.asm:asm:9.9' }
+sourceSets {
+    drain {
+        compileClasspath += sourceSets.main.output
+    }
+    drainTest
+}
 java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 tasks.withType(JavaCompile).configureEach { options.release = 21 }
 tasks.named('test') { enabled = false }
@@ -23,8 +29,17 @@ shadowJar {
     exclude 'org/marshal/wesotest/slices/CallEvent.class', 'org/marshal/wesotest/slices/SliceProbe*.class'
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
+
+tasks.register('drainAgentJar', Jar) {
+    dependsOn drainClasses, shadowJar, bootstrapJar
+    archiveFileName = 'bridge-drain-agent.jar'
+    manifest { attributes 'Premain-Class': 'org.marshal.wesotest.slices.DrainAgent' }
+    from(sourceSets.drain.output)
+    from({ zipTree(shadowJar.archiveFile.get().asFile) }) { exclude 'META-INF/MANIFEST.MF' }
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+}
 tasks.register('verifyAgentJar') {
-    dependsOn shadowJar, bootstrapJar
+    dependsOn shadowJar, bootstrapJar, drainAgentJar
     doLast {
         new java.util.zip.ZipFile(shadowJar.archiveFile.get().asFile).withCloseable { zip ->
             if (zip.entries().find { it.name.startsWith('org/objectweb/asm/') })
@@ -35,6 +50,11 @@ tasks.register('verifyAgentJar') {
         new java.util.zip.ZipFile(tasks.bootstrapJar.archiveFile.get().asFile).withCloseable { zip ->
             if (!zip.getEntry('org/marshal/wesotest/slices/CallEvent.class') || zip.entries().find { it.name.contains('/asm/') })
                 throw new GradleException('Invalid bootstrap helper isolation')
+        }
+        new java.util.zip.ZipFile(tasks.drainAgentJar.archiveFile.get().asFile).withCloseable { zip ->
+            if (!zip.getEntry('org/marshal/wesotest/slices/DrainAgent.class')
+                    || zip.entries().find { it.name.startsWith('org/marshal/weaddon_lightposition/') || it.name.endsWith('Checks.class') })
+                throw new GradleException('Drain agent contains a production/test subject or lacks its entrypoint')
         }
     }
 }
@@ -60,3 +80,15 @@ tasks.register('verifyBootstrapProbe', JavaExec) {
             "-javaagent:${shadowJar.archiveFile.get().asFile.absolutePath}"
 }
 check.dependsOn verifyAgentJar, verifyProbe, verifyBootstrapProbe
+
+tasks.register('verifyDrainProbe', JavaExec) {
+    dependsOn drainTestClasses, verifyAgentJar
+    classpath = sourceSets.drainTest.runtimeClasspath
+    mainClass = 'org.marshal.wesotest.slices.DrainAgentChecks'
+    args layout.buildDirectory.file('drain-probe.jfr').get().asFile.absolutePath
+    javaLauncher = tasks.verifyProbe.javaLauncher
+    maxHeapSize = '256m'
+    jvmArgs '-XX:ActiveProcessorCount=2', '-Dweso.bridge.fixture=true', '-Dweso.bridge.sliceDiagnostics=true',
+            '-Dweso.bridge.drainDiagnostics=true', "-javaagent:${tasks.drainAgentJar.archiveFile.get().asFile.absolutePath}"
+}
+check.dependsOn verifyDrainProbe
