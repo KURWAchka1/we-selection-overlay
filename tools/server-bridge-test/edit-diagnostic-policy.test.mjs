@@ -30,6 +30,19 @@ test('moving edit study is isolated, repeated without method instrumentation and
   for (const flag of ['--spark-control','--matched-slices','--without-spark','--moving-gameplay'])
     assert.throws(()=>editDiagnosticPolicy(['--moving-gameplay',flag]));
 });
+
+test('budget comparison changes only the pinned companion in previous/candidate/candidate/previous order', () => {
+  const study=editDiagnosticPolicy(['--budget-control']);
+  assert.equal(study.rootName,'bridge-dispatch-budget-proof'); assert.equal(study.budgetControl,true);
+  assert.equal(study.matchedSlices,true); assert.equal(study.movingGameplay,true); assert.equal(study.sparkControl,false);
+  assert.deepEqual(study.order,['previous','candidate','candidate','previous']);
+  assert.deepEqual([1,2,3,4].map(round=>editRunPolicy(study,round)),[
+    {instrumented:true,sparkEnabled:false,variant:'previous'},{instrumented:true,sparkEnabled:false,variant:'candidate'},
+    {instrumented:true,sparkEnabled:false,variant:'candidate'},{instrumented:true,sparkEnabled:false,variant:'previous'}]);
+  assert.deepEqual(editRunPolicy(study,0),{instrumented:false,sparkEnabled:false,variant:'previous'});
+  for (const flag of ['--spark-control','--matched-slices','--moving-gameplay','--budget-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--budget-control',flag]));
+});
 test('ambiguous flags, unknown studies, invalid rounds and accidental policy mutation fail', () => {
   for (const options of [['--spark-control','--matched-slices'],['--spark-control','--spark-control'],['--without-spark'],['26.3'],null])
     assert.throws(()=>editDiagnosticPolicy(options));

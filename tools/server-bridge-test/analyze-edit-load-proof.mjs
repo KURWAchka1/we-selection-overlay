@@ -14,7 +14,7 @@ import { verifyMovingEditWindow, verifyMovingEditTargets, reconcileMovingEditRep
 
 const javaHome = process.argv[2]; assert(javaHome, 'Explicit JDK home required');
 const version = process.argv[3] ?? '1.21.11', tuple = gestureTuple(version);
-const study = editDiagnosticPolicy(process.argv.slice(4)), {matchedSlices,sparkControl,movingGameplay} = study;
+const study = editDiagnosticPolicy(process.argv.slice(4)), {matchedSlices,sparkControl,movingGameplay,budgetControl} = study;
 const frozenStudy=matchedSlices || movingGameplay,profilerStudy=sparkControl || movingGameplay;
 if (movingGameplay) assert.equal(version,'26.2');
 const root = resolve(import.meta.dirname, '../..'), directory = frozenStudy ? join(root, 'build',study.rootName, version)
@@ -26,8 +26,14 @@ const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex
 assert.equal(!!proof.matchedSlices, matchedSlices);
 assert.equal(!!proof.sparkControl,sparkControl);
 assert.equal(!!proof.movingGameplay,movingGameplay);
+assert.equal(!!proof.budgetControl,budgetControl);
+if (budgetControl) {
+  assert.equal(hash(join(directory,'previous-companion.jar')),proof.hashes.previousCompanion);
+  assert.equal(proof.hashes.previousCompanion,'7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956');
+  assert.notEqual(proof.hashes.companion,proof.hashes.previousCompanion);
+}
 if (frozenStudy) {
-  assert.equal(proof.repetitions, movingGameplay ? 2 : 4); assert.deepEqual(proof.order, study.order);
+  assert.equal(proof.repetitions, movingGameplay && !budgetControl ? 2 : 4); assert.deepEqual(proof.order, study.order);
   assert.match(proof.frozenDigest, /^[0-9a-f]{64}$/);
   assert.equal(new FrozenFixtureWorld(directory).digest(), proof.frozenDigest);
   assert.equal(hash(join(directory,'edit-diagnostics.jfc')), proof.hashes.jfrSettings);
@@ -52,7 +58,7 @@ if (profilerStudy) {
   const configurations = JSON.parse(invoke(join(javaHome,'bin/java.exe'),['-Xmx128m','-XX:ActiveProcessorCount=2',
     '--class-path',libraries.map(x=>x.file).join(delimiter),join(root,'tools/server-bridge-test/PaperProfilerConfiguration.java'),
     ...proof.runs.map(run=>join(directory,`edit-${run.round}-paper-global.effective.yml`))]));
-  effectiveConfigurationDigest = verifyEffectiveProfilerConfigurations(configurations,movingGameplay ? [false,false] : [true,false,false,true]);
+  effectiveConfigurationDigest = verifyEffectiveProfilerConfigurations(configurations,movingGameplay ? proof.runs.map(()=>false) : [true,false,false,true]);
 }
 for (const [index, run] of proof.runs.entries()) {
   assert.equal(run.round, index+1);
@@ -67,7 +73,11 @@ for (const [index, run] of proof.runs.entries()) {
     const policy = editRunPolicy(study,run.round);
     verifyProfilerLog(serverLog,policy.sparkEnabled);
     if (matchedSlices) assert.equal(run.instrumented, policy.instrumented);
-    if (movingGameplay) { assert.equal(run.movingGameplay,true); assert.equal(run.instrumented,undefined); }
+    if (movingGameplay) { assert.equal(run.movingGameplay,true); if (!budgetControl) assert.equal(run.instrumented,undefined); }
+    if (budgetControl) {
+      assert.equal(run.variant,policy.variant);
+      assert.equal(run.companionHash,policy.variant==='previous' ? proof.hashes.previousCompanion : proof.hashes.companion);
+    }
     if (profilerStudy) {
       assert.equal(run.sparkEnabled,policy.sparkEnabled);
       const input = join(directory,`edit-${run.round}-paper-global.input.json`);
@@ -198,13 +208,33 @@ for (const [index, run] of proof.runs.entries()) {
   }
   results.push({ round:run.round, markers:1200, recordedDataLoss:0,
     ...(matchedSlices ? {instrumented:run.instrumented,slices} : {}),
+    ...(budgetControl ? {variant:run.variant,companionHash:run.companionHash} : {}),
     applied:active.after.applied-active.before.applied, latencyP95:latencies[Math.ceil(latencies.length*.95)-1], latencyMax:latencies.at(-1),
     ...(movingGameplay ? {movingGameplay,gameplayProfile,windows:windows.map((w,i)=>({phase:['idle','active','recovered'][i],
       p95:w.ticks.p95,p99:w.ticks.p99,max:w.ticks.max,ticksOver50:w.ticks.tickMillis.filter(n=>n>50).length,
       acceptedMoves:w.ticks.gameplay.acceptedMoves,editBatches:w.ticks.gameplay.editBatches,changedBlocks:w.ticks.gameplay.changedBlocks}))} : {}),
     dispatcherMaxWaitNanos:Number(dispatch[1]), dispatcherMaxSliceNanos:Number(dispatch[2]), outliers:rows });
 }
+let budgetComparison;
+if (budgetControl) {
+  const arms=results.map(result=>{
+    const drain=result.slices.phases.find(p=>p.phase==='active').totals.groups.find(g=>g.operation==='drain');
+    assert(drain.count>0);
+    const actors=proof.runs[result.round-1].active.actors;
+    return {round:result.round,variant:result.variant,applied:result.applied,
+      editorMinimum:Math.min(...actors.filter(a=>a.role==='editor').map(a=>a.applied)),
+      readerMinimum:Math.min(...actors.filter(a=>a.role==='reader').map(a=>a.reads)),
+      drain,overTargetFraction:drain.overSoftTarget/drain.count,
+      latencyP95:result.latencyP95,latencyMax:result.latencyMax,maxWaitMillis:result.dispatcherMaxWaitNanos/1e6};
+  });
+  budgetComparison={arms,pairs:[[0,1],[3,2]].map(([old,next])=>({previousRound:arms[old].round,candidateRound:arms[next].round,
+    appliedRatio:arms[next].applied/arms[old].applied,
+    overTargetFractionDelta:arms[next].overTargetFraction-arms[old].overTargetFraction,
+    drainP95DeltaMillis:arms[next].drain.p95Millis-arms[old].drain.p95Millis,
+    latencyP95DeltaMillis:arms[next].latencyP95-arms[old].latencyP95}))};
+}
 writeFileSync(output,JSON.stringify({checkedAt:new Date().toISOString(),minecraft:version,hashes:proof.hashes,
+  ...(budgetControl ? {budgetComparison} : {}),
   ...(frozenStudy ? {matchedSlices,frozenDigest:proof.frozenDigest,order:proof.order,
-    ...(profilerStudy ? {sparkControl,movingGameplay,effectiveConfigurationDigest,configurationReaderLibraries} : {})} : {}),results},null,2));
+    ...(profilerStudy ? {sparkControl,movingGameplay,budgetControl,effectiveConfigurationDigest,configurationReaderLibraries} : {})} : {}),results},null,2));
 console.log(`EDIT LOAD ANALYSIS PASS: ${results.length*1200} matched JFR ticks, exact raw summaries, no recorded data loss`);

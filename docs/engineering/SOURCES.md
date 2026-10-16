@@ -995,6 +995,30 @@ wire reconciliation explicitly preserve those boundaries; an acknowledgment is
 not by itself evidence of another call to `host.applyEdit`. No async WorldEdit
 access, permission caching or quota increase is justified by this source review.
 
+## S63 Dispatcher Clock And Thread Constraints
+
+Checked **2026-10-16** against Oracle Java 25 and Paper's scheduler guidance.
+[`System.nanoTime`](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/System.html#nanoTime())
+measures elapsed time within one JVM. Its origin is arbitrary; precision is not
+a guarantee of resolution. Oracle recommends subtracting timestamps rather than
+forming an absolute timeout by addition, avoiding overflow at the clock wrap.
+This is elapsed duration, not owner-thread CPU consumption.
+
+Paper's [scheduler documentation](https://docs.papermc.io/paper/dev/scheduler/#difference-between-synchronous-and-asynchronous-tasks)
+distinguishes main-thread tasks from asynchronous work and warns that accessing
+or changing world state is not safe from an asynchronous task. Oracle's
+[`Thread.stop`](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Thread.html#stop())
+describes the old mechanism as unsafe; in Java 25 it always throws
+`UnsupportedOperationException`. These are constraints, not a proposed way of
+timing out WorldEdit on the server thread.
+
+Our within-slice visit reservation is a local policy derived from a reproduced
+200 us + 200 us + 200 us counterexample, not an official WorldEdit scheduler or
+a hard real-time guarantee. A completed visit can inform subsequent admission,
+but cannot predict or preempt a sudden atomic call or JVM/OS pause. The
+[matched old/candidate experiment](BRIDGE_DISPATCH_BUDGET_2026-10-16.md)
+retains raw outliers and measures the effect on actual player progress.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

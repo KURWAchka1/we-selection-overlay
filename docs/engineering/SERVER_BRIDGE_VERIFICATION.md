@@ -88,6 +88,16 @@ not publication or claims about unimplemented remote features/other servers.
 
 ## Evidence Record
 
+The [2026-10-16 dispatcher comparison](BRIDGE_DISPATCH_BUDGET_2026-10-16.md)
+changes only the unpublished companion after a deterministic old-code failure.
+Four identically instrumented previous/candidate/candidate/previous moving-load
+JVMs pass 2,340 applies, 4,800 raw/JFR ticks, 128 actor audits and cleanup gates.
+Active over-target frequency falls from 19.21% to 7.30%; saturated edit throughput
+falls 11.44% and candidate ack p95 rises to 436..497 ms. Candidate drain p95 still
+exceeds 0.5 ms. Keep the narrow admission fix as measured backoff, not a claim of
+free speed, fixed atomic/JVM outliers or production cost acceptance. Published
+1.8.0 and development player artifacts remain unchanged.
+
 The [2026-10-16 exact 26.2 concurrent moving-edit workload](BRIDGE_26_2_MOVING_EDITS_2026-10-16.md)
 passes two fresh servers, 1,244 XYZ move/resize applies, 2,400 verified ticks,
 18,816 accepted moves and 61,440 independent fixture WorldEdit cell changes.

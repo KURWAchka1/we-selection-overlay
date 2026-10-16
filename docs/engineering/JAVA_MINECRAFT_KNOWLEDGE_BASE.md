@@ -29,6 +29,11 @@ The [combined moving-edit workload](BRIDGE_26_2_MOVING_EDITS_2026-10-16.md) late
 passes 1,244 applies and 2,400 verified ticks on exact Paper 26.2; native
 concurrent gameplay, ungraceful loss and production cost gates remain separate. Clipboard
 synchronization, command simulation and other dedicated hosts remain unimplemented.
+The [dispatcher follow-up](BRIDGE_DISPATCH_BUDGET_2026-10-16.md) changes the
+unpublished companion: within-slice visit reservation fixes a deterministic
+admission overrun. Four matched moving-load JVMs reduce over-target frequency
+from 19.21% to 7.30%, with 11.44% less saturated edit throughput and higher ack
+latency. This is measured backoff, not hard-deadline or release cost acceptance.
 Published client 1.8.0 is unchanged and has no bridge protocol support.
 Existing CUI-only servers must keep working without installing a companion.
 
@@ -180,6 +185,13 @@ not free CPU or memory. Do not force-load chunks for previews.
 Follow the [low-overhead contract](SERVER_BRIDGE_DESIGN.md#low-overhead-server-contract)
 and record [baseline/load evidence](SERVER_BRIDGE_VERIFICATION.md#server-cost-acceptance)
 before claiming a performance result or choosing release defaults.
+
+The dispatcher reserves the largest completed visit within each slice before
+starting another. Include publication/bookkeeping in that observation; reset
+it on the next invocation so one cold/paused call cannot poison later service.
+Do not interrupt/retry an atomic host operation or hide raw overruns. Subtract
+`nanoTime` values rather than adding absolute deadlines; see
+[clock/thread constraints](SOURCES.md#s63-dispatcher-clock-and-thread-constraints).
 
 ## Network Facts That Affect This Project
 

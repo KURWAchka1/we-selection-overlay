@@ -25,6 +25,10 @@ The later [26.2 combined moving-edit workload](BRIDGE_26_2_MOVING_EDITS_2026-10-
 verifies concurrent headless XYZ selection edits with actual motion/entity/
 WorldEdit work, not native-client load or production cost acceptance. Existing
 published artifacts and production bridge behavior remain unchanged.
+The subsequent [dispatcher reservation study](BRIDGE_DISPATCH_BUDGET_2026-10-16.md)
+changes only the unpublished companion. Four matched moving-load JVMs show less
+over-target service at a measurable throughput/ack-latency cost; the soft-target
+and production cost gates are not closed by this server-first backoff.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).
@@ -162,6 +166,15 @@ buffers/tasks on context loss, disconnect and disable. Permissions and context
 are checked at actual service/publication time, including cached results.
 See [implemented evidence](BRIDGE_FAIR_DISPATCH_2026-10-12.md) and
 [public scheduling sources](SOURCES.md#s46-owning-thread-fair-dispatch).
+
+Before another visit, reserve the largest completed visit observed in this
+invocation, including reply publication and queue bookkeeping. Defer before
+removing the oldest slot or spending a global token. Reservation is local to
+the slice; it does not cache permissions, carry a cold-call estimate into future
+ticks, or predict an arbitrary later pause. The first eligible visit can always
+make progress. Already-running WorldEdit calls are not preempted or retried;
+raw maximum duration still includes all pauses. See
+[the reproduced failure and measured tradeoff](BRIDGE_DISPATCH_BUDGET_2026-10-16.md).
 
 This is fixed metadata/control service, not a measured CPU-share scheduler for
 clipboard capture or simulation. No network deficit/CoDel implementation was

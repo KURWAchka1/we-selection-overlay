@@ -75,6 +75,64 @@ class BridgeDispatchTest {
         assertEquals(1, target.pendingCount()); assertEquals(700_000, target.queueMetrics().maxSliceNanos());
     }
 
+    @Test void sliceDoesNotStartAnotherVisitWithoutRoomForItsObservedCost() {
+        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { time.addAndGet(200_000); return false; }
+            public SelectionState readSelection(UUID id) { fail("No read expected"); return null; }
+        }, new BridgeServer.Limits(3, 1, 3, 4, 8), time::get, UUID::randomUUID);
+        var third = new UUID(1, 3);
+        for (UUID id : List.of(player, second, third)) target.enqueue(id, BridgeCodec.encode(hello(1)));
+        var order = new ArrayList<UUID>();
+        assertEquals(2, target.drain((id, frame) -> order.add(id)));
+        assertEquals(List.of(player, second), order);
+        assertEquals(1, target.pendingCount()); assertEquals(400_000, target.queueMetrics().maxSliceNanos());
+        assertEquals(2, target.metrics().admitted());
+        assertEquals(1, target.drain((id, frame) -> order.add(id)));
+        assertEquals(List.of(player, second, third), order); assertEquals(0, target.pendingCount());
+        assertEquals(3, target.metrics().admitted()); assertEquals(0, target.metrics().throttled());
+    }
+
+    @Test void visitReservationIncludesPublicationCost() {
+        for (int i = 0; i < 3; i++) server.enqueue(new UUID(4, i), BridgeCodec.encode(hello(i)));
+        assertEquals(2, server.drain((id, frame) -> time.addAndGet(200_000)));
+        assertEquals(1, server.pendingCount()); assertEquals(400_000, server.queueMetrics().maxSliceNanos());
+    }
+
+    @Test void expensiveVisitCannotPoisonLaterSlicesOrStopOrdinaryProgress() {
+        var calls = new AtomicLong();
+        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { if (calls.getAndIncrement() == 0) time.addAndGet(700_000); return false; }
+            public SelectionState readSelection(UUID id) { fail("No read expected"); return null; }
+        }, BridgeServer.Limits.defaults(), time::get, UUID::randomUUID);
+        for (int i = 0; i < 10; i++) target.enqueue(new UUID(4, i), BridgeCodec.encode(hello(i)));
+        assertEquals(1, target.drain((id, frame) -> { }));
+        assertEquals(8, target.drain((id, frame) -> { }));
+        assertEquals(1, target.drain((id, frame) -> { })); assertEquals(0, target.pendingCount());
+    }
+
+    @Test void suddenlySlowAtomicVisitRemainsVisibleAndIsNeverInterruptedOrRetried() {
+        var calls = new AtomicLong();
+        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { time.addAndGet(calls.incrementAndGet() == 2 ? 900_000 : 100_000); return false; }
+            public SelectionState readSelection(UUID id) { fail("No read expected"); return null; }
+        }, BridgeServer.Limits.defaults(), time::get, UUID::randomUUID);
+        for (int i = 0; i < 3; i++) target.enqueue(new UUID(4, i), BridgeCodec.encode(hello(i)));
+        assertEquals(2, target.drain((id, frame) -> { })); assertEquals(1_000_000, target.queueMetrics().maxSliceNanos());
+        assertEquals(1, target.pendingCount()); assertEquals(1, target.drain((id, frame) -> { }));
+        assertEquals(3, calls.get()); assertEquals(3, target.metrics().admitted());
+    }
+
+    @Test void visitReservationUsesElapsedDifferencesAcrossNanoTimeWrap() {
+        time.set(Long.MAX_VALUE - 300_000);
+        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { time.addAndGet(200_000); return false; }
+            public SelectionState readSelection(UUID id) { fail("No read expected"); return null; }
+        }, BridgeServer.Limits.defaults(), time::get, UUID::randomUUID);
+        for (int i = 0; i < 3; i++) target.enqueue(new UUID(4, i), BridgeCodec.encode(hello(i)));
+        assertEquals(2, target.drain((id, frame) -> { })); assertEquals(400_000, target.queueMetrics().maxSliceNanos());
+        assertEquals(1, target.drain((id, frame) -> { })); assertEquals(0, target.pendingCount());
+    }
+
     @Test void idleDrainNeverDoesWorkAndDoesNotVisitTheClock() {
         var clockCalls = new AtomicLong();
         BridgeServer target = new BridgeServer(new BridgeServer.Host() {

@@ -20,7 +20,7 @@ import { movement } from './gameplay-workload.mjs';
 import { movingEditKinds, movingEditTarget, verifyMovingEditWindow } from './moving-edit-window.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode, version = '1.21.11', ...options] = process.argv.slice(2);
-const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl,movingGameplay} = study;
+const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl,movingGameplay,budgetControl} = study;
 const frozenStudy = matchedSlices || movingGameplay, profilerStudy = sparkControl || movingGameplay;
 if (sparkControl) assert.equal(version,'26.2','Profiler-control configuration pins currently cover only exact 26.2');
 if (movingGameplay) assert.equal(version,'26.2','Moving edit transport is pinned to the exact 26.2 host');
@@ -31,7 +31,7 @@ assert.equal(relative(root, serverDir), frozenStudy ? join('build', study.rootNa
 assert.equal(Number(playerArgument), 32); assert.equal(Number(sampleArgument), 400);
 assert(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 4);
 if (matchedSlices) assert.equal(repetitions, 4);
-if (movingGameplay) assert.equal(repetitions,2,'Moving edit proof requires two fresh repeated JVMs');
+if (movingGameplay) assert.equal(repetitions,budgetControl ? 4 : 2,'Moving edit proof has a fixed repetition count');
 const properties = readFileSync(join(serverDir, 'server.properties'), 'utf8');
 for (const line of ['server-ip=127.0.0.1', 'server-port=25579', 'online-mode=false', 'max-players=32']) assert(properties.split(/\r?\n/).includes(line));
 assert.match(readFileSync(join(serverDir, 'eula.txt'), 'utf8'), /^eula=true\s*$/);
@@ -41,6 +41,11 @@ if (minecraft) assert.equal(require('minecraft-protocol/package.json').version, 
 const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
 const hashes = { paper: hash(join(serverDir, 'server.jar')), worldedit: hash(join(serverDir, 'plugins/worldedit.jar')),
   companion: hash(join(serverDir, 'companion.jar')), fixture: hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar')) };
+if (budgetControl) {
+  hashes.previousCompanion=hash(join(serverDir,'previous-companion.jar'));
+  assert.equal(hashes.previousCompanion,'7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956');
+  assert.notEqual(hashes.previousCompanion,hashes.companion,'Budget comparison needs a real candidate');
+}
 const agent = join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-agent.jar');
 const recordingSettings = frozenStudy ? join(serverDir, 'edit-diagnostics.jfc') : 'default';
 if (frozenStudy) {
@@ -175,10 +180,11 @@ async function measure(label, active) {
 async function run(round) {
   peers = []; fault = null; stopping = true; transport = null;
   const probe = createServer(); await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(25579, '127.0.0.1', resolve); }); await new Promise(resolve => probe.close(resolve));
-  copyFileSync(join(serverDir, 'companion.jar'), join(serverDir, 'plugins/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar'));
+  const policy=editRunPolicy(study,round),{instrumented,sparkEnabled,variant}=policy;
+  const companion=join(serverDir,budgetControl && variant==='previous' ? 'previous-companion.jar' : 'companion.jar');
+  copyFileSync(companion, join(serverDir, 'plugins/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar'));
   const config = join(serverDir, 'plugins/WorldEditSelectionOverlayBridge'); mkdirSync(config, { recursive: true });
   writeFileSync(join(config, 'config.yml'), 'limits:\n  max-connections: 1024\n  global-requests-per-second: 100\n  global-burst: 100\n  player-requests-per-second: 4\n  player-burst: 8\n');
-  const {instrumented,sparkEnabled} = editRunPolicy(study,round);
   let profilerConfigSha256;
   if (profilerStudy) {
     const config = join(serverDir,'config'); mkdirSync(config,{recursive:true});
@@ -262,6 +268,7 @@ async function run(round) {
     await waitFor(() => peers.every(p => p.ended), 'all disconnects'); await delay(250);
     const final = await metrics(); assert.equal(final.connections, 0); assert.equal(final.pending, 0); assert.equal(final.tasks, 0);
     const result = { round, ...(matchedSlices ? {instrumented, frozenDigest} : {}),
+      ...(budgetControl ? {variant,companionHash:hash(companion)} : {}),
       ...(movingGameplay ? {movingGameplay,frozenDigest,canonical,actors:peers.map(p=>({name:p.name,frames:p.frames.length,cui:p.cui.length,
         teleports:p.client.teleports,movementPackets:p.movementPackets}))} : {}),
       ...(profilerStudy ? {sparkEnabled,profilerConfigSha256} : {}),
@@ -299,6 +306,7 @@ try {
     ...(matchedSlices ? {matchedSlices, frozenDigest, order:study.order,
       ...(sparkControl ? {sparkControl} : {}),
       profiler:`Paper ${sparkControl ? 'spark on/off/off/on' : 'default spark'} + JFR default with zero-threshold ExecuteVMOperation/SafepointBegin`} : {}),
-    ...(movingGameplay ? {movingGameplay,frozenDigest,order:study.order,profiler:'Paper spark disabled + identical JFR; no method agent'} : {}),runs }, null, 2));
+    ...(movingGameplay ? {movingGameplay,frozenDigest,order:study.order,profiler:`Paper spark disabled + identical JFR; ${budgetControl ? 'identical method agent' : 'no method agent'}`} : {}),
+    ...(budgetControl ? {budgetControl} : {}),runs }, null, 2));
   console.log('PAPER EDIT LOAD PROOF PASS; owned servers stopped');
 } catch (error) { writeFileSync(failure, JSON.stringify({ checkedAt:new Date().toISOString(), hashes, error:String(error), runs }, null, 2)); console.error(error); process.exitCode=1; }

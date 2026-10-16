@@ -2,19 +2,21 @@ import assert from 'node:assert/strict';
 
 export function editDiagnosticPolicy(options) {
   assert(Array.isArray(options) && options.length <= 1
-    && options.every(option => ['--matched-slices','--spark-control','--moving-gameplay'].includes(option)), 'Choose one exact edit diagnostic study');
-  const sparkControl = options[0] === '--spark-control', movingGameplay = options[0] === '--moving-gameplay';
-  const matchedSlices = options.length === 1 && !movingGameplay;
-  return Object.freeze({matchedSlices,sparkControl,movingGameplay,
-    rootName:movingGameplay ? 'bridge-moving-edit-proof' : sparkControl ? 'bridge-edit-profiler-control' : matchedSlices ? 'bridge-edit-diagnostics' : 'bridge-edit-load-proof',
-    order:Object.freeze(movingGameplay ? ['moving','moving'] : sparkControl ? ['spark-on','spark-off','spark-off','spark-on'] : ['control','instrumented','instrumented','control'])});
+    && options.every(option => ['--matched-slices','--spark-control','--moving-gameplay','--budget-control'].includes(option)), 'Choose one exact edit diagnostic study');
+  const sparkControl = options[0] === '--spark-control', budgetControl = options[0] === '--budget-control';
+  const movingGameplay = budgetControl || options[0] === '--moving-gameplay';
+  const matchedSlices = budgetControl || options.length === 1 && !movingGameplay;
+  return Object.freeze({matchedSlices,sparkControl,movingGameplay,budgetControl,
+    rootName:budgetControl ? 'bridge-dispatch-budget-proof' : movingGameplay ? 'bridge-moving-edit-proof' : sparkControl ? 'bridge-edit-profiler-control' : matchedSlices ? 'bridge-edit-diagnostics' : 'bridge-edit-load-proof',
+    order:Object.freeze(budgetControl ? ['previous','candidate','candidate','previous'] : movingGameplay ? ['moving','moving'] : sparkControl ? ['spark-on','spark-off','spark-off','spark-on'] : ['control','instrumented','instrumented','control'])});
 }
 
 export function editRunPolicy(policy, round) {
   assert(Number.isInteger(round) && round >= 0 && round <= 4, 'Invalid edit study round');
   const middle = round === 2 || round === 3;
-  return Object.freeze({instrumented:policy.matchedSlices && round > 0 && (policy.sparkControl || middle),
-    sparkEnabled:!policy.movingGameplay && (!policy.sparkControl || !middle)});
+  return Object.freeze({instrumented:policy.matchedSlices && round > 0 && (policy.sparkControl || policy.budgetControl || middle),
+    sparkEnabled:!policy.movingGameplay && (!policy.sparkControl || !middle),
+    ...(policy.budgetControl ? {variant:middle ? 'candidate' : 'previous'} : {})});
 }
 
 export function paperProfilerConfig(enabled) {

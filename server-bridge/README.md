@@ -393,6 +393,15 @@ records 1,244 applies and independent CUI/canonical/undo/control-area audits,
 not native-client concurrent gameplay or production cost acceptance. The soft
 dispatcher target remains exceeded; production/player JARs are unchanged.
 
+The [dispatcher follow-up](../docs/engineering/BRIDGE_DISPATCH_BUDGET_2026-10-16.md)
+changes the unpublished companion and retains old/candidate/candidate/old moving
+load in `build/bridge-dispatch-budget-proof/26.2/`. The report gives the exact
+`-BudgetComparison` launcher and `26.2 --budget-control` analyzer commands; the
+exact old JAR must be preserved before building. Over-target frequency drops
+from 19.21% to 7.30% with 11.44% less
+saturated edit throughput and increased acknowledgment latency. This does not
+close the soft-target/release cost gate or replace the native-client checks.
+
 Use a disposable Paper server with its EULA accepted by its owner, official
 WorldEdit and this development companion. Updated development Fabric/NeoForge
 clients discover the channel only when advertised. No player gets the new
@@ -442,8 +451,12 @@ Decoded/served work remains limited to 100 frames/s with burst 100; ingress fram
 copies have separate per-player/storage bounds, not that global dispatch rate.
 
 One owning-thread slice per tick visits at most 8 slots with a cooperative 0.5 ms
-target. A frame waiting 5 seconds is ineligible for service and is discarded when
-visited. These are experimental defaults, not guaranteed CPU cost or a hard
+target. Before another visit it reserves the largest completed visit in the
+current slice, including send/bookkeeping cost. A deferred slot keeps its place
+and global token; the reservation resets next slice. Atomic host calls cannot
+be preempted and raw duration metrics remain unclipped. A frame waiting 5 seconds
+is ineligible for service and is discarded when visited. These are experimental
+defaults, not guaranteed CPU cost or a hard
 wall-clock reclamation deadline during a stalled server. Existing clients keep
 their 10-second timeout; there is no new busy opcode, retry loop or promise of
 all-player replies at arbitrary saturation. The reproduced 31-sender starvation

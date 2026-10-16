@@ -142,11 +142,18 @@ public final class BridgeServer {
         if (pending.isEmpty()) return 0;
         draining = true;
         long started = clock.getAsLong();
+        long previousVisit = started, visitReserve = 0;
         int visited = 0;
         try {
             while (!closed && !pending.isEmpty() && visited < dispatchLimits.maxPerSlice()) {
                 long now = clock.getAsLong();
-                if (visited > 0 && now - started >= dispatchLimits.sliceNanos()) break;
+                if (visited > 0) {
+                    // Reserve one observed visit; never carry a cold/paused call into later slices.
+                    visitReserve = Math.max(visitReserve, Math.max(0, now - previousVisit));
+                    long elapsed = Math.max(0, now - started);
+                    if (elapsed >= dispatchLimits.sliceNanos() || visitReserve >= dispatchLimits.sliceNanos() - elapsed) break;
+                }
+                previousVisit = now;
                 var entry = pending.entrySet().iterator().next();
                 UUID player = entry.getKey();
                 Peer peer = entry.getValue();
