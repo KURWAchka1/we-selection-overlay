@@ -30,6 +30,7 @@ param(
     [switch]$KindAdmissionComparison,
     [switch]$PeerAdmissionComparison,
     [switch]$AuthorityComparison,
+    [switch]$DispatchDiagnostics,
     [ValidateRange(6,7)][int]$BatchVisits = 6
 )
 $ErrorActionPreference = 'Stop'
@@ -38,9 +39,10 @@ if ($Minecraft -ne '1.21.11' -and (!$Java25 -or !($EditLoad -or ($Minecraft -eq 
 if ($Minecraft -eq '26.2' -and $GameplayLoad -and ($Players -ne 32 -or $Samples -ne 400 -or $Repetitions -ne 2)) { throw '26.2 gameplay requires 32 actors, 400 ticks and two reversed-order pairs' }
 if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $GameplayLoad, $LifecycleLoad, $EditLoad).Where({ $_ }).Count -gt 1) { throw 'Choose one workload mode: frozen baseline, restart load, tick timeline, fair dispatch, gameplay, active lifecycle or edit load' }
 if ($EditLoad -and ($Players -ne 32 -or $Samples -ne 400)) { throw 'Edit load requires 32 actors and 400 ticks per phase' }
-if (@($MatchedEditDiagnostics,$EditProfilerControl,$MovingEditLoad,$BudgetComparison,$DrainObserverControl,$RevisionComparison,$WorldReadComparison,$GuardBandComparison,$HotPathComparison,$PriorityControl,$EncodingComparison,$BatchComparison,$KindAdmissionComparison,$PeerAdmissionComparison,$AuthorityComparison).Where({$_}).Count -gt 1) { throw 'Choose one edit study' }
+if (@($MatchedEditDiagnostics,$EditProfilerControl,$MovingEditLoad,$BudgetComparison,$DrainObserverControl,$RevisionComparison,$WorldReadComparison,$GuardBandComparison,$HotPathComparison,$PriorityControl,$EncodingComparison,$BatchComparison,$KindAdmissionComparison,$PeerAdmissionComparison,$AuthorityComparison,$DispatchDiagnostics).Where({$_}).Count -gt 1) { throw 'Choose one edit study' }
 if ($EditProfilerControl -and $Minecraft -ne '26.2') { throw 'Edit profiler control is currently pinned to the exact 26.2 host' }
-$editStudy = $MatchedEditDiagnostics -or $EditProfilerControl -or $BudgetComparison -or $DrainObserverControl -or $RevisionComparison -or $WorldReadComparison -or $GuardBandComparison -or $HotPathComparison -or $PriorityControl -or $EncodingComparison -or $BatchComparison -or $KindAdmissionComparison -or $PeerAdmissionComparison -or $AuthorityComparison
+$editStudy = $MatchedEditDiagnostics -or $EditProfilerControl -or $BudgetComparison -or $DrainObserverControl -or $RevisionComparison -or $WorldReadComparison -or $GuardBandComparison -or $HotPathComparison -or $PriorityControl -or $EncodingComparison -or $BatchComparison -or $KindAdmissionComparison -or $PeerAdmissionComparison -or $AuthorityComparison -or $DispatchDiagnostics
+if ($DispatchDiagnostics -and $Minecraft -ne '26.2') { throw 'Dispatch diagnostics require exact 26.2 and Java25' }
 if ($BudgetComparison -and $Minecraft -ne '26.2') { throw 'Budget comparison is pinned to exact 26.2' }
 if ($DrainObserverControl -and $Minecraft -ne '26.2') { throw 'Drain observer control is pinned to exact 26.2' }
 if ($RevisionComparison -and $Minecraft -ne '26.2') { throw 'Revision comparison is pinned to exact 26.2' }
@@ -78,6 +80,7 @@ if ($BatchComparison) { $server = Join-Path $root $(if ($BatchVisits -eq 7) { 'b
 if ($KindAdmissionComparison) { $server = Join-Path $root 'build/bridge-kind-admission-proof' }
 if ($PeerAdmissionComparison) { $server = Join-Path $root 'build/bridge-peer-admission-proof' }
 if ($AuthorityComparison) { $server = Join-Path $root 'build/bridge-authority-proof' }
+if ($DispatchDiagnostics) { $server = Join-Path $root 'build/bridge-dispatch-diagnostics' }
 if ($Minecraft -eq '1.21.11') {
     if ($editStudy) { $server = Join-Path $server $Minecraft }
     $paper = Join-Path $source 'server.jar'
@@ -128,6 +131,10 @@ try {
     if ($SliceDiagnostics -or $editStudy) {
         & .\WEaddon_fabric_1.21.11\gradlew.bat -p tools/bridge-slice-agent check --offline --no-daemon --max-workers=2 --console=plain
         if ($LASTEXITCODE -ne 0) { throw 'Slice diagnostic agent checks failed' }
+        if ($DispatchDiagnostics) {
+            & .\WEaddon_fabric_1.21.11\gradlew.bat -p tools/bridge-slice-agent verifyDispatchProbe --offline --no-daemon --max-workers=2 --console=plain
+            if ($LASTEXITCODE -ne 0) { throw 'Native dispatch observer preflight failed' }
+        }
     }
     New-Item -ItemType Directory -Force -Path (Join-Path $server 'plugins') | Out-Null
     Copy-Item -LiteralPath $paper -Destination (Join-Path $server 'server.jar')
@@ -163,6 +170,7 @@ try {
     if ($KindAdmissionComparison) { $diagnosticArguments += '--kind-control' }
     if ($PeerAdmissionComparison) { $diagnosticArguments += '--peer-control' }
     if ($AuthorityComparison) { $diagnosticArguments += '--authority-control' }
+    if ($DispatchDiagnostics) { $diagnosticArguments += '--dispatch-diagnostics' }
     $serverJava = if ($Minecraft -eq '1.21.11') { $Java21 } else { $Java25 }
     & node (Join-Path $PSScriptRoot $runner) $serverJava $server $Players $Samples $Repetitions $mode @diagnosticArguments
     if ($LASTEXITCODE -ne 0) { throw "Paper load proof failed; inspect $server" }

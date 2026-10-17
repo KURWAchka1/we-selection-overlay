@@ -18,9 +18,10 @@ import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 import { editDiagnosticPolicy, editRunPolicy, paperProfilerConfig, verifyProfilerLog } from './edit-diagnostic-policy.mjs';
 import { movement } from './gameplay-workload.mjs';
 import { movingEditKinds, movingEditTarget, verifyMovingEditWindow } from './moving-edit-window.mjs';
+import { dispatchTraceTargets, dispatchStallEvents } from './dispatch-diagnostics.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode, version = '1.21.11', ...options] = process.argv.slice(2);
-const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,batchControl,kindControl,peerControl,authorityControl} = study;
+const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,batchControl,kindControl,peerControl,authorityControl,dispatchControl} = study;
 const minimalImplementation = revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl || peerControl || authorityControl;
 const frozenStudy = matchedSlices || movingGameplay, profilerStudy = sparkControl || movingGameplay;
 if (sparkControl) assert.equal(version,'26.2','Profiler-control configuration pins currently cover only exact 26.2');
@@ -32,7 +33,7 @@ assert.equal(relative(root, serverDir), frozenStudy ? join('build', study.rootNa
 assert.equal(Number(playerArgument), 32); assert.equal(Number(sampleArgument), 400);
 assert(Number.isInteger(repetitions) && repetitions >= 1 && repetitions <= 4);
 if (matchedSlices) assert.equal(repetitions, 4);
-if (movingGameplay) assert.equal(repetitions,budgetControl || drainControl || priorityControl ? 4 : 2,'Moving edit proof has a fixed repetition count');
+if (movingGameplay) assert.equal(repetitions,budgetControl || drainControl || priorityControl || dispatchControl ? 4 : 2,'Moving edit proof has a fixed repetition count');
 const properties = readFileSync(join(serverDir, 'server.properties'), 'utf8');
 for (const line of ['server-ip=127.0.0.1', 'server-port=25579', 'online-mode=false', 'max-players=32']) assert(properties.split(/\r?\n/).includes(line));
 assert.match(readFileSync(join(serverDir, 'eula.txt'), 'utf8'), /^eula=true\s*$/);
@@ -55,13 +56,20 @@ if(authorityControl) {
   assert.equal(hashes.companion,'5518acd05bb06ea9072482b9263c5a3f58368617a0d44e169a2a6c9bc9af860d');
   assert.equal(hashes.fixture,'8e6e6f344f55ef890e0dfbd9c49f24b17a56d358e684d75f1502c148d6237995');
 }
+if(dispatchControl) {
+  assert.equal(hashes.companion,'2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a');
+  assert.equal(hashes.fixture,'8e6e6f344f55ef890e0dfbd9c49f24b17a56d358e684d75f1502c148d6237995');
+}
 const agent = join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-agent.jar');
 const drainAgent = join(root,'tools/bridge-slice-agent/build/libs/bridge-drain-agent.jar');
+const dispatchAgent = join(root,'tools/bridge-slice-agent/build/libs/bridge-dispatch-agent.jar');
 if (drainControl) {
   assert.equal(hashes.companion,'78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1','Observer control must keep the tested companion fixed');
 }
-if (drainControl || minimalImplementation) hashes.drainAgent=hash(drainAgent);
+if (drainControl || minimalImplementation || dispatchControl) hashes.drainAgent=hash(drainAgent);
+if(dispatchControl) { hashes.dispatchAgent=hash(dispatchAgent); hashes.dispatchBootstrap=hash(join(root,'tools/bridge-slice-agent/build/libs/bridge-dispatch-bootstrap.jar')); }
 const recordingSettings = frozenStudy ? join(serverDir, 'edit-diagnostics.jfc') : 'default';
+const dispatchRecordingSettings = join(serverDir, 'edit-dispatch.jfc');
 if (frozenStudy) {
   if (matchedSlices) {
     hashes.agent = hash(agent);
@@ -72,9 +80,18 @@ if (frozenStudy) {
     assert(!existsSync(join(serverDir,file)), 'Archive previous diagnostic attempts before rerunning');
   const configured = spawnSync(join(javaHome,'bin/jfr.exe'), ['configure','--input','default','--output',recordingSettings,
     'jdk.ExecuteVMOperation#enabled=true','jdk.ExecuteVMOperation#threshold=0ms',
-    'jdk.SafepointBegin#enabled=true','jdk.SafepointBegin#threshold=0ms'], {windowsHide:true,encoding:'utf8',timeout:30000});
+    'jdk.SafepointBegin#enabled=true','jdk.SafepointBegin#threshold=0ms',
+    ...(dispatchControl ? dispatchStallEvents.flatMap(name=>[`${name}#enabled=true`,`${name}#threshold=0ms`]) : []),
+    ...(dispatchControl ? ['jdk.ClassLoad#enabled=true','jdk.ClassLoad#threshold=0ms'] : [])], {windowsHide:true,encoding:'utf8',timeout:30000});
   assert.equal(configured.status,0,configured.stderr || configured.error?.message);
   hashes.jfrSettings = hash(recordingSettings);
+  if(dispatchControl) {
+    const configured=spawnSync(join(javaHome,'bin/jfr.exe'),['configure','--input',recordingSettings,'--output',dispatchRecordingSettings,
+      'jdk.MethodTrace#enabled=true','jdk.MethodTrace#threshold=0ms','jdk.MethodTrace#stackTrace=false',
+      `jdk.MethodTrace#filter=${dispatchTraceTargets.join(';')}`],{windowsHide:true,encoding:'utf8',timeout:30000});
+    assert.equal(configured.status,0,configured.stderr || configured.error?.message);
+    hashes.dispatchSettings=hash(dispatchRecordingSettings);
+  }
 }
 const frozen = frozenStudy ? new FrozenFixtureWorld(serverDir) : null;
 let frozenDigest;
@@ -210,8 +227,9 @@ async function run(round) {
   const child = spawn(join(javaHome, 'bin/java.exe'), ['-Xms256m', '-Xmx1024m', '-XX:ActiveProcessorCount=2', '-Dweso.bridge.fixture=true', '-Dweso.bridge.editFixture=true', '-Dweso.bridge.measureTicks=400',
     ...(instrumented ? ['-Dweso.bridge.sliceDiagnostics=true',
       ...(diagnosticProfile==='drain' ? ['-Dweso.bridge.drainDiagnostics=true'] : []),
-      `-javaagent:${diagnosticProfile==='drain' ? drainAgent : agent}`] : []),
-    `-XX:StartFlightRecording=filename=edit-${round}.jfr,settings=${recordingSettings},dumponexit=true,maxsize=32m`, '-jar', 'server.jar', '--nogui'], { cwd: serverDir, windowsHide: true, stdio: ['pipe','pipe','pipe'] });
+      ...(diagnosticProfile==='dispatch' ? ['-Dweso.bridge.dispatchDiagnostics=true','--enable-native-access=ALL-UNNAMED'] : []),
+      `-javaagent:${diagnosticProfile==='dispatch' ? dispatchAgent : diagnosticProfile==='drain' ? drainAgent : agent}`] : []),
+    `-XX:StartFlightRecording=filename=edit-${round}.jfr,settings=${diagnosticProfile==='dispatch' ? dispatchRecordingSettings : recordingSettings},dumponexit=true,maxsize=${dispatchControl ? 128 : 32}m`, '-jar', 'server.jar', '--nogui'], { cwd: serverDir, windowsHide: true, stdio: ['pipe','pipe','pipe'] });
   server = captureProcess(child, join(serverDir, `edit-${round}.log`)); server.lifecycle = observeOwnedServer(child);
   let actualProcessPriority;
   const priorityReadings=[];
@@ -304,7 +322,7 @@ async function run(round) {
     const result = { round, ...(matchedSlices ? {instrumented, frozenDigest} : {}),
       ...(budgetControl ? {variant,companionHash:hash(companion)} : {}),
       ...(priorityControl ? {variant,processPriority,actualProcessPriority,priorityReadings} : {}),
-      ...(drainControl || minimalImplementation ? {diagnosticProfile,companionHash:hash(companion)} : {}),
+      ...(drainControl || minimalImplementation || dispatchControl ? {diagnosticProfile,companionHash:hash(companion)} : {}),
       ...(movingGameplay ? {movingGameplay,frozenDigest,canonical,actors:peers.map(p=>({name:p.name,frames:p.frames.length,cui:p.cui.length,
         teleports:p.client.teleports,movementPackets:p.movementPackets}))} : {}),
       ...(profilerStudy ? {sparkEnabled,profilerConfigSha256} : {}),
@@ -344,7 +362,9 @@ try {
       profiler:`Paper ${sparkControl ? 'spark on/off/off/on' : 'default spark'} + JFR default with zero-threshold ExecuteVMOperation/SafepointBegin`} : {}),
     ...(movingGameplay ? {movingGameplay,frozenDigest,order:study.order,profiler:`Paper spark disabled + identical JFR; ${minimalImplementation ? 'identical drain-only agent' : drainControl ? 'nested/drain/drain/nested observers' : budgetControl ? 'identical method agent' : 'no method agent'}`} : {}),
     cleanupBarrier:'server-quit-log',
-    ...(budgetControl ? {budgetControl} : {}),...(drainControl || minimalImplementation ? {joinPreparation:{batch:32,gapMillis:0}} : {}),
+    ...(budgetControl ? {budgetControl} : {}),...(drainControl || minimalImplementation || dispatchControl ? {joinPreparation:{batch:32,gapMillis:0}} : {}),
+    ...(dispatchControl ? {dispatchControl,traceTargets:dispatchTraceTargets,stallEvents:dispatchStallEvents,
+      profiler:'Paper spark disabled; identical zero-threshold stalls; root/dispatch/dispatch/root observers; no production intervention'} : {}),
     ...(drainControl ? {drainControl} : {}),...(revisionControl ? {revisionControl} : {}),...(worldControl ? {worldControl} : {}),...(guardControl ? {guardControl} : {}),...(hotPathControl ? {hotPathControl} : {}),...(priorityControl ? {priorityControl} : {}),...(encodingControl ? {encodingControl} : {}),...(batchControl ? {batchControl,batchVisits:study.batchVisits} : {}),...(kindControl ? {kindControl} : {}),...(peerControl ? {peerControl} : {}),...(authorityControl ? {authorityControl} : {}),runs }, null, 2));
   console.log('PAPER EDIT LOAD PROOF PASS; owned servers stopped');
 } catch (error) { writeFileSync(failure, JSON.stringify({ checkedAt:new Date().toISOString(), hashes, error:String(error), runs }, null, 2)); console.error(error); process.exitCode=1; }

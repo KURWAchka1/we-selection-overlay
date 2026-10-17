@@ -201,6 +201,19 @@ test('Paper input defaults are identical except for the profiler enable bit', ()
   disabled.spark.enabled = true; assert.deepEqual(disabled,enabled);
   for (const value of [null,1,'false',undefined]) assert.throws(()=>paperProfilerConfig(value));
 });
+
+test('dispatch diagnostics retain the companion and isolate native counters to middle arms', () => {
+  const study = editDiagnosticPolicy(['--dispatch-diagnostics']);
+  assert.equal(study.rootName, 'bridge-dispatch-diagnostics');
+  assert(study.dispatchControl && study.matchedSlices && study.movingGameplay);
+  assert(!study.budgetControl && !study.drainControl);
+  assert.deepEqual(study.order, ['drain','dispatch','dispatch','drain']);
+  for (let round=1; round<=4; round++) assert.deepEqual(editRunPolicy(study,round), {
+    instrumented:true, sparkEnabled:false, diagnosticProfile:round===2 || round===3 ? 'dispatch' : 'drain',
+  });
+  for (const flag of ['--authority-control','--dispatch-diagnostics','--moving-gameplay','--drain-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--dispatch-diagnostics',flag]));
+});
 test('startup logs require the exact chosen profiler policy and sampling engine', () => {
   verifyProfilerLog(on,true); verifyProfilerLog(off,false);
   for (const [log,enabled] of [[on,false],[off,true],['',true],['',false],[on+'\n'+off,true],[on+'\n'+off,false],['[spark] Starting background profiler...',true]])

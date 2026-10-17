@@ -9,6 +9,8 @@ sourceSets {
         compileClasspath += sourceSets.main.output
     }
     drainTest
+    dispatch { compileClasspath += sourceSets.main.output + configurations.runtimeClasspath }
+    dispatchTest { compileClasspath += sourceSets.main.output + sourceSets.dispatch.output + sourceSets.drainTest.output }
 }
 java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
 tasks.withType(JavaCompile).configureEach { options.release = 21 }
@@ -92,3 +94,39 @@ tasks.register('verifyDrainProbe', JavaExec) {
             '-Dweso.bridge.drainDiagnostics=true', "-javaagent:${tasks.drainAgentJar.archiveFile.get().asFile.absolutePath}"
 }
 check.dependsOn verifyDrainProbe
+
+tasks.named('compileDispatchJava', JavaCompile) {
+    javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(25) }
+    options.release = 25
+}
+tasks.named('compileDispatchTestJava', JavaCompile) {
+    dependsOn drainTestClasses
+    javaCompiler = tasks.compileDispatchJava.javaCompiler
+    options.release = 25
+}
+tasks.register('dispatchBootstrapJar', Jar) {
+    dependsOn dispatchClasses
+    archiveFileName = 'bridge-dispatch-bootstrap.jar'
+    from(sourceSets.dispatch.output) { exclude '**/DispatchAgent*.class' }
+}
+tasks.register('dispatchAgentJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+    dependsOn dispatchClasses, shadowJar, bootstrapJar, dispatchBootstrapJar
+    archiveFileName = 'bridge-dispatch-agent.jar'
+    configurations = []
+    relocate 'org.objectweb.asm', 'org.marshal.wesotest.slices.internal.asm'
+    manifest { attributes 'Premain-Class': 'org.marshal.wesotest.slices.DispatchAgent' }
+    from(sourceSets.dispatch.output) { include '**/DispatchAgent*.class' }
+    from({ zipTree(shadowJar.archiveFile.get().asFile) }) { exclude 'META-INF/MANIFEST.MF' }
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+}
+tasks.register('verifyDispatchProbe', JavaExec) {
+    dependsOn dispatchTestClasses, dispatchAgentJar
+    classpath = sourceSets.dispatchTest.output + sourceSets.drainTest.output
+    mainClass = 'org.marshal.wesotest.slices.DispatchChecks'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+    args layout.buildDirectory.file('dispatch-probe.jfr').get().asFile.absolutePath
+    maxHeapSize = '256m'
+    jvmArgs '-XX:ActiveProcessorCount=2', '--enable-native-access=ALL-UNNAMED',
+            '-Dweso.bridge.fixture=true', '-Dweso.bridge.sliceDiagnostics=true', '-Dweso.bridge.dispatchDiagnostics=true',
+            "-javaagent:${tasks.dispatchAgentJar.archiveFile.get().asFile.absolutePath}"
+}
