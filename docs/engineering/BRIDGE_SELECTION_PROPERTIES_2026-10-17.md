@@ -12,11 +12,14 @@ WorldEdit 7.4.2/Java 21, Paper 26.1.2-74 with WorldEdit 7.4.3/Java 25 and Paper
 tuple registry. One owned headless actor uses actual Minecraft custom payloads;
 this does not test native concurrent gameplay or a client GUI.
 
-For both exact Cuboid and ExtendingCuboid selectors, all eight independent
+For both exact Cuboid and ExtendingCuboid selectors, all eight input
 Pos1/Pos2 axis orientations receive six targets: disjoint positive and negative
 resize/translation, a mixed six-face adjustment, collapse to one block, unchanged
 bounds and a pure shift. All 96 successful cases replay the identical request.
-Another 48 cases request mixed expansion/contraction under expand-only,
+The ordinary Cuboid retains each input point order; the public Extending copy
+constructor first normalizes to minimum/maximum points, which must then remain
+canonical. Thus the Extending seeds verify normalization, not eight distinct
+post-construction orders. Another 48 cases request mixed expansion/contraction under expand-only,
 contract-only or shift-only authority and must refuse without partial mutation.
 
 The expected ordered integer points are computed independently of production
@@ -61,8 +64,25 @@ not used as writable test data.
 
 ## Preparation Checks
 
-- 19 property-generator/evidence rejection groups pass.
-- Full existing Node harness plus the new groups: **171 pass**.
+- 20 property-generator/evidence rejection groups pass after the correction below.
+- Full Node harness before that correction: **171 pass**; this includes the first
+  19 groups, not a claim that pure tests established WorldEdit's runtime semantics.
 - Restored companion SHA-256 remains
   `2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a`.
 - Real host results must be recorded separately after execution.
+
+## Preserved First Attempt
+
+The first 1.21.11 run on `f24a05f` failed before the first reversed Extending
+operation: the fixture copy constructor normalized X while the initial oracle
+expected reversed X. **81 cases** had completed; this attempt is not accepted.
+The server stopped normally and no success proof was written. Its complete
+world/log/failure rows are preserved under
+`build/bridge-selection-properties-first-attempt-20261017/1.21.11`.
+
+This is a reproduced **fixture/oracle assumption error**, not a production
+transaction defect. Official [Extending 7.4.2](https://github.com/EngineHub/WorldEdit/blob/7.4.2/worldedit-core/src/main/java/com/sk89q/worldedit/regions/selector/ExtendingCuboidRegionSelector.java)
+and [7.4.5](https://github.com/EngineHub/WorldEdit/blob/7.4.5/worldedit-core/src/main/java/com/sk89q/worldedit/regions/selector/ExtendingCuboidRegionSelector.java)
+both normalize the public copy constructor. The corrected oracle explicitly
+distinguishes input orientation from effective point orientation; it does not
+force an artificial selector state or relax any mutation/authority check.

@@ -30,12 +30,14 @@ export function selectionPropertyCases() {
   for (const extending of [false, true]) for (let orientation = 0; orientation < 8; orientation++) {
     const seed = `orientation-${extending ? 'ext-' : ''}${orientation}`;
     const selector = extending ? 'ExtendingCuboidRegionSelector' : 'CuboidRegionSelector';
-    for (const target of targets) result.push({ id: `${seed}/${target.name}`, seed, selector, orientation,
+    // WorldEdit's public Extending copy constructor normalizes the two corners.
+    const pointOrientation = extending ? 0 : orientation;
+    for (const target of targets) result.push({ id: `${seed}/${target.name}`, seed, selector, orientation, pointOrientation,
       permission: 'allgrants', permissionBits: 7, bounds: target.bounds, status: 0,
-      expectedPoints: orderedPoints(target.bounds, orientation), cui: target.name !== 'noop', replay: true });
+      expectedPoints: orderedPoints(target.bounds, pointOrientation), cui: target.name !== 'noop', replay: true });
     for (const [permission, permissionBits] of [['expandonly', 1], ['contractonly', 2], ['shiftonly', 4]]) {
-      result.push({ id: `${seed}/${permission}-mixed-denied`, seed, selector, orientation, permission, permissionBits,
-        bounds: targets[2].bounds, status: 2, expectedPoints: orderedPoints(propertyBase, orientation), cui: false, replay: false });
+      result.push({ id: `${seed}/${permission}-mixed-denied`, seed, selector, orientation, pointOrientation, permission, permissionBits,
+        bounds: targets[2].bounds, status: 2, expectedPoints: orderedPoints(propertyBase, pointOrientation), cui: false, replay: false });
     }
   }
   return result;

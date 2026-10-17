@@ -38,6 +38,12 @@ test('point oracle preserves independent per-axis ordering and handles collapse'
   for (let orientation = 0; orientation < 8; orientation++)
     assert.deepEqual(orderedPoints([12, 67, 23, 12, 67, 23], orientation), [12, 67, 23, 12, 67, 23]);
 });
+test('Extending normalizes all eight input orders; ordinary cuboid retains them', () => {
+  for (const c of cases) {
+    assert.equal(c.pointOrientation, c.selector === 'ExtendingCuboidRegionSelector' ? 0 : c.orientation);
+    assert.deepEqual(c.expectedPoints, orderedPoints(c.status === 0 ? c.bounds : propertyBase, c.pointOrientation));
+  }
+});
 test('oracle rejects malformed bounds or orientation instead of guessing', () => {
   for (const orientation of [-1, 8, NaN, 1.5]) assert.throws(() => orderedPoints(propertyBase, orientation));
   for (const bounds of [[], [1, 2, 3, 0, 2, 3], [0, 0, 0, 1, 1, NaN]]) assert.throws(() => orderedPoints(bounds, 0));

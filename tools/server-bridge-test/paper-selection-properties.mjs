@@ -116,7 +116,7 @@ try {
   const before = await metrics();
   for (const test of selectionPropertyCases()) {
     await action(test.seed); await action(test.permission);
-    assert.deepEqual(await canonical(), { selector: test.selector, points: orderedPoints(propertyBase, test.orientation) });
+    assert.deepEqual(await canonical(), { selector: test.selector, points: orderedPoints(propertyBase, test.pointOrientation) });
     if (!epoch) {
       const nonce = randomBytes(16), welcome = (await exchange(hello(nonce, 1, 2, 7))).value;
       assert.equal(welcome.opcode, 2); assert.equal(welcome.status, 0); assert.equal(welcome.capabilities, 7);
