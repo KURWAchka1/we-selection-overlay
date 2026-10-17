@@ -133,6 +133,16 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
             return true;
         }
         switch (args[0]) {
+            case "edit-state" -> {
+                var actor = BukkitAdapter.adapt(player);
+                try {
+                    var selector = WorldEdit.getInstance().getSessionManager().get(actor).getRegionSelector(actor.getWorld());
+                    var region = (com.sk89q.worldedit.regions.CuboidRegion) selector.getRegion();
+                    var a = region.getPos1(); var b = region.getPos2();
+                    getLogger().info("WESO_FIXTURE_EDIT_STATE " + player.getName() + " " + selector.getClass().getSimpleName()
+                            + " " + a.x() + "," + a.y() + "," + a.z() + "," + b.x() + "," + b.y() + "," + b.z());
+                } catch (com.sk89q.worldedit.IncompleteRegionException ex) { throw new IllegalStateException("Missing property selection", ex); }
+            }
             case "edit-pose" -> {
                 player.setGameMode(org.bukkit.GameMode.CREATIVE);
                 player.setAllowFlight(true); player.setFlying(true); player.setGravity(false);
@@ -203,7 +213,19 @@ public final class PaperBridgeFixture extends JavaPlugin implements Listener {
                     Objects.requireNonNull(getServer().getPluginManager().getPlugin("WorldEdit")));
             case "bridgeoff" -> getServer().getPluginManager().disablePlugin(bridgePlugin());
             case "bridgeon" -> getServer().getPluginManager().enablePlugin(bridgePlugin());
-            default -> { return true; }
+            default -> {
+                if (!args[0].matches("orientation-(ext-)?[0-7]")) return true;
+                int orientation = args[0].charAt(args[0].length() - 1) - '0';
+                var actor = BukkitAdapter.adapt(player);
+                var session = WorldEdit.getInstance().getSessionManager().get(actor);
+                var first = BlockVector3.at((orientation & 1) == 0 ? 10 : 15,
+                        (orientation & 2) == 0 ? 64 : 70, (orientation & 4) == 0 ? 20 : 27);
+                var second = BlockVector3.at((orientation & 1) == 0 ? 15 : 10,
+                        (orientation & 2) == 0 ? 70 : 64, (orientation & 4) == 0 ? 27 : 20);
+                var selector = new CuboidRegionSelector(actor.getWorld(), first, second);
+                session.setRegionSelector(actor.getWorld(), args[0].contains("-ext-")
+                        ? new com.sk89q.worldedit.regions.selector.ExtendingCuboidRegionSelector(selector) : selector);
+            }
         }
         getLogger().info("WESO_FIXTURE_OK " + args[0] + " " + args[1]);
         return true;
