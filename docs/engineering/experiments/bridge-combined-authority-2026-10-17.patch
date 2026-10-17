@@ -1,0 +1,218 @@
+diff --git a/server-bridge/core/src/main/java/org/marshal/weaddon_lightposition/bridge/server/BridgeServer.java b/server-bridge/core/src/main/java/org/marshal/weaddon_lightposition/bridge/server/BridgeServer.java
+index c5318ba..a4f5158 100644
+--- a/server-bridge/core/src/main/java/org/marshal/weaddon_lightposition/bridge/server/BridgeServer.java
++++ b/server-bridge/core/src/main/java/org/marshal/weaddon_lightposition/bridge/server/BridgeServer.java
+@@ -20,6 +20,10 @@ public final class BridgeServer {
+         boolean mayReadSelection(UUID connectionPlayer);
+         SelectionState readSelection(UUID connectionPlayer);
+         default boolean mayEditSelection(UUID player) { return false; }
++        /** Fresh read AND edit authority. Overrides must enforce both, never a cached grant. */
++        default boolean mayReadAndEditSelection(UUID player) {
++            return mayReadSelection(player) && mayEditSelection(player);
++        }
+         default EditCapture captureEdit(UUID player) { return EditCapture.unavailable(SelectionStatus.UNSUPPORTED); }
+         default EditOutcome applyEdit(UUID player, Object token, Bounds target) {
+             return new EditOutcome(CommitStatus.UNSUPPORTED, EditCapture.unavailable(SelectionStatus.UNSUPPORTED));
+@@ -271,7 +275,7 @@ public final class BridgeServer {
+ 
+     private BridgeMessage editRead(UUID player, Peer peer, EditReadRequest request) {
+         if (!editSession(peer, request.epoch())) return null;
+-        boolean allowed = host.mayReadSelection(player) && host.mayEditSelection(player);
++        boolean allowed = host.mayReadAndEditSelection(player);
+         if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+         if (!allowed) {
+             var reply = new EditReadReply(request.epoch(), request.requestId(), EditSnapshot.unavailable(SelectionStatus.DENIED));
+@@ -282,7 +286,7 @@ public final class BridgeServer {
+         editCaptures++;
+         EditCapture capture = Objects.requireNonNull(host.captureEdit(player));
+         if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+-        allowed = host.mayReadSelection(player) && host.mayEditSelection(player);
++        allowed = host.mayReadAndEditSelection(player);
+         if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+         if (!allowed || capture.selection().status() == SelectionStatus.DENIED) {
+             var reply = new EditReadReply(request.epoch(), request.requestId(), EditSnapshot.unavailable(SelectionStatus.DENIED));
+@@ -294,7 +298,7 @@ public final class BridgeServer {
+ 
+     private BridgeMessage editCommit(UUID player, Peer peer, EditCommitRequest request) {
+         if (!editSession(peer, request.epoch())) return null;
+-        boolean allowed = host.mayReadSelection(player) && host.mayEditSelection(player);
++        boolean allowed = host.mayReadAndEditSelection(player);
+         if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+         if (!allowed) {
+             var reply = new EditCommitReply(request.epoch(), request.requestId(), CommitStatus.DENIED, EditSnapshot.unavailable(SelectionStatus.DENIED));
+@@ -317,7 +321,7 @@ public final class BridgeServer {
+             if (outcome.status() == CommitStatus.APPLIED) editsApplied++;
+         }
+         if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+-        allowed = host.mayReadSelection(player) && host.mayEditSelection(player);
++        allowed = host.mayReadAndEditSelection(player);
+         if (closed || peers.get(player) != peer || !editSession(peer, request.epoch())) return null;
+         if (!allowed) {
+             var reply = new EditCommitReply(request.epoch(), request.requestId(), CommitStatus.UNKNOWN, EditSnapshot.unavailable(SelectionStatus.DENIED));
+diff --git a/server-bridge/paper/src/main/java/org/marshal/weaddon_lightposition/bridge/paper/WorldEditOverlayBridgePlugin.java b/server-bridge/paper/src/main/java/org/marshal/weaddon_lightposition/bridge/paper/WorldEditOverlayBridgePlugin.java
+index b1da49d..da0f129 100644
+--- a/server-bridge/paper/src/main/java/org/marshal/weaddon_lightposition/bridge/paper/WorldEditOverlayBridgePlugin.java
++++ b/server-bridge/paper/src/main/java/org/marshal/weaddon_lightposition/bridge/paper/WorldEditOverlayBridgePlugin.java
+@@ -186,6 +186,11 @@ public final class WorldEditOverlayBridgePlugin extends JavaPlugin implements Li
+     }
+ 
+     private final class SelectionHost implements BridgeServer.Host {
++        @Override public boolean mayReadAndEditSelection(UUID id) {
++            // This host's existing edit gate already includes a fresh read gate.
++            return mayEditSelection(id);
++        }
++
+         @Override public boolean mayEditSelection(UUID id) {
+             Player player = getServer().getPlayer(id);
+             return selectionEditingAvailable && player != null && player.hasPermission("weso.bridge.selection.edit") && mayReadSelection(id);
+diff --git a/server-bridge/core/src/test/java/org/marshal/weaddon_lightposition/bridge/server/BridgeEditAuthorityTest.java b/server-bridge/core/src/test/java/org/marshal/weaddon_lightposition/bridge/server/BridgeEditAuthorityTest.java
+new file mode 100644
+--- /dev/null
++++ b/server-bridge/core/src/test/java/org/marshal/weaddon_lightposition/bridge/server/BridgeEditAuthorityTest.java
+@@ -0,0 +1,146 @@
++package org.marshal.weaddon_lightposition.bridge.server;
++
++import java.util.UUID;
++import java.util.concurrent.atomic.AtomicReference;
++import java.util.function.IntConsumer;
++import org.junit.jupiter.api.Test;
++import org.marshal.weaddon_lightposition.bridge.protocol.BridgeCodec;
++import org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage;
++import static org.junit.jupiter.api.Assertions.*;
++import static org.marshal.weaddon_lightposition.bridge.protocol.BridgeMessage.*;
++
++class BridgeEditAuthorityTest {
++    private static final UUID PLAYER = new UUID(1, 1);
++    private static final Bounds INITIAL = new Bounds(0, 64, 0, 5, 70, 5);
++    private static final Bounds TARGET = new Bounds(1, 64, 0, 6, 70, 5);
++    private record Origin(UUID player, Bounds bounds) { }
++
++    private static final class Fixture implements BridgeServer.Host {
++        boolean read = true, edit = true;
++        int readChecks, jointChecks, captures, applies;
++        Bounds actual = INITIAL;
++        IntConsumer duringAuthorization = count -> { };
++        Runnable afterCapture = () -> { }, afterApply = () -> { };
++        final BridgeServer server = new BridgeServer(this, new BridgeServer.Limits(10, 1000, 1000, 100, 100),
++                () -> 1L, UUID::randomUUID);
++
++        @Override public boolean mayReadSelection(UUID player) { assertEquals(PLAYER, player); readChecks++; return read; }
++        @Override public boolean mayEditSelection(UUID player) { return edit && mayReadSelection(player); }
++        // Compiles on the control core too, where the specialization is not yet used.
++        public boolean mayReadAndEditSelection(UUID player) {
++            boolean allowed = mayEditSelection(player);
++            duringAuthorization.accept(++jointChecks);
++            return allowed;
++        }
++        @Override public SelectionState readSelection(UUID player) { return state(); }
++        SelectionState state() { return new SelectionState(SelectionStatus.READY, actual, -64, 319, 7); }
++        @Override public BridgeServer.EditCapture captureEdit(UUID player) {
++            if (!mayEditSelection(player)) return BridgeServer.EditCapture.unavailable(SelectionStatus.DENIED);
++            captures++;
++            var captured = new BridgeServer.EditCapture(new Origin(player, actual), state());
++            afterCapture.run(); return captured;
++        }
++        @Override public BridgeServer.EditOutcome applyEdit(UUID player, Object token, Bounds target) {
++            if (!mayEditSelection(player)) return new BridgeServer.EditOutcome(CommitStatus.DENIED,
++                    BridgeServer.EditCapture.unavailable(SelectionStatus.DENIED));
++            assertEquals(new Origin(player, actual), token);
++            applies++; actual = target;
++            var captured = new BridgeServer.EditCapture(new Origin(player, actual), state());
++            afterApply.run(); return new BridgeServer.EditOutcome(CommitStatus.APPLIED, captured);
++        }
++        BridgeMessage exchange(BridgeMessage message) {
++            assertTrue(server.enqueue(PLAYER, BridgeCodec.encode(message)));
++            var result = new AtomicReference<BridgeMessage>();
++            server.drain((id, frame) -> { assertEquals(PLAYER, id); result.set(BridgeCodec.decode(frame, BridgeCodec.Direction.TO_CLIENT)); });
++            return result.get();
++        }
++        UUID hello() { return ((Welcome) exchange(new Hello(UUID.randomUUID(), 1, 2, 7))).epoch(); }
++        EditSnapshot capture(UUID epoch) { return ((EditReadReply) exchange(new EditReadRequest(epoch, 1))).snapshot(); }
++    }
++
++    @Test void combinedAuthorityAvoidsRepeatedReadChecksWithoutCachingStages() {
++        var f = new Fixture(); var epoch = f.hello(); f.readChecks = 0;
++        var snapshot = f.capture(epoch);
++        assertEquals(3, f.readChecks, "One live read gate at each pre/host/post stage");
++        assertEquals(2, f.jointChecks); assertEquals(1, f.captures);
++        f.readChecks = 0;
++        var command = new EditCommitRequest(epoch, 2, snapshot.revision(), TARGET);
++        var applied = (EditCommitReply) f.exchange(command);
++        assertEquals(CommitStatus.APPLIED, applied.status()); assertEquals(3, f.readChecks);
++        assertEquals(4, f.jointChecks); assertEquals(1, f.applies);
++        f.readChecks = 0;
++        assertEquals(applied, f.exchange(command));
++        assertEquals(1, f.readChecks, "Cached result still needs a fresh combined gate");
++        assertEquals(5, f.jointChecks); assertEquals(1, f.applies);
++    }
++
++    @Test void revocationProtectsCachedCapturesAndCommits() {
++        for (boolean revokeRead : new boolean[]{true, false}) {
++            var f = new Fixture(); var epoch = f.hello(); var captured = f.capture(epoch);
++            if (revokeRead) f.read = false; else f.edit = false;
++            var denied = (EditReadReply) f.exchange(new EditReadRequest(epoch, 1));
++            assertEquals(SelectionStatus.DENIED, denied.snapshot().selection().status()); assertFalse(denied.snapshot().ready());
++            assertEquals(1, f.captures); assertEquals(0, f.applies);
++            assertNull(f.exchange(new EditCommitRequest(epoch, 2, captured.revision(), TARGET)));
++        }
++    }
++
++    @Test void revocationAfterCaptureNeverReachesApply() {
++        for (boolean revokeRead : new boolean[]{true, false}) {
++            var f = new Fixture(); var epoch = f.hello(); var captured = f.capture(epoch);
++            if (revokeRead) f.read = false; else f.edit = false;
++            var denied = (EditCommitReply) f.exchange(new EditCommitRequest(epoch, 2, captured.revision(), TARGET));
++            assertEquals(CommitStatus.DENIED, denied.status()); assertFalse(denied.snapshot().ready());
++            assertEquals(0, f.applies); assertEquals(INITIAL, f.actual);
++        }
++    }
++
++    @Test void revocationInsideCaptureCannotPublishOrRetainItsToken() {
++        var f = new Fixture(); var epoch = f.hello(); f.afterCapture = () -> f.read = false;
++        var reply = (EditReadReply) f.exchange(new EditReadRequest(epoch, 1));
++        assertEquals(SelectionStatus.DENIED, reply.snapshot().selection().status()); assertFalse(reply.snapshot().ready());
++        f.read = true;
++        assertNull(f.exchange(new EditCommitRequest(epoch, 2, UUID.randomUUID(), TARGET)));
++        assertEquals(0, f.applies);
++    }
++
++    @Test void revocationInsideApplyIsUnknownWithoutAFictionalRollbackOrReplay() {
++        for (boolean revokeRead : new boolean[]{true, false}) {
++            var f = new Fixture(); var epoch = f.hello(); var captured = f.capture(epoch);
++            f.afterApply = () -> { if (revokeRead) f.read = false; else f.edit = false; };
++            var command = new EditCommitRequest(epoch, 2, captured.revision(), TARGET);
++            var reply = (EditCommitReply) f.exchange(command);
++            assertEquals(CommitStatus.UNKNOWN, reply.status()); assertFalse(reply.snapshot().ready());
++            assertEquals(TARGET, f.actual); assertEquals(1, f.applies);
++            f.read = f.edit = true; assertNull(f.exchange(command)); assertEquals(1, f.applies);
++        }
++    }
++
++    @Test void reentrantCombinedGateCannotReadIntoResetContext() {
++        var f = new Fixture(); var epoch = f.hello();
++        f.duringAuthorization = count -> f.server.resetContext(PLAYER);
++        assertNull(f.exchange(new EditReadRequest(epoch, 1)));
++        assertEquals(0, f.captures); assertEquals(0, f.applies);
++    }
++
++    @Test void reentrantFinalCombinedGateCannotPublishAnAppliedAck() {
++        var f = new Fixture(); var epoch = f.hello(); var captured = f.capture(epoch);
++        int resetAt = f.jointChecks + 2;
++        f.duringAuthorization = count -> { if (count == resetAt) f.server.resetContext(PLAYER); };
++        var command = new EditCommitRequest(epoch, 2, captured.revision(), TARGET);
++        assertNull(f.exchange(command)); assertEquals(TARGET, f.actual); assertEquals(1, f.applies);
++        assertNull(f.exchange(command)); assertEquals(1, f.applies);
++    }
++
++    @Test void exceptionalPostApplyGateConsumesTokenAndReleasesDrainGuard() {
++        var f = new Fixture(); var epoch = f.hello(); var captured = f.capture(epoch);
++        int failAt = f.jointChecks + 2; var failure = new IllegalStateException("authority callback failed");
++        f.duringAuthorization = count -> { if (count == failAt) throw failure; };
++        var command = new EditCommitRequest(epoch, 2, captured.revision(), TARGET);
++        assertSame(failure, assertThrows(IllegalStateException.class, () -> f.exchange(command)));
++        assertEquals(TARGET, f.actual); assertEquals(1, f.applies);
++        f.duringAuthorization = count -> { };
++        assertEquals(CommitStatus.CONFLICT, ((EditCommitReply) f.exchange(command)).status());
++        assertEquals(1, f.applies); assertEquals(0, f.server.pendingCount());
++    }
++}

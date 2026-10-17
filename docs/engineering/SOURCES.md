@@ -1249,6 +1249,22 @@ an incorrect oracle assumption here. Preserve that failed attempt; test actual
 effective points rather than forcing a different public-API behavior. These facts
 justify the corrected test expectations, not a transaction rewrite or cost claim.
 
+## S74 Combined Authority And WorldEdit Permission Semantics
+
+Checked **2026-10-17**. The public tagged [BukkitAdapter](https://github.com/EngineHub/WorldEdit/blob/7.4.2/worldedit-bukkit/src/main/java/com/sk89q/worldedit/bukkit/BukkitAdapter.java)
+delegates player adaptation to [WorldEditPlugin](https://github.com/EngineHub/WorldEdit/blob/7.4.5/worldedit-bukkit/src/main/java/com/sk89q/worldedit/bukkit/WorldEditPlugin.java).
+The [BukkitPlayer permission implementation](https://github.com/EngineHub/WorldEdit/blob/7.4.5/worldedit-bukkit/src/main/java/com/sk89q/worldedit/bukkit/BukkitPlayer.java)
+uses WorldEdit's own OP/configuration and world-aware resolver. Replacing it with
+a direct Bukkit lookup or caching its result is not equivalent authorization.
+
+The [combined-authority candidate](BRIDGE_COMBINED_AUTHORITY_2026-10-17.md) preserves
+that path and all three live authorization stages, while removing duplicate read
+gate calls within a stage. It passes Java/live functional checks but fails one
+unchanged strict p95 gate. The candidate is fully reverted. This source inspection
+establishes permission semantics and avoidable calls, **not** a proven performance
+fix. A recorded stack in Paper send is only a sample, not duration attribution or
+justification for using unsupported internal packet calls.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

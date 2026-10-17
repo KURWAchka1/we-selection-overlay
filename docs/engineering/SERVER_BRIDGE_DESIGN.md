@@ -57,6 +57,10 @@ avoidable operation cost instead of accepting lost progress as an optimization.
 The separate [selection property matrix](BRIDGE_SELECTION_PROPERTIES_2026-10-17.md)
 verifies 432 real wire cases on the three exact hosts with unchanged production
 artifacts. It closes those mixed-boundary/order/authority cases, not cost gates.
+The [combined-authority trial](BRIDGE_COMBINED_AUTHORITY_2026-10-17.md) then removes
+two redundant read-gate evaluations in its candidate, without caching authority.
+It passes functional/service checks but fails one strict p95 gate and is fully
+reverted. A single send-path sample does not explain its long intervals.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).

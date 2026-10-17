@@ -136,6 +136,12 @@ corrected against the official Extending constructor. Only completed exact-host
 rows count. All three raw proofs/artifact hashes, 864 canonical snapshots and
 12 counter snapshots independently reconcile. No production change or new cost
 acceptance is inferred.
+The [combined-authority comparison](BRIDGE_COMBINED_AUTHORITY_2026-10-17.md) adds
+four fresh matched JVMs, 2,384 applied commits and 4,800 reconciled ticks. Its
+candidate preserves every ordinary actor's progress and ack gates but fails
+the second absolute p95 target (0.5557 ms). Both production changes and its
+candidate tests are reverted; fewer permission evaluations/allocations do not
+close the cost gate. Long, unassigned send-path intervals remain diagnostic work.
 None of these exact-host studies substitutes for native concurrent gameplay,
 absent/installed production cost baselines or unsupported platform matrices.
 
