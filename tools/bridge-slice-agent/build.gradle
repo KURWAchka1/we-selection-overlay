@@ -130,3 +130,13 @@ tasks.register('verifyDispatchProbe', JavaExec) {
             '-Dweso.bridge.fixture=true', '-Dweso.bridge.sliceDiagnostics=true', '-Dweso.bridge.dispatchDiagnostics=true',
             "-javaagent:${tasks.dispatchAgentJar.archiveFile.get().asFile.absolutePath}"
 }
+tasks.register('probeSamplerCause', JavaExec) {
+    dependsOn dispatchTestClasses, dispatchBootstrapJar, bootstrapJar
+    classpath = sourceSets.dispatchTest.output + files(tasks.dispatchBootstrapJar, tasks.bootstrapJar)
+    mainClass = 'org.marshal.wesotest.slices.SamplerCauseProbe'
+    javaLauncher = tasks.verifyDispatchProbe.javaLauncher
+    args rootProject.file('../../build/bridge-sampler-cause-20261017').absolutePath
+    maxHeapSize = '256m'
+    jvmArgs '-XX:ActiveProcessorCount=2', '--enable-native-access=ALL-UNNAMED',
+            '-Dweso.bridge.fixture=true', '-Dweso.bridge.dispatchDiagnostics=true'
+}

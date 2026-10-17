@@ -214,6 +214,16 @@ test('dispatch diagnostics retain the companion and isolate native counters to m
   for (const flag of ['--authority-control','--dispatch-diagnostics','--moving-gameplay','--drain-control'])
     assert.throws(()=>editDiagnosticPolicy(['--dispatch-diagnostics',flag]));
 });
+test('sampling control fixes native and method instrumentation and changes only the sampler',()=>{
+  const study=editDiagnosticPolicy(['--dispatch-sampling-control']);
+  assert.equal(study.rootName,'bridge-dispatch-sampling-proof');assert(study.samplingControl && study.dispatchControl);
+  assert.deepEqual(study.order,['sampling-on','sampling-off','sampling-off','sampling-on']);
+  for(let round=1;round<=4;round++) assert.deepEqual(editRunPolicy(study,round),{
+    instrumented:true,sparkEnabled:false,diagnosticProfile:'dispatch',samplingEnabled:round===1 || round===4,
+  });
+  for(const flag of ['--dispatch-diagnostics','--authority-control','--dispatch-sampling-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--dispatch-sampling-control',flag]));
+});
 test('startup logs require the exact chosen profiler policy and sampling engine', () => {
   verifyProfilerLog(on,true); verifyProfilerLog(off,false);
   for (const [log,enabled] of [[on,false],[off,true],['',true],['',false],[on+'\n'+off,true],[on+'\n'+off,false],['[spark] Starting background profiler...',true]])

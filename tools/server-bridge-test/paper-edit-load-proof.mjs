@@ -18,10 +18,10 @@ import { FrozenFixtureWorld } from './frozen-fixture-world.mjs';
 import { editDiagnosticPolicy, editRunPolicy, paperProfilerConfig, verifyProfilerLog } from './edit-diagnostic-policy.mjs';
 import { movement } from './gameplay-workload.mjs';
 import { movingEditKinds, movingEditTarget, verifyMovingEditWindow } from './moving-edit-window.mjs';
-import { dispatchTraceTargets, dispatchStallEvents } from './dispatch-diagnostics.mjs';
+import { dispatchTraceTargets, dispatchStallEvents, paperSafeDispatchTraceTargets } from './dispatch-diagnostics.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode, version = '1.21.11', ...options] = process.argv.slice(2);
-const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,batchControl,kindControl,peerControl,authorityControl,dispatchControl} = study;
+const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,batchControl,kindControl,peerControl,authorityControl,dispatchControl,samplingControl} = study;
 const minimalImplementation = revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl || peerControl || authorityControl;
 const frozenStudy = matchedSlices || movingGameplay, profilerStudy = sparkControl || movingGameplay;
 if (sparkControl) assert.equal(version,'26.2','Profiler-control configuration pins currently cover only exact 26.2');
@@ -70,6 +70,7 @@ if (drainControl || minimalImplementation || dispatchControl) hashes.drainAgent=
 if(dispatchControl) { hashes.dispatchAgent=hash(dispatchAgent); hashes.dispatchBootstrap=hash(join(root,'tools/bridge-slice-agent/build/libs/bridge-dispatch-bootstrap.jar')); }
 const recordingSettings = frozenStudy ? join(serverDir, 'edit-diagnostics.jfc') : 'default';
 const dispatchRecordingSettings = join(serverDir, 'edit-dispatch.jfc');
+const noSamplingSettings = join(serverDir,'edit-dispatch-no-sampling.jfc');
 if (frozenStudy) {
   if (matchedSlices) {
     hashes.agent = hash(agent);
@@ -88,9 +89,15 @@ if (frozenStudy) {
   if(dispatchControl) {
     const configured=spawnSync(join(javaHome,'bin/jfr.exe'),['configure','--input',recordingSettings,'--output',dispatchRecordingSettings,
       'jdk.MethodTrace#enabled=true','jdk.MethodTrace#threshold=0ms','jdk.MethodTrace#stackTrace=false',
-      `jdk.MethodTrace#filter=${dispatchTraceTargets.join(';')}`],{windowsHide:true,encoding:'utf8',timeout:30000});
+      `jdk.MethodTrace#filter=${(samplingControl ? paperSafeDispatchTraceTargets : dispatchTraceTargets).join(';')}`],{windowsHide:true,encoding:'utf8',timeout:30000});
     assert.equal(configured.status,0,configured.stderr || configured.error?.message);
     hashes.dispatchSettings=hash(dispatchRecordingSettings);
+    if(samplingControl) {
+      const configured=spawnSync(join(javaHome,'bin/jfr.exe'),['configure','--input',dispatchRecordingSettings,'--output',noSamplingSettings,
+        'jdk.ExecutionSample#enabled=false','jdk.NativeMethodSample#enabled=false'],{windowsHide:true,encoding:'utf8',timeout:30000});
+      assert.equal(configured.status,0,configured.stderr || configured.error?.message);
+      hashes.noSamplingSettings=hash(noSamplingSettings);
+    }
   }
 }
 const frozen = frozenStudy ? new FrozenFixtureWorld(serverDir) : null;
@@ -211,7 +218,7 @@ async function measure(label, active) {
 async function run(round) {
   peers = []; fault = null; stopping = true; transport = null;
   const probe = createServer(); await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(25579, '127.0.0.1', resolve); }); await new Promise(resolve => probe.close(resolve));
-  const policy=editRunPolicy(study,round),{instrumented,sparkEnabled,variant,diagnosticProfile,processPriority}=policy;
+  const policy=editRunPolicy(study,round),{instrumented,sparkEnabled,variant,diagnosticProfile,processPriority,samplingEnabled}=policy;
   const companion=join(serverDir,budgetControl && variant==='previous' ? 'previous-companion.jar' : 'companion.jar');
   copyFileSync(companion, join(serverDir, 'plugins/worldedit_selection_overlay-bridge-paper-0.1.0-dev.jar'));
   const config = join(serverDir, 'plugins/WorldEditSelectionOverlayBridge'); mkdirSync(config, { recursive: true });
@@ -229,7 +236,7 @@ async function run(round) {
       ...(diagnosticProfile==='drain' ? ['-Dweso.bridge.drainDiagnostics=true'] : []),
       ...(diagnosticProfile==='dispatch' ? ['-Dweso.bridge.dispatchDiagnostics=true','--enable-native-access=ALL-UNNAMED'] : []),
       `-javaagent:${diagnosticProfile==='dispatch' ? dispatchAgent : diagnosticProfile==='drain' ? drainAgent : agent}`] : []),
-    `-XX:StartFlightRecording=filename=edit-${round}.jfr,settings=${diagnosticProfile==='dispatch' ? dispatchRecordingSettings : recordingSettings},dumponexit=true,maxsize=${dispatchControl ? 128 : 32}m`, '-jar', 'server.jar', '--nogui'], { cwd: serverDir, windowsHide: true, stdio: ['pipe','pipe','pipe'] });
+    `-XX:StartFlightRecording=filename=edit-${round}.jfr,settings=${samplingControl && !samplingEnabled ? noSamplingSettings : diagnosticProfile==='dispatch' ? dispatchRecordingSettings : recordingSettings},dumponexit=true,maxsize=${dispatchControl ? 128 : 32}m`, '-jar', 'server.jar', '--nogui'], { cwd: serverDir, windowsHide: true, stdio: ['pipe','pipe','pipe'] });
   server = captureProcess(child, join(serverDir, `edit-${round}.log`)); server.lifecycle = observeOwnedServer(child);
   let actualProcessPriority;
   const priorityReadings=[];
@@ -320,6 +327,7 @@ async function run(round) {
       'all owning-server player quits',5000);
     const final = await metrics(); assert.equal(final.connections, 0); assert.equal(final.pending, 0); assert.equal(final.tasks, 0);
     const result = { round, ...(matchedSlices ? {instrumented, frozenDigest} : {}),
+      ...(samplingControl ? {samplingEnabled} : {}),
       ...(budgetControl ? {variant,companionHash:hash(companion)} : {}),
       ...(priorityControl ? {variant,processPriority,actualProcessPriority,priorityReadings} : {}),
       ...(drainControl || minimalImplementation || dispatchControl ? {diagnosticProfile,companionHash:hash(companion)} : {}),
@@ -363,8 +371,9 @@ try {
     ...(movingGameplay ? {movingGameplay,frozenDigest,order:study.order,profiler:`Paper spark disabled + identical JFR; ${minimalImplementation ? 'identical drain-only agent' : drainControl ? 'nested/drain/drain/nested observers' : budgetControl ? 'identical method agent' : 'no method agent'}`} : {}),
     cleanupBarrier:'server-quit-log',
     ...(budgetControl ? {budgetControl} : {}),...(drainControl || minimalImplementation || dispatchControl ? {joinPreparation:{batch:32,gapMillis:0}} : {}),
-    ...(dispatchControl ? {dispatchControl,traceTargets:dispatchTraceTargets,stallEvents:dispatchStallEvents,
+    ...(dispatchControl ? {dispatchControl,traceTargets:samplingControl ? paperSafeDispatchTraceTargets : dispatchTraceTargets,stallEvents:dispatchStallEvents,
       profiler:'Paper spark disabled; identical zero-threshold stalls; root/dispatch/dispatch/root observers; no production intervention'} : {}),
+    ...(samplingControl ? {samplingControl,profiler:'Paper spark disabled; identical Windows/native and method observers; JFR execution/native sampler on/off/off/on'} : {}),
     ...(drainControl ? {drainControl} : {}),...(revisionControl ? {revisionControl} : {}),...(worldControl ? {worldControl} : {}),...(guardControl ? {guardControl} : {}),...(hotPathControl ? {hotPathControl} : {}),...(priorityControl ? {priorityControl} : {}),...(encodingControl ? {encodingControl} : {}),...(batchControl ? {batchControl,batchVisits:study.batchVisits} : {}),...(kindControl ? {kindControl} : {}),...(peerControl ? {peerControl} : {}),...(authorityControl ? {authorityControl} : {}),runs }, null, 2));
   console.log('PAPER EDIT LOAD PROOF PASS; owned servers stopped');
 } catch (error) { writeFileSync(failure, JSON.stringify({ checkedAt:new Date().toISOString(), hashes, error:String(error), runs }, null, 2)); console.error(error); process.exitCode=1; }

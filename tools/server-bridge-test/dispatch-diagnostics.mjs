@@ -13,3 +13,5 @@ export const dispatchStallEvents = Object.freeze([
   'jdk.JavaMonitorEnter', 'jdk.JavaMonitorWait', 'jdk.ThreadPark', 'jdk.ThreadSleep',
   'jdk.FileRead', 'jdk.FileWrite', 'jdk.SocketRead', 'jdk.SocketWrite',
 ]);
+export const paperSafeDispatchTraceTargets = Object.freeze(dispatchTraceTargets.filter(name =>
+  name.startsWith('org.bukkit.') || name.startsWith('org.marshal.wesotest.')));

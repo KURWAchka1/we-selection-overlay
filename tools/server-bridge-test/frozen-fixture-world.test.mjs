@@ -14,7 +14,7 @@ function fixture(t, name = 'bridge-baseline-proof') {
     rmSync(path, { recursive: true, force: true });
   });
   const directory = join(scratch, name);
-  const modern = name === 'bridge-dispatch-diagnostics/26.2' || ['bridge-edit-diagnostics/26.2','bridge-edit-diagnostics/26.1.2',
+  const modern = ['bridge-dispatch-diagnostics/26.2','bridge-dispatch-sampling-proof/26.2'].includes(name) || ['bridge-edit-diagnostics/26.2','bridge-edit-diagnostics/26.1.2',
     'bridge-edit-profiler-control/26.2','bridge-edit-profiler-control/26.1.2','bridge-gameplay-control-proof/26.2','bridge-moving-edit-proof/26.2','bridge-dispatch-budget-proof/26.2','bridge-drain-observer-proof/26.2','bridge-revision-proof/26.2','bridge-world-read-proof/26.2','bridge-guard-band-proof/26.2','bridge-hotpath-proof/26.2','bridge-priority-proof/26.2','bridge-encoding-proof/26.2','bridge-batch-proof/26.2','bridge-batch-seven-proof/26.2','bridge-kind-admission-proof/26.2','bridge-peer-admission-proof/26.2','bridge-authority-proof/26.2'].includes(name);
   for (const name of modern ? ['bridge-fixture'] : ['bridge-fixture', 'bridge-fixture_nether', 'bridge-fixture_the_end']) {
     mkdirSync(join(directory, name, 'region'), { recursive: true });
@@ -46,6 +46,12 @@ test('dispatch diagnostics use a separate modern world and preserve exact restor
   writeFileSync(join(directory, 'bridge-fixture/level.dat'), 'changed');
   assert.equal(frozen.restore(), digest);
   assert.equal(readFileSync(join(directory, 'bridge-fixture/level.dat'), 'utf8'), 'bridge-fixture');
+});
+test('sampling intervention cannot overwrite the original dispatch study or another host', t => {
+  const {directory,frozen}=fixture(t,'bridge-dispatch-sampling-proof/26.2');
+  const digest=frozen.capture();writeFileSync(join(directory,'bridge-fixture/level.dat'),'change');
+  assert.equal(frozen.restore(),digest);
+  assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'../26.1.2')),/Not a named|ENOENT/);
 });
 
 test('the separate tick-timeline fixture preserves the same snapshot guards', t => {

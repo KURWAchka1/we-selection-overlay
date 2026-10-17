@@ -1,6 +1,6 @@
 # Dispatch Cause Investigation
 
-Status: **predeclared diagnostic study, not a production optimization**.
+Status: **first live series complete; method-attribution gate incomplete**.
 Original companion remains `2fc45532...`; no permission, scheduling, quota,
 wire or client change. Existing studies and published artifacts stay immutable.
 
@@ -70,5 +70,73 @@ onDisable cleanup hook. Original nested/root agent artifacts are unchanged.
 ```powershell
 ./tools/test-paper-bridge-load.ps1 -Java21 <jdk21> -Java25 <jdk25> `
   -Minecraft 26.2 -EditLoad -DispatchDiagnostics -Players 32 -Samples 400 `
+  -Repetitions 4 -AcceptEula
+```
+
+## First Series And Instrumentation Limitation
+
+All four fresh servers stop normally: 595 / 596 / 598 / 590 applies and 4,800
+raw/JFR ticks reconcile. The independent method-completeness guard then correctly
+fails: Java 25's built-in tracer skips our plugin classes because its hierarchy
+resolver cannot obtain `IllegalArgumentException`, `Record` or `RuntimeException`
+through Paper's plugin loader. The exact warnings are in `edit-2.log`; this is
+not a production mod error. Do not count six absent filters as observed methods
+or call full attribution passed. The exact agents are archived inside this
+study's `diagnostic-artifacts` before further tooling changes.
+
+Native records and the three actually traced public/diagnostic targets remain
+usable narrow evidence. Round 3 root 54 lasts 6.1648 ms, has 1,398,622 raw cycle
+delta, six context switches, reason bitmap `80000020` (DispatchInt + Suspended),
+no recorded stall/class-load overlap and 119.3 us total counter-read duration.
+Its four Paper sends total 79 us. The suspension is observed, not guessed from
+a missing Java sample; it does not identify who suspended the thread by itself.
+Round 2 also has preemption-only long intervals; cold class loading, a monitor
+wait and a file read appear in other roots. No single cause is inferred for all.
+
+`JfrDispatchDetails` has four independent reader groups, including corrupt/missing/
+duplicate/foreign counters, lost data and plain-observer controls. Its synthetic
+counters validate parsing only. A separate `QueryThreadCycleTime` busy/sleep
+cross-check confirms positive short-call cycle deltas even without a context
+switch; raw cycles are never converted to elapsed time.
+
+## Controlled Sampler Mechanism
+
+`SamplerCauseProbe` executes fixed 250,000-iteration CPU work 500 times per arm,
+with the same native reader. A same-JVM off/20/1/1/20/off pilot shows 0/12/145/
+139/12/1 suspended intervals; the final off arm may contain an in-flight sample.
+Do not discard it. Repeat in **six fresh JVMs** to remove that carry-over:
+**0 / 11 / 139 / 139 / 13 / 0** suspended intervals. Raw cycle totals remain
+approximately 676-686 million for the fixed work. General preemption persists
+with sampling off. Dense sampling is a mechanism probe, not a server benchmark.
+All JFRs/logs are retained under `build/bridge-sampler-cause-20261017` and
+`build/bridge-sampler-fresh-20261017`.
+
+Exact [OpenJDK 25.0.2+10 sampler source](https://github.com/openjdk/jdk25u/blob/jdk-25.0.2%2B10/src/hotspot/share/jfr/periodic/sampling/jfrThreadSampler.cpp)
+uses platform thread suspension and can return without a successful sample.
+Thus no recorded owner sample does not exclude a sampler-induced suspension.
+No code is copied from the JDK. A failed optional Gradle `javaexec` launcher
+(removed; unavailable on Gradle 9) and an unquoted PowerShell `-D` launch are
+preserved as setup failures; no measured server ran in either attempt. The
+successful fresh-JVM probe uses the direct Java CLI with quoted properties.
+
+## Predeclared Bridge Sampler Intervention
+
+New isolated root `build/bridge-dispatch-sampling-proof/26.2`. Same exact host,
+original companion/current fixture, frozen world, BelowNormal priority, actor
+preparation/work and 400-tick windows. Four fresh JVMs **on / off / off / on**.
+All use the **same native root observer and same three proven method filters**;
+the only recorder-setting difference is `enabled` for `jdk.ExecutionSample`
+and `jdk.NativeMethodSample`. Other JFR/stall/class-load settings stay equal.
+No build or offline reader competes with measured windows.
+
+Require complete raw/phase/authority/canonical/normal-stop reconciliation, exact
+method filters, matched native records and cleanup. Verify recorder settings and
+actual samples, not merely the filename. Compare Suspended/Preempted reason
+counts and all outliers without trimming. This tests the sampler's causal role,
+not a production optimization or permission to waive the existing cost gate.
+
+```powershell
+./tools/test-paper-bridge-load.ps1 -Java21 <jdk21> -Java25 <jdk25> `
+  -Minecraft 26.2 -EditLoad -DispatchSamplingControl -Players 32 -Samples 400 `
   -Repetitions 4 -AcceptEula
 ```
