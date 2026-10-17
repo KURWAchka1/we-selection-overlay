@@ -83,6 +83,9 @@ try {
         & node --test (Join-Path $root 'tools/server-bridge-test/jfr-bridge-slices.test.mjs') 2>&1 |
             Tee-Object -FilePath (Join-Path $logs "harness-slices-$($target.Name).log")
         if ($LASTEXITCODE -ne 0) { throw "JFR slice reader self-tests failed: $($target.Name)" }
+        & node --test (Join-Path $root 'tools/server-bridge-test/jfr-owner-samples.test.mjs') 2>&1 |
+            Tee-Object -FilePath (Join-Path $logs "harness-owner-samples-$($target.Name).log")
+        if ($LASTEXITCODE -ne 0) { throw "JFR owner-sample reader self-tests failed: $($target.Name)" }
         & node --test (Join-Path $root 'tools/server-bridge-test/jfr-edit-slices.test.mjs') 2>&1 |
             Tee-Object -FilePath (Join-Path $logs "harness-edit-slices-$($target.Name).log")
         if ($LASTEXITCODE -ne 0) { throw "JFR edit phase reader self-tests failed: $($target.Name)" }

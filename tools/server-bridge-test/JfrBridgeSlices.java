@@ -19,6 +19,9 @@ class JfrBridgeSlices {
             "value", "wide", "fail", "pause", "nested", "object");
     private record Call(long id, long parent, long thread, String operation, Instant start, Instant end,
                         long wall, long cpu, long allocation, long before, long after, boolean failed) { }
+    private record Frame(String location, boolean locationClipped, int line, String type) { }
+    private record Sample(Instant time, String state, boolean stateClipped, boolean stackPresent,
+                          boolean recordingTruncated, int recordedFrameCount, List<Frame> frames) { }
     private static final class Group {
         final List<Long> walls = new ArrayList<>();
         long sum, cpu, allocated, failed, overTarget;
@@ -26,6 +29,7 @@ class JfrBridgeSlices {
     private static final class Detail {
         final Call root;
         final List<Call> children = new ArrayList<>();
+        final List<Sample> samples = new ArrayList<>();
         long gc, vm, safepointBegin, park, monitor, ownerSamples, deoptimizations;
         final Set<String> vmOperations = new java.util.TreeSet<>();
         final Set<String> vmCallers = new java.util.TreeSet<>();
@@ -117,7 +121,15 @@ class JfrBridgeSlices {
                     if (kind.equals("jdk.ExecutionSample")) {
                         var thread = event.getThread("sampledThread");
                         if (thread != null && thread.getJavaThreadId() == root.thread
-                                && !event.getStartTime().isBefore(root.start) && event.getStartTime().isBefore(root.end)) detail.ownerSamples++;
+                                && !event.getStartTime().isBefore(root.start) && event.getStartTime().isBefore(root.end)) {
+                            detail.ownerSamples++;
+                            // Recording buffers are not chronological; keep the earliest eight points.
+                            if (detail.samples.size() < 8 || event.getStartTime().isBefore(detail.samples.getLast().time)) {
+                                detail.samples.add(sample(event));
+                                detail.samples.sort(Comparator.comparing(Sample::time));
+                                if (detail.samples.size() > 8) detail.samples.removeLast();
+                            }
+                        }
                         continue;
                     }
                     if (kind.equals("jdk.Deoptimization")) {
@@ -191,9 +203,24 @@ class JfrBridgeSlices {
                 if (!first) System.out.print(','); first = false;
                 System.out.printf(Locale.ROOT, "{\"id\":%d,\"parentId\":%d,\"operation\":\"%s\",\"wallMillis\":%.6f,\"allocatedBytes\":%d}", child.id, child.parent, child.operation, child.wall / 1e6, child.allocation);
             }
-            System.out.printf("],\"safepointIds\":[%s],\"associatedVmOperations\":[%s],\"associatedVmCallers\":[%s]}%n",
+            System.out.printf("],\"safepointIds\":[%s],\"associatedVmOperations\":[%s],\"associatedVmCallers\":[%s],\"ownerSampleDetailsClipped\":%s,\"ownerSampleDetails\":[",
                     detail.safepointIds.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")),
-                    quoted(detail.associatedVmOperations), quoted(detail.associatedVmCallers));
+                    quoted(detail.associatedVmOperations), quoted(detail.associatedVmCallers), detail.ownerSamples > detail.samples.size());
+            first = true;
+            for (Sample sample : detail.samples) {
+                if (!first) System.out.print(','); first = false;
+                System.out.printf("{\"time\":\"%s\",\"state\":%s,\"stateClipped\":%s,\"stackPresent\":%s,\"recordingTruncated\":%s,\"recordedFrameCount\":%d,\"framesClipped\":%s,\"frames\":[",
+                        sample.time, json(sample.state), sample.stateClipped, sample.stackPresent, sample.recordingTruncated,
+                        sample.recordedFrameCount, sample.recordedFrameCount > sample.frames.size());
+                boolean firstFrame = true;
+                for (Frame frame : sample.frames) {
+                    if (!firstFrame) System.out.print(','); firstFrame = false;
+                    System.out.printf("{\"location\":%s,\"locationClipped\":%s,\"line\":%d,\"type\":%s}",
+                            json(frame.location), frame.locationClipped, frame.line, json(frame.type));
+                }
+                System.out.print("]}");
+            }
+            System.out.println("]}");
         }
     }
     private static String caller(RecordedEvent event) {
@@ -204,6 +231,31 @@ class JfrBridgeSlices {
     }
     private static String quoted(Set<String> values) {
         return values.stream().map(s -> "\"" + s + "\"").collect(java.util.stream.Collectors.joining(","));
+    }
+    private static Sample sample(RecordedEvent event) {
+        var trace = event.getStackTrace();
+        List<Frame> frames = new ArrayList<>();
+        if (trace != null) for (var frame : trace.getFrames().subList(0, Math.min(24, trace.getFrames().size()))) {
+            var method = frame.getMethod();
+            String location = method.getType().getName() + "." + method.getName();
+            frames.add(new Frame(location.substring(0, Math.min(512, location.length())), location.length() > 512,
+                    frame.getLineNumber(), frame.getType()));
+        }
+        String state = event.getString("state");
+        return new Sample(event.getStartTime(), state == null ? null : state.substring(0, Math.min(128, state.length())),
+                state != null && state.length() > 128, trace != null, trace != null && trace.isTruncated(),
+                trace == null ? 0 : trace.getFrames().size(), frames);
+    }
+    private static String json(String value) {
+        if (value == null) return "null";
+        StringBuilder out = new StringBuilder("\"");
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\\' || c == '"') out.append('\\').append(c);
+            else if (c < 32) out.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
+            else out.append(c);
+        }
+        return out.append('"').toString();
     }
     private static Call call(RecordedEvent event) {
         String operation = event.getString("operation");

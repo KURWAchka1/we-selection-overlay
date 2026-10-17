@@ -142,6 +142,11 @@ candidate preserves every ordinary actor's progress and ack gates but fails
 the second absolute p95 target (0.5557 ms). Both production changes and its
 candidate tests are reverted; fewer permission evaluations/allocations do not
 close the cost gate. Long, unassigned send-path intervals remain diagnostic work.
+The [bounded offline sample audit](BRIDGE_OWNER_SAMPLES_2026-10-17.md) then
+preserves every original metric in all four active windows. Only three of forty
+selected intervals have an owner sample, insufficient for full-duration causal
+attribution. Six new reader groups pass on both JVMs, including lost-data failure
+and explicit truncation. No new live observer or production change is introduced.
 None of these exact-host studies substitutes for native concurrent gameplay,
 absent/installed production cost baselines or unsupported platform matrices.
 

@@ -1265,6 +1265,28 @@ establishes permission semantics and avoidable calls, **not** a proven performan
 fix. A recorded stack in Paper send is only a sample, not duration attribution or
 justification for using unsupported internal packet calls.
 
+## S75 Offline Sampling And Windows Measurement Limits
+
+Checked **2026-10-17**. Oracle's public [RecordedEvent](https://docs.oracle.com/en/java/javase/25/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedEvent.html)
+allows absent stacks; [RecordedStackTrace](https://docs.oracle.com/en/java/javase/25/docs/api/jdk.jfr/jdk/jfr/consumer/RecordedStackTrace.html)
+separately exposes original frame truncation. Preserve that distinction from our
+bounded display output and match the sampled-thread field, not the committer.
+The [offline audit](BRIDGE_OWNER_SAMPLES_2026-10-17.md) adds no live instrumentation
+and reconciles every original field before interpreting its sparse points.
+
+The [ThreadMXBean accuracy contract](https://docs.oracle.com/en/java/javase/25/docs/api/java.management/java/lang/management/ThreadMXBean.html)
+and exact [OpenJDK 25.0.2+10 Windows source](https://github.com/openjdk/jdk25u/blob/jdk-25.0.2%2B10/src/hotspot/os/windows/os_windows.cpp)
+explain why nanosecond units and zero short-call deltas cannot establish exact
+charged work. Oracle's [Java 25 overview](https://inside.java/2025/10/17/new-in-jdk-25-2-mins/)
+limits JFR CPU-time profiling to Linux. Direct JEP pages returned HTTP 403;
+the official overview and API/source, not third-party summaries, support these
+narrow decisions. No Windows native counter or machine-wide trace is introduced.
+
+Exact [Paper 58e6e45 CraftPlayer](https://github.com/PaperMC/Paper/blob/58e6e45/paper-server/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java)
+checks channels while sending and copies the externally returned listening set.
+Those source facts do not attribute a sampled 12 ms interval, justify bypassing
+public messaging, or prove removing the copy will meet the cost gate.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

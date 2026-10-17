@@ -68,6 +68,8 @@ Existing CUI-only servers must keep working without installing a companion.
 | [26.2 concurrent moving edits](BRIDGE_26_2_MOVING_EDITS_2026-10-16.md) | Two fresh servers, 1,244 XYZ move/resize applies, 2,400 ticks and 64 canonical/CUI/control-area/undo audits; native-load and cost acceptance remain open |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
 | [Real WorldEdit selection properties](BRIDGE_SELECTION_PROPERTIES_2026-10-17.md) | 432 exact-host cases, ordered versus normalized corners, mixed resize/shift, refusals without partial mutation, raw CUI/replay/counter reconciliation and a preserved fixture error |
+| [Combined authority trial](BRIDGE_COMBINED_AUTHORITY_2026-10-17.md) | Duplicate fresh gate removal rejected on strict paired cost; exact original restored and complete candidate retained as a patch |
+| [Bounded offline owner samples](BRIDGE_OWNER_SAMPLES_2026-10-17.md) | Six reader regression groups per JVM, unchanged original metrics, explicit output/recording truncation and sparse-sampling limits |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |
 
@@ -245,6 +247,14 @@ passes both p95 gates at the cost of failed individual service and one ack-p95
 delta +123.1749 ms. It is rejected/reverted completely, not retained because it
 avoids extra clocks/codec work. Both failed scheduling candidates remain available
 as reproducible patches, while the original companion remains in production.
+The [combined-authority trial](BRIDGE_COMBINED_AUTHORITY_2026-10-17.md) preserves
+WorldEdit's resolver and every live stage, but fails the second strict p95 gate
+(0.5557 ms). Revert it completely; source-level duplicate calls are not proof
+of an accepted speedup. The subsequent [offline sample audit](BRIDGE_OWNER_SAMPLES_2026-10-17.md)
+finds only three owner points among forty selected intervals, in different
+subsystems. Treat them as locations, not full-duration causes. Java 25's Linux-only
+CPU-time sampler is not a Windows solution; retain quantized zero readings as
+unknown charged work, not free execution. No extra live observer is installed.
 
 ## Network Facts That Affect This Project
 
