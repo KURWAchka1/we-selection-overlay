@@ -1231,6 +1231,24 @@ The candidate passes deterministic checks but fails both live absolute p95 gates
 it is rejected and the helper removed. This entry records researched/rejected
 design, not current dispatcher behavior or a proven performance improvement.
 
+## S73 Cuboid Point Ordering And Real-API Property Tests
+
+Checked **2026-10-17** against official tagged sources, not a hand-written
+replacement region. [CuboidRegion 7.4.2](https://github.com/EngineHub/WorldEdit/blob/7.4.2/worldedit-core/src/main/java/com/sk89q/worldedit/regions/CuboidRegion.java)
+and [7.4.5](https://github.com/EngineHub/WorldEdit/blob/7.4.5/worldedit-core/src/main/java/com/sk89q/worldedit/regions/CuboidRegion.java)
+retain ordered corner fields while exposing minimum/maximum bounds. The public
+[selector API](https://docs.enginehub.org/javadoc/com.sk89q.worldedit/worldedit-core/release/com/sk89q/worldedit/regions/selector/CuboidRegionSelector.html)
+separates accepting region changes from notifying the actor; production keeps
+both operations and clone-before-apply validation on the owning thread.
+
+The public Extending copy constructor deliberately normalizes corner order in
+both [7.4.2](https://github.com/EngineHub/WorldEdit/blob/7.4.2/worldedit-core/src/main/java/com/sk89q/worldedit/regions/selector/ExtendingCuboidRegionSelector.java)
+and [7.4.5](https://github.com/EngineHub/WorldEdit/blob/7.4.5/worldedit-core/src/main/java/com/sk89q/worldedit/regions/selector/ExtendingCuboidRegionSelector.java).
+The first [property fixture](BRIDGE_SELECTION_PROPERTIES_2026-10-17.md) reproduced
+an incorrect oracle assumption here. Preserve that failed attempt; test actual
+effective points rather than forcing a different public-API behavior. These facts
+justify the corrected test expectations, not a transaction rewrite or cost claim.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

@@ -129,6 +129,12 @@ subsequently passes deterministic/functional checks and both p95 gates, but lose
 individual progress in both pairs and exceeds +100 ms ack-p95 in one pair. It
 is fully reverted. Original companion/native evidence remains the retained
 baseline; neither cross-slice cost estimate is accepted as a release fix.
+The separate [real-WorldEdit property matrix](BRIDGE_SELECTION_PROPERTIES_2026-10-17.md)
+adds 144 passed legacy wire cases with independent ordered-point/CUI/replay and
+permission-denial checks. Its first fixture assumption failure is retained and
+corrected against the official Extending constructor. Only completed exact-host
+rows count; 26.x rows remain pending at this checkpoint. No production change or
+new cost acceptance is inferred.
 None of these exact-host studies substitutes for native concurrent gameplay,
 absent/installed production cost baselines or unsupported platform matrices.
 

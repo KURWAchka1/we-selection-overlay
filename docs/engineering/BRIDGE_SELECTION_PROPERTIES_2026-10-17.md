@@ -1,6 +1,6 @@
 # Real WorldEdit Selection Properties
 
-Status: **harness prepared; live rows not yet accepted**. This is a correctness
+Status: **1.21.11 passed; 26.x live rows pending**. This is a correctness
 study, not another scheduler tuning or performance comparison. Production client,
 shared transaction and companion sources are unchanged. The fixture is test-only.
 
@@ -70,6 +70,33 @@ not used as writable test data.
 - Restored companion SHA-256 remains
   `2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a`.
 - Real host results must be recorded separately after execution.
+
+## Executed Rows
+
+| Exact host | Cases | Applied status | Denied | Replays | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Paper 1.21.11-132 / WorldEdit 7.4.2 / Java 21 | 144 | 96 | 48 | 96 | PASS |
+| Paper 26.1.2-74 / WorldEdit 7.4.3 / Java 25 | - | - | - | - | Pending |
+| Paper 26.2-133 / WorldEdit 7.4.5 / Java 25 | - | - | - | - | Pending |
+
+The 1.21.11 proof completed at **2026-10-17T06:26:08.035Z**, using
+`dd342201ffa186650e425c77333b2d1b9e340414`. Its SHA-256 is
+`4382224233e0fb8cc546b9da854f47a647d518c074d44438c293c666f6cc89b4`.
+It was independently re-read through the offline raw-frame/CUI checker, with
+all seven recorded harness hashes reconciled and a zero-exit, non-forced server
+stop. Evidence is local under `build/bridge-selection-properties/1.21.11`.
+
+It records exactly 144 captures, 144 commit attempts, 96 APPLIED responses and
+432 total replies, with no throttled/malformed input. APPLIED includes **16
+unchanged-bound cases**, not 96 distinct mutations. The remaining 80 successes
+update CUI once; all 96 replay acknowledgments are byte-identical without another
+apply. After player departure, connections, pending frames and dispatch tasks
+are zero. The loaded control-area hash and empty undo audit pass; this is not a
+hash of every generated chunk or a production performance measurement.
+
+The test-only fixture SHA-256 is
+`8e6e6f344f55ef890e0dfbd9c49f24b17a56d358e684d75f1502c148d6237995`;
+the companion remains the unchanged hash recorded above.
 
 ## Preserved First Attempt
 
