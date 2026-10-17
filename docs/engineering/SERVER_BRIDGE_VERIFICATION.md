@@ -1,7 +1,7 @@
 # Server Bridge Verification Gates
 
 Status: **release gates, with partial foundation evidence**.
-Updated: 2026-10-16. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
+Updated: 2026-10-17. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
 contains Java 21/25 tests, six native-codec checks and a real Paper wire proof.
 Headless protocol clients are not Fabric/NeoForge gameplay clients. A subsequent
 [six-client native Paper 1.21.11 matrix](NATIVE_PAPER_REGRESSION_2026-10-11.md)
@@ -111,6 +111,19 @@ The same candidate then passes **six fresh ordinary-load JVMs** across exact
 1.21.11/26.1.2/26.2 Paper/WorldEdit tuples: 3,519 applies, 7,200 reconciled ticks,
 48 editor audits and zero final connections/queue/tasks. That is cross-host
 functional regression, not a replacement performance baseline or native test.
+The later [six-visit](BRIDGE_BATCH_2026-10-17.md),
+[seven-visit](BRIDGE_BATCH_SEVEN_2026-10-17.md) and
+[request-kind](BRIDGE_KIND_ADMISSION_2026-10-17.md) studies preserve 12 additional
+fresh-server runs / 14,400 reconciled ticks and reject all three scheduling
+candidates under the unchanged numerical gates. The retained source/JAR is
+restored to original eight; the mixed-cost admission counterexample remains
+open, not fixed by the rejected helper. Only extra eight-visit capacity/FIFO
+regression tests remain. Candidate patch and all negative evidence are retained.
+The [retained-companion native regression](BRIDGE_NATIVE_REGRESSION_2026-10-17.md)
+then passes all six guarded rows: 24 clients, 168 gestures, 18 fault cases, 150
+applies/198 captures, twelve normal server stops and independently revalidated
+proof/PNG/artifact hashes. This verifies the original companion and rebuilt
+development clients on the three exact hosts, not the rejected hint/cap variants.
 None of these exact-host studies substitutes for native concurrent gameplay,
 absent/installed production cost baselines or unsupported platform matrices.
 

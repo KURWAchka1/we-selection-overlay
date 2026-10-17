@@ -1182,6 +1182,55 @@ six native adapters must pass before retaining the shared codec change. The
 with the same observer, priority, workload and predeclared performance gates.
 Source-level array removal is not itself proof of universal wall/CPU speedup.
 
+## S71 Bounded Batch Capacity And Diagnostic Alternatives
+
+Checked **2026-10-17**. Paper's
+[scheduler guide](https://docs.papermc.io/paper/dev/scheduler/) describes nominal
+20 TPS, tick-based task periods and slower wall-clock execution during server
+lag. Main-thread tasks share the game thread; moving live world access to an
+async task is not a valid shortcut. For this existing one-drain-per-tick host,
+six possible visits per tick means nominal capacity 120/second, not a guaranteed
+real service rate. The unchanged token bucket allows 100/second; FIFO and the
+0.5 ms cooperative target still constrain actual service. The
+[batch trial](BRIDGE_BATCH_2026-10-17.md) tests progress and cost together rather
+than inferring acceptance from this arithmetic or maintained TPS.
+
+Oracle's Java-21
+[SequencedMap contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/SequencedMap.html)
+specifies snapshot entries for `firstEntry`/`pollFirstEntry`. Replacing the
+current iterator is not automatically allocation-free; polling before token/
+expiry eligibility could also discard unserved work. No queue rewrite is made
+without a separate measured and reentrancy-tested justification.
+
+Microsoft's
+[QueryThreadCycleTime](https://learn.microsoft.com/en-us/windows/win32/api/realtimeapiset/nf-realtimeapiset-querythreadcycletime)
+reports charged CPU cycles and explicitly disallows converting them to elapsed
+time. A new native counter would add its own observer and platform constraints;
+no native agent or inferred cause is introduced here. Existing unassigned
+intervals and quantized CPU readings remain visible, not labeled free execution.
+
+## S72 Observed Cost Admission
+
+Checked **2026-10-17**. V8's primary engineering article
+[Getting garbage collection for free](https://v8.dev/blog/free-garbage-collection)
+describes estimating upcoming task duration from observed work before admitting
+it against a deadline. This supports the general pattern, not a Minecraft library
+or a hard runtime guarantee. Our narrow adaptation uses the latest reply visit
+per request kind, bounded state and first-visit progress; it does not reproduce
+V8's averaging, GC implementation or idle scheduler. Compare service/fairness and
+latency as well as elapsed time before retaining it.
+
+Oracle's [System.nanoTime contract](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/System.html#nanoTime())
+requires elapsed differences, not absolute timestamps, for timeout comparison;
+the regression covers signed wrap. Paper's
+[scheduler constraints](https://docs.papermc.io/paper/dev/scheduler/) still apply:
+public WorldEdit/Bukkit state stays on the owning game thread. An estimated-cost
+guard cannot preempt a single operation or promise that GC/OS pauses will vanish.
+See [counterexample and gates](BRIDGE_KIND_ADMISSION_2026-10-17.md).
+The candidate passes deterministic checks but fails both live absolute p95 gates;
+it is rejected and the helper removed. This entry records researched/rejected
+design, not current dispatcher behavior or a proven performance improvement.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

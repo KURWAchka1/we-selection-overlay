@@ -225,6 +225,21 @@ claim: one candidate p95 is 0.5054 ms and the strict cost gate remains open.
 Because the codec is shared, rebuild development clients on all six native
 runtimes; never silently replace published 1.8.0 artifacts.
 
+The later [six-visit](BRIDGE_BATCH_2026-10-17.md) and
+[seven-visit](BRIDGE_BATCH_SEVEN_2026-10-17.md) trials reject reduced batch caps;
+restore original eight. The separate
+[request-kind candidate](BRIDGE_KIND_ADMISSION_2026-10-17.md) addresses a
+reproduced 550 us mixed-cost overrun but fails both live p95 gates (0.5151/0.5143
+ms) and is fully reverted. Its codec hint is not in retained production. Preserve
+the reproducible candidate patch and failed evidence rather than claiming the
+counterexample or general timing gate fixed. Latest observed cost is an estimate,
+not authority, a permission cache or a worst-case runtime guarantee; see [S72](SOURCES.md#s72-observed-cost-admission).
+The subsequent [retained-artifact native regression](BRIDGE_NATIVE_REGRESSION_2026-10-17.md)
+passes 24 real clients across exact Paper 1.21.11/26.1.2/26.2, 168 gestures and
+18 delayed/late/revoked scenarios. It verifies the restored original companion
+and existing exact-size-encoding development clients, not a rejected scheduler,
+new clipboard/command transport or general cost acceptance.
+
 ## Network Facts That Affect This Project
 
 | Verified fact | Engineering decision |

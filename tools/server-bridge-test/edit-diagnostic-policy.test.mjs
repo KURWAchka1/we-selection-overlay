@@ -127,6 +127,40 @@ test('encoding comparison fixes the minimal observer and changes only the compan
     assert.throws(()=>editDiagnosticPolicy(['--encoding-control',flag]));
 });
 
+test('batch comparison isolates six-visit scheduling with the same minimal observer',()=>{
+  const study=editDiagnosticPolicy(['--batch-control']);
+  assert.equal(study.rootName,'bridge-batch-proof'); assert.equal(study.batchControl,true);
+  assert.equal(study.batchVisits,6);
+  assert.equal(study.encodingControl,false); assert.equal(study.budgetControl,true);
+  assert.deepEqual(study.order,['previous','candidate','candidate','previous']);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control','--world-control','--guard-control','--hotpath-control','--priority-control','--encoding-control','--batch-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--batch-control',flag]));
+});
+
+test('seven-visit follow-up keeps six-visit evidence isolated and the original baseline order',()=>{
+  const study=editDiagnosticPolicy(['--batch-seven-control']);
+  assert.equal(study.rootName,'bridge-batch-seven-proof'); assert.equal(study.batchControl,true);
+  assert.equal(study.batchVisits,7); assert.equal(study.budgetControl,true);
+  assert.deepEqual(study.order,['previous','candidate','candidate','previous']);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control','--world-control','--guard-control','--hotpath-control','--priority-control','--encoding-control','--batch-control','--batch-seven-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--batch-seven-control',flag]));
+});
+
+test('request-kind comparison keeps eight visits and the original companion as control',()=>{
+  const study=editDiagnosticPolicy(['--kind-control']);
+  assert.equal(study.rootName,'bridge-kind-admission-proof'); assert.equal(study.kindControl,true);
+  assert.equal(study.batchControl,false); assert.equal(study.budgetControl,true);
+  assert.deepEqual(study.order,['previous','candidate','candidate','previous']);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control','--world-control','--guard-control','--hotpath-control','--priority-control','--encoding-control','--batch-control','--batch-seven-control','--kind-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--kind-control',flag]));
+});
+
 test('Paper input defaults are identical except for the profiler enable bit', () => {
   const enabled = paperProfilerConfig(true), disabled = paperProfilerConfig(false);
   assert.deepEqual(enabled,{_version:31,spark:{enabled:true,'enable-immediately':false}});

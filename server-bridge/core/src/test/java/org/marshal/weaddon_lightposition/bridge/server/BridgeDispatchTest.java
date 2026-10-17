@@ -65,6 +65,40 @@ class BridgeDispatchTest {
         assertEquals(56, server.pendingCount()); assertEquals(8, server.metrics().admitted());
     }
 
+    @Test void eightVisitDefaultPreservesFifoAndServesEveryActorWithoutExpiry() {
+        var order = new ArrayList<UUID>();
+        for (int i = 0; i < 32; i++) assertTrue(server.enqueue(new UUID(4, i), BridgeCodec.encode(hello(i))));
+        for (int tick = 0; tick < 4; tick++) {
+            assertEquals(8, server.drain((id, frame) -> order.add(id)));
+            time.addAndGet(50_000_000L);
+        }
+        for (int i = 0; i < 32; i++) assertEquals(new UUID(4, i), order.get(i));
+        assertEquals(32, order.size()); assertEquals(32, server.metrics().admitted());
+        assertEquals(0, server.pendingCount()); assertEquals(0, server.queueMetrics().expired());
+        assertEquals(150_000_000L, server.queueMetrics().maxWaitNanos());
+        assertEquals(0, reads); assertEquals(0, server.drain((id, frame) -> fail("Unexpected idle publication")));
+    }
+
+    @Test void eightVisitDefaultSustainsGlobalRateAtNominalTickRate() {
+        var epochs = new AtomicLong();
+        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
+            public boolean mayReadSelection(UUID id) { return false; }
+            public SelectionState readSelection(UUID id) { fail("No source reads expected"); return null; }
+        }, BridgeServer.Limits.defaults(), time::get, () -> new UUID(8, epochs.incrementAndGet()));
+        int replies = 0;
+        for (int tick = 0; tick < 200; tick++) {
+            var order = new ArrayList<UUID>();
+            for (int request = 0; request < 5; request++)
+                assertTrue(target.enqueue(new UUID(4, (tick * 5 + request) % 32), BridgeCodec.encode(hello(tick))));
+            assertEquals(5, target.drain((id, frame) -> order.add(id)));
+            for (int request = 0; request < 5; request++) assertEquals(new UUID(4, (tick * 5 + request) % 32), order.get(request));
+            replies += order.size(); assertEquals(0, target.pendingCount());
+            time.addAndGet(50_000_000L);
+        }
+        assertEquals(1000, replies); assertEquals(1000, target.metrics().admitted());
+        assertEquals(0, target.metrics().throttled()); assertEquals(0, target.queueMetrics().expired());
+    }
+
     @Test void cooperativeTimeLimitStopsAfterAnExpensiveNonPreemptibleCall() {
         BridgeServer target = new BridgeServer(new BridgeServer.Host() {
             public boolean mayReadSelection(UUID id) { time.addAndGet(700_000); return false; }

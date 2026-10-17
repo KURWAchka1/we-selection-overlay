@@ -2,6 +2,8 @@
 *.java text eol=lf
 *.gradle text eol=lf
 *.md text eol=lf
+# Unified diffs need a single-space marker on empty context lines.
+*.patch text eol=lf whitespace=-blank-at-eol
 *.json text eol=lf
 *.toml text eol=lf
 *.properties text eol=lf

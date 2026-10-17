@@ -41,6 +41,16 @@ priority unchanged after mixed results. [Exact-sized encoding](BRIDGE_ENCODING_2
 then removes a frame copy in the shared codec, preserving ownership and protocol
 bytes. It reduces allocation but does not pass both strict p95 gates. This later
 change requires rebuilt development clients, not overwritten release artifacts.
+The [six-visit](BRIDGE_BATCH_2026-10-17.md) and
+[seven-visit](BRIDGE_BATCH_SEVEN_2026-10-17.md) comparisons reject lower batch
+defaults. A separate [request-kind estimate](BRIDGE_KIND_ADMISSION_2026-10-17.md)
+fixes a deterministic mixed-cost counterexample in the candidate, but fails both
+strict live p95 gates and is fully reverted, including its codec helper. The
+retained dispatcher remains original eight with within-slice reservation only;
+that mixed-cost limitation and production cost gates are not marked fixed.
+The subsequent [native matrix](BRIDGE_NATIVE_REGRESSION_2026-10-17.md) passes
+24 real Fabric/NeoForge clients on three exact Paper hosts against that restored
+artifact. Functional fault/gesture evidence remains distinct from cost acceptance.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).

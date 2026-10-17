@@ -16,6 +16,10 @@ published baseline.
 
 Optional server-bridge foundation checks are recorded separately in
 [SERVER_BRIDGE_IMPLEMENTATION.md](docs/engineering/SERVER_BRIDGE_IMPLEMENTATION.md).
+The latest [retained-companion native matrix](docs/engineering/BRIDGE_NATIVE_REGRESSION_2026-10-17.md)
+passes exact 1.21.11/26.1.2/26.2 fault/gesture checks on both loaders. Rejected
+scheduling trials and the unresolved cost gate are documented separately; these
+native checks do not establish new remote clipboard/command-preview features.
 `tools/test-server-bridge.ps1` verifies pure state/codec tests on Java 21 and 25
 and six native payload codecs without opening a game window.
 `tools/test-bridge-packaging.ps1` uses development-only artifact names and runs
