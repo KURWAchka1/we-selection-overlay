@@ -1,0 +1,227 @@
+diff --git a/server-bridge/core/src/main/java/org/marshal/weaddon_lightposition/bridge/server/BridgeServer.java b/server-bridge/core/src/main/java/org/marshal/weaddon_lightposition/bridge/server/BridgeServer.java
+index c5318ba..988ef75 100644
+--- a/server-bridge/core/src/main/java/org/marshal/weaddon_lightposition/bridge/server/BridgeServer.java
++++ b/server-bridge/core/src/main/java/org/marshal/weaddon_lightposition/bridge/server/BridgeServer.java
+@@ -74,6 +74,7 @@ public final class BridgeServer {
+         UUID editRevision;
+         byte[] pending;
+         long queuedAt;
++        long replyVisitNanos;
+         Peer(TokenBucket rate) { this.rate = rate; }
+     }
+ 
+@@ -144,13 +145,18 @@ public final class BridgeServer {
+         draining = true;
+         long started = clock.getAsLong();
+         long previousVisit = started, visitReserve = 0;
++        Peer previousReplyPeer = null;
+         int visited = 0;
+         try {
+             while (!closed && !pending.isEmpty() && visited < dispatchLimits.maxPerSlice()) {
+                 long now = clock.getAsLong();
+                 if (visited > 0) {
+-                    // Reserve one observed visit; never carry a cold/paused call into later slices.
+-                    visitReserve = Math.max(visitReserve, Math.max(0, now - previousVisit));
++                    long observed = Math.max(0, now - previousVisit);
++                    if (previousReplyPeer != null) {
++                        previousReplyPeer.replyVisitNanos = Math.min(dispatchLimits.sliceNanos(), observed);
++                        previousReplyPeer = null;
++                    }
++                    visitReserve = Math.max(visitReserve, observed);
+                     long elapsed = Math.max(0, now - started);
+                     if (elapsed >= dispatchLimits.sliceNanos() || visitReserve >= dispatchLimits.sliceNanos() - elapsed) break;
+                 }
+@@ -160,6 +166,7 @@ public final class BridgeServer {
+                 Peer peer = entry.getValue();
+                 long wait = Math.max(0, now - peer.queuedAt);
+                 boolean stale = wait >= dispatchLimits.maxPendingNanos();
++                if (!stale && visited > 0 && peer.replyVisitNanos >= dispatchLimits.sliceNanos() - Math.max(0, now - started)) break;
+                 if (!stale && !aggregate.take(now)) break;
+                 pending.remove(player);
+                 byte[] frame = peer.pending;
+@@ -169,11 +176,18 @@ public final class BridgeServer {
+                 if (stale) { expired++; continue; }
+                 admitted++;
+                 byte[] reply = process(player, peer, frame);
+-                if (reply != null && !closed && peers.get(player) == peer) send.accept(player, reply);
++                if (reply != null) {
++                    previousReplyPeer = peer;
++                    if (!closed && peers.get(player) == peer) send.accept(player, reply);
++                }
+             }
+             return visited;
+         } finally {
+-            maxSliceNanos = Math.max(maxSliceNanos, Math.max(0, clock.getAsLong() - started));
++            long ended = clock.getAsLong();
++            // Reuse the final clock read, including publication; first visits always allow recovery.
++            if (previousReplyPeer != null)
++                previousReplyPeer.replyVisitNanos = Math.min(dispatchLimits.sliceNanos(), Math.max(0, ended - previousVisit));
++            maxSliceNanos = Math.max(maxSliceNanos, Math.max(0, ended - started));
+             draining = false;
+         }
+     }
+diff --git a/server-bridge/core/src/test/java/org/marshal/weaddon_lightposition/bridge/server/BridgeDispatchTest.java b/server-bridge/core/src/test/java/org/marshal/weaddon_lightposition/bridge/server/BridgeDispatchTest.java
+index ee3bf8c..f28ff02 100644
+--- a/server-bridge/core/src/test/java/org/marshal/weaddon_lightposition/bridge/server/BridgeDispatchTest.java
++++ b/server-bridge/core/src/test/java/org/marshal/weaddon_lightposition/bridge/server/BridgeDispatchTest.java
+@@ -1,6 +1,7 @@
+ package org.marshal.weaddon_lightposition.bridge.server;
+ 
+ import java.util.ArrayList;
++import java.util.HashMap;
+ import java.util.HashSet;
+ import java.util.List;
+ import java.util.Set;
+@@ -99,6 +100,152 @@ class BridgeDispatchTest {
+         assertEquals(0, target.metrics().throttled()); assertEquals(0, target.queueMetrics().expired());
+     }
+ 
++    @Test void knownPeerCostIsReservedAfterCheapVisitsWithoutSpendingDeferredQuota() {
++        for (long start : new long[] { 1, Long.MAX_VALUE - 300_000 }) {
++            for (boolean publicationCost : new boolean[] { false, true }) {
++                time.set(start);
++                var sourceReads = new AtomicLong();
++                BridgeServer target = new BridgeServer(new BridgeServer.Host() {
++                    public boolean mayReadSelection(UUID id) { time.addAndGet(50_000); return true; }
++                    public SelectionState readSelection(UUID id) {
++                        sourceReads.incrementAndGet();
++                        if (!publicationCost) time.addAndGet(200_000);
++                        return new SelectionState(SelectionStatus.READY, new Bounds(0, 0, 0, 1, 1, 1), -64, 319, 7);
++                    }
++                }, new BridgeServer.Limits(32, 1, 8, 100, 100), time::get, UUID::randomUUID);
++                var order = new ArrayList<UUID>();
++                var epoch = new AtomicReference<UUID>();
++                java.util.function.BiConsumer<UUID, byte[]> send = (id, frame) -> {
++                    BridgeMessage message = BridgeCodec.decode(frame, BridgeCodec.Direction.TO_CLIENT);
++                    if (message instanceof Welcome welcome && id.equals(player)) epoch.set(welcome.epoch());
++                    if (message instanceof SelectionReply && publicationCost) time.addAndGet(200_000);
++                    order.add(id);
++                };
++                assertTrue(target.enqueue(player, BridgeCodec.encode(hello(1))));
++                assertEquals(1, target.drain(send));
++                assertTrue(target.enqueue(player, BridgeCodec.encode(new SelectionRequest(epoch.get(), 1))));
++                assertEquals(1, target.drain(send));
++                order.clear();
++                for (int i = 0; i < 5; i++) assertTrue(target.enqueue(new UUID(5, i), BridgeCodec.encode(hello(i))));
++                assertTrue(target.enqueue(player, BridgeCodec.encode(new SelectionRequest(epoch.get(), 2))));
++                assertEquals(5, target.drain(send), "Known 300us read does not fit after 250us of cheap visits");
++                for (int i = 0; i < 5; i++) assertEquals(new UUID(5, i), order.get(i));
++                assertEquals(1, target.pendingCount()); assertEquals(7, target.metrics().admitted());
++                assertTrue(target.queueMetrics().maxSliceNanos() <= 500_000);
++                assertEquals(1, target.drain(send), "Deferred visit still owns the last aggregate token");
++                assertEquals(player, order.getLast()); assertEquals(2, sourceReads.get());
++                assertEquals(8, target.metrics().admitted()); assertEquals(0, target.metrics().throttled());
++                assertEquals(0, target.pendingCount()); assertEquals(0, target.queueMetrics().expired());
++            }
++        }
++    }
++
++    @Test void peerCostUsesExistingClockReadsForFullAndIdleSlices() {
++        var clockCalls = new AtomicLong();
++        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
++            public boolean mayReadSelection(UUID id) { time.addAndGet(50_000); return false; }
++            public SelectionState readSelection(UUID id) { fail("No source read expected"); return null; }
++        }, BridgeServer.Limits.defaults(), () -> { clockCalls.incrementAndGet(); return time.get(); }, UUID::randomUUID);
++        for (int round = 0; round < 2; round++) {
++            for (int i = 0; i < 8; i++) assertTrue(target.enqueue(new UUID(5, i), BridgeCodec.encode(hello(i))));
++            long before = clockCalls.get();
++            assertEquals(8, target.drain((id, frame) -> { }));
++            assertEquals(10, clockCalls.get() - before, "Started + eight visits + finally, no additional clocks");
++            assertEquals(400_000, target.queueMetrics().maxSliceNanos());
++        }
++        long before = clockCalls.get();
++        for (int i = 0; i < 1000; i++) assertEquals(0, target.drain((id, frame) -> fail("Idle publication")));
++        assertEquals(before, clockCalls.get());
++    }
++
++    @Test void expensivePeerEstimateDoesNotDeferAnotherPeersCheapRead() {
++        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
++            public boolean mayReadSelection(UUID id) { time.addAndGet(50_000); return true; }
++            public SelectionState readSelection(UUID id) {
++                time.addAndGet(id.equals(player) ? 600_000 : 100_000);
++                return new SelectionState(SelectionStatus.READY, new Bounds(0, 0, 0, 1, 1, 1), -64, 319, 7);
++            }
++        }, BridgeServer.Limits.defaults(), time::get, UUID::randomUUID);
++        var tokens = new HashMap<UUID, UUID>();
++        for (UUID actor : List.of(player, second)) {
++            target.enqueue(actor, BridgeCodec.encode(hello(actor.getLeastSignificantBits())));
++            target.drain((id, frame) -> tokens.put(id, ((Welcome) BridgeCodec.decode(frame, BridgeCodec.Direction.TO_CLIENT)).epoch()));
++        }
++        target.enqueue(player, BridgeCodec.encode(new SelectionRequest(tokens.get(player), 1)));
++        assertEquals(1, target.drain((id, frame) -> { }));
++        assertEquals(700_000, target.queueMetrics().maxSliceNanos());
++        for (int i = 0; i < 5; i++) target.enqueue(new UUID(5, i), BridgeCodec.encode(hello(i)));
++        target.enqueue(second, BridgeCodec.encode(new SelectionRequest(tokens.get(second), 1)));
++        long before = time.get();
++        assertEquals(6, target.drain((id, frame) -> { }));
++        assertEquals(450_000, time.get() - before); assertEquals(0, target.pendingCount());
++    }
++
++    @Test void malformedBodyCannotEraseTheSamePeersObservedReadCost() {
++        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
++            public boolean mayReadSelection(UUID id) { time.addAndGet(50_000); return true; }
++            public SelectionState readSelection(UUID id) {
++                time.addAndGet(200_000);
++                return new SelectionState(SelectionStatus.READY, new Bounds(0, 0, 0, 1, 1, 1), -64, 319, 7);
++            }
++        }, BridgeServer.Limits.defaults(), time::get, UUID::randomUUID);
++        var epoch = new AtomicReference<UUID>();
++        target.enqueue(player, BridgeCodec.encode(hello(1)));
++        target.drain((id, frame) -> epoch.set(((Welcome) BridgeCodec.decode(frame, BridgeCodec.Direction.TO_CLIENT)).epoch()));
++        target.enqueue(player, BridgeCodec.encode(new SelectionRequest(epoch.get(), 1)));
++        target.drain((id, frame) -> { });
++        byte[] malformed = BridgeCodec.encode(new SelectionRequest(epoch.get(), 2));
++        java.util.Arrays.fill(malformed, 22, 30, (byte) 0);
++        assertTrue(target.enqueue(player, malformed));
++        assertEquals(1, target.drain((id, frame) -> fail("Malformed publication")));
++        assertEquals(1, target.metrics().malformed());
++        for (int i = 0; i < 5; i++) target.enqueue(new UUID(5, i), BridgeCodec.encode(hello(i)));
++        target.enqueue(player, BridgeCodec.encode(new SelectionRequest(epoch.get(), 2)));
++        assertEquals(5, target.drain((id, frame) -> { })); assertEquals(1, target.pendingCount());
++        assertEquals(1, target.drain((id, frame) -> { })); assertEquals(2, target.metrics().selectionReads());
++    }
++
++    @Test void pausedPeerRecoversOnItsNextFirstVisitWithoutPenalizingOtherPeers() {
++        var calls = new AtomicLong();
++        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
++            public boolean mayReadSelection(UUID id) { time.addAndGet(calls.getAndIncrement() == 0 ? 700_000 : 50_000); return false; }
++            public SelectionState readSelection(UUID id) { fail("No source read expected"); return null; }
++        }, BridgeServer.Limits.defaults(), time::get, UUID::randomUUID);
++        target.enqueue(player, BridgeCodec.encode(hello(1))); assertEquals(1, target.drain((id, frame) -> { }));
++        for (int round = 0; round < 2; round++) {
++            for (int i = 0; i < 5; i++) target.enqueue(new UUID(5, i), BridgeCodec.encode(hello(i)));
++            target.enqueue(player, BridgeCodec.encode(hello(2 + round)));
++            assertEquals(round == 0 ? 5 : 6, target.drain((id, frame) -> { }));
++            if (round == 0) assertEquals(1, target.drain((id, frame) -> { }));
++        }
++        assertEquals(0, target.pendingCount()); assertEquals(13, target.metrics().admitted());
++        assertEquals(700_000, target.queueMetrics().maxSliceNanos(), "Atomic pause remains visible");
++    }
++
++    @Test void publicationFailurePreservesItsCostAndExceptionIdentityThenRecovers() {
++        BridgeServer target = new BridgeServer(new BridgeServer.Host() {
++            public boolean mayReadSelection(UUID id) { time.addAndGet(50_000); return true; }
++            public SelectionState readSelection(UUID id) {
++                return new SelectionState(SelectionStatus.READY, new Bounds(0, 0, 0, 1, 1, 1), -64, 319, 7);
++            }
++        }, BridgeServer.Limits.defaults(), time::get, UUID::randomUUID);
++        var epoch = new AtomicReference<UUID>();
++        target.enqueue(player, BridgeCodec.encode(hello(1)));
++        target.drain((id, frame) -> epoch.set(((Welcome) BridgeCodec.decode(frame, BridgeCodec.Direction.TO_CLIENT)).epoch()));
++        var failure = new IllegalStateException("Test publication failure");
++        target.enqueue(player, BridgeCodec.encode(new SelectionRequest(epoch.get(), 1)));
++        assertSame(failure, assertThrows(IllegalStateException.class,
++                () -> target.drain((id, frame) -> { time.addAndGet(200_000); throw failure; })));
++        assertEquals(300_000, target.queueMetrics().maxSliceNanos());
++        for (int round = 0; round < 2; round++) {
++            for (int i = 0; i < 5; i++) target.enqueue(new UUID(5, i), BridgeCodec.encode(hello(i)));
++            target.enqueue(player, BridgeCodec.encode(new SelectionRequest(epoch.get(), 2 + round)));
++            assertEquals(round == 0 ? 5 : 6, target.drain((id, frame) -> { }));
++            if (round == 0) assertEquals(1, target.drain((id, frame) -> { }));
++        }
++        assertEquals(0, target.pendingCount()); assertEquals(3, target.metrics().selectionReads());
++    }
++
+     @Test void cooperativeTimeLimitStopsAfterAnExpensiveNonPreemptibleCall() {
+         BridgeServer target = new BridgeServer(new BridgeServer.Host() {
+             public boolean mayReadSelection(UUID id) { time.addAndGet(700_000); return false; }

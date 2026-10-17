@@ -28,6 +28,7 @@ param(
     [switch]$EncodingComparison,
     [switch]$BatchComparison,
     [switch]$KindAdmissionComparison,
+    [switch]$PeerAdmissionComparison,
     [ValidateRange(6,7)][int]$BatchVisits = 6
 )
 $ErrorActionPreference = 'Stop'
@@ -36,9 +37,9 @@ if ($Minecraft -ne '1.21.11' -and (!$Java25 -or !($EditLoad -or ($Minecraft -eq 
 if ($Minecraft -eq '26.2' -and $GameplayLoad -and ($Players -ne 32 -or $Samples -ne 400 -or $Repetitions -ne 2)) { throw '26.2 gameplay requires 32 actors, 400 ticks and two reversed-order pairs' }
 if (@($ControlledBaseline, $RestartLoad, $TickTimeline, $FairDispatch, $GameplayLoad, $LifecycleLoad, $EditLoad).Where({ $_ }).Count -gt 1) { throw 'Choose one workload mode: frozen baseline, restart load, tick timeline, fair dispatch, gameplay, active lifecycle or edit load' }
 if ($EditLoad -and ($Players -ne 32 -or $Samples -ne 400)) { throw 'Edit load requires 32 actors and 400 ticks per phase' }
-if (@($MatchedEditDiagnostics,$EditProfilerControl,$MovingEditLoad,$BudgetComparison,$DrainObserverControl,$RevisionComparison,$WorldReadComparison,$GuardBandComparison,$HotPathComparison,$PriorityControl,$EncodingComparison,$BatchComparison,$KindAdmissionComparison).Where({$_}).Count -gt 1) { throw 'Choose one edit study' }
+if (@($MatchedEditDiagnostics,$EditProfilerControl,$MovingEditLoad,$BudgetComparison,$DrainObserverControl,$RevisionComparison,$WorldReadComparison,$GuardBandComparison,$HotPathComparison,$PriorityControl,$EncodingComparison,$BatchComparison,$KindAdmissionComparison,$PeerAdmissionComparison).Where({$_}).Count -gt 1) { throw 'Choose one edit study' }
 if ($EditProfilerControl -and $Minecraft -ne '26.2') { throw 'Edit profiler control is currently pinned to the exact 26.2 host' }
-$editStudy = $MatchedEditDiagnostics -or $EditProfilerControl -or $BudgetComparison -or $DrainObserverControl -or $RevisionComparison -or $WorldReadComparison -or $GuardBandComparison -or $HotPathComparison -or $PriorityControl -or $EncodingComparison -or $BatchComparison -or $KindAdmissionComparison
+$editStudy = $MatchedEditDiagnostics -or $EditProfilerControl -or $BudgetComparison -or $DrainObserverControl -or $RevisionComparison -or $WorldReadComparison -or $GuardBandComparison -or $HotPathComparison -or $PriorityControl -or $EncodingComparison -or $BatchComparison -or $KindAdmissionComparison -or $PeerAdmissionComparison
 if ($BudgetComparison -and $Minecraft -ne '26.2') { throw 'Budget comparison is pinned to exact 26.2' }
 if ($DrainObserverControl -and $Minecraft -ne '26.2') { throw 'Drain observer control is pinned to exact 26.2' }
 if ($RevisionComparison -and $Minecraft -ne '26.2') { throw 'Revision comparison is pinned to exact 26.2' }
@@ -49,6 +50,7 @@ if ($PriorityControl -and $Minecraft -ne '26.2') { throw 'Priority control is pi
 if ($EncodingComparison -and $Minecraft -ne '26.2') { throw 'Encoding comparison is pinned to exact 26.2' }
 if ($BatchComparison -and $Minecraft -ne '26.2') { throw 'Batch comparison is pinned to exact 26.2' }
 if ($KindAdmissionComparison -and $Minecraft -ne '26.2') { throw 'Request-kind admission comparison is pinned to exact 26.2' }
+if ($PeerAdmissionComparison -and $Minecraft -ne '26.2') { throw 'Peer admission comparison is pinned to exact 26.2' }
 if (!$BatchComparison -and $BatchVisits -ne 6) { throw 'Batch visits require an isolated batch comparison' }
 if ($editStudy -and (!$EditLoad -or $Repetitions -ne 4 -or $SliceDiagnostics -or $WithoutSpark)) { throw 'Matched edit studies require EditLoad and four repetitions; no unrelated profiler/diagnostic overrides' }
 if ($MovingEditLoad -and (!$EditLoad -or $Minecraft -ne '26.2' -or $Repetitions -ne 2 -or $SliceDiagnostics -or $WithoutSpark)) { throw 'Moving edits require exact 26.2, EditLoad and two repetitions; profiler policy is fixed' }
@@ -72,6 +74,7 @@ if ($PriorityControl) { $server = Join-Path $root 'build/bridge-priority-proof' 
 if ($EncodingComparison) { $server = Join-Path $root 'build/bridge-encoding-proof' }
 if ($BatchComparison) { $server = Join-Path $root $(if ($BatchVisits -eq 7) { 'build/bridge-batch-seven-proof' } else { 'build/bridge-batch-proof' }) }
 if ($KindAdmissionComparison) { $server = Join-Path $root 'build/bridge-kind-admission-proof' }
+if ($PeerAdmissionComparison) { $server = Join-Path $root 'build/bridge-peer-admission-proof' }
 if ($Minecraft -eq '1.21.11') {
     if ($editStudy) { $server = Join-Path $server $Minecraft }
     $paper = Join-Path $source 'server.jar'
@@ -91,9 +94,9 @@ if ($editStudy -or $MovingEditLoad) {
         }
     }
 }
-if ($BudgetComparison -or $RevisionComparison -or $WorldReadComparison -or $GuardBandComparison -or $HotPathComparison -or $EncodingComparison -or $BatchComparison -or $KindAdmissionComparison) {
+if ($BudgetComparison -or $RevisionComparison -or $WorldReadComparison -or $GuardBandComparison -or $HotPathComparison -or $EncodingComparison -or $BatchComparison -or $KindAdmissionComparison -or $PeerAdmissionComparison) {
     $previous = Join-Path $server 'previous-companion.jar'
-    $expected = if ($BatchComparison -or $KindAdmissionComparison) {'2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a'} elseif ($GuardBandComparison -or $EncodingComparison) {'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6'} elseif ($WorldReadComparison) {'42528d3b606e6e2cba9142a482d5ba6e95a589ec16fc3b693a57dfe1af9186cd'} elseif ($RevisionComparison -or $HotPathComparison) {'78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1'} else {'7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956'}
+    $expected = if ($BatchComparison -or $KindAdmissionComparison -or $PeerAdmissionComparison) {'2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a'} elseif ($GuardBandComparison -or $EncodingComparison) {'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6'} elseif ($WorldReadComparison) {'42528d3b606e6e2cba9142a482d5ba6e95a589ec16fc3b693a57dfe1af9186cd'} elseif ($RevisionComparison -or $HotPathComparison) {'78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1'} else {'7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956'}
     if (!(Test-Path -LiteralPath $previous -PathType Leaf) -or (Get-FileHash -LiteralPath $previous -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Preserve the exact pre-change companion before building a comparison' }
 }
 if ($Minecraft -eq '26.2' -and $GameplayLoad) {
@@ -155,6 +158,7 @@ try {
     if ($EncodingComparison) { $diagnosticArguments += '--encoding-control' }
     if ($BatchComparison) { $diagnosticArguments += $(if ($BatchVisits -eq 7) { '--batch-seven-control' } else { '--batch-control' }) }
     if ($KindAdmissionComparison) { $diagnosticArguments += '--kind-control' }
+    if ($PeerAdmissionComparison) { $diagnosticArguments += '--peer-control' }
     $serverJava = if ($Minecraft -eq '1.21.11') { $Java21 } else { $Java25 }
     & node (Join-Path $PSScriptRoot $runner) $serverJava $server $Players $Samples $Repetitions $mode @diagnosticArguments
     if ($LASTEXITCODE -ne 0) { throw "Paper load proof failed; inspect $server" }

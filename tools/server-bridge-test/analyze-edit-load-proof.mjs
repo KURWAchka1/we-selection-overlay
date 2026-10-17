@@ -17,7 +17,7 @@ import { observedOwnedDepartures } from './owned-server.mjs';
 
 const javaHome = process.argv[2]; assert(javaHome, 'Explicit JDK home required');
 const version = process.argv[3] ?? '1.21.11', tuple = gestureTuple(version);
-const study = editDiagnosticPolicy(process.argv.slice(4)), {matchedSlices,sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,batchControl,kindControl} = study;
+const study = editDiagnosticPolicy(process.argv.slice(4)), {matchedSlices,sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,batchControl,kindControl,peerControl} = study;
 const frozenStudy=matchedSlices || movingGameplay,profilerStudy=sparkControl || movingGameplay;
 if (movingGameplay) assert.equal(version,'26.2');
 const root = resolve(import.meta.dirname, '../..'), directory = frozenStudy ? join(root, 'build',study.rootName, version)
@@ -39,12 +39,14 @@ assert.equal(!!proof.priorityControl,priorityControl);
 assert.equal(!!proof.encodingControl,encodingControl);
 assert.equal(!!proof.batchControl,batchControl);
 assert.equal(!!proof.kindControl,!!kindControl);
+assert.equal(!!proof.peerControl,!!peerControl);
 if(batchControl) assert.equal(proof.batchVisits ?? 6,study.batchVisits);
-if(guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl) assert.equal(proof.cleanupBarrier,'server-quit-log');
+if(guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl || peerControl) assert.equal(proof.cleanupBarrier,'server-quit-log');
 if(hotPathControl || priorityControl) assert.equal(proof.hashes.companion,'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6');
 if(batchControl) assert.equal(proof.hashes.companion,study.batchVisits===7 ? '2f643ed9950c9b69a3ed524a5c6a67c69ca2ddfa63170938cce3703581dbd686' : 'f6b0e0829cce2f5d0bafba5246d1f3554edd8f3bd9aa2a87b1e3d1f42aa120e2');
 if(kindControl) assert.equal(proof.hashes.companion,'9cbf75252fa6a88cfb5c32d68ccaec8091ae2d8307df558089efabbb0404735b');
-if(drainControl || revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl) {
+if(peerControl) assert.equal(proof.hashes.companion,'6815f2b33d3da765b18385f3fa2bbcb26f4bf4334eafafdd2801196bd458fcdd');
+if(drainControl || revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl || peerControl) {
   assert.deepEqual(proof.joinPreparation,{batch:32,gapMillis:0});
   assert.equal(hash(join(root,'tools/bridge-slice-agent/build/libs/bridge-drain-agent.jar')),proof.hashes.drainAgent);
 }
@@ -53,7 +55,7 @@ if (drainControl) {
 }
 if (budgetControl) {
   assert.equal(hash(join(directory,'previous-companion.jar')),proof.hashes.previousCompanion);
-  assert.equal(proof.hashes.previousCompanion,batchControl || kindControl ? '2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a' : guardControl || encodingControl ? 'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6' : worldControl ? '42528d3b606e6e2cba9142a482d5ba6e95a589ec16fc3b693a57dfe1af9186cd' : revisionControl || hotPathControl ? '78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1' : '7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956');
+  assert.equal(proof.hashes.previousCompanion,batchControl || kindControl || peerControl ? '2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a' : guardControl || encodingControl ? 'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6' : worldControl ? '42528d3b606e6e2cba9142a482d5ba6e95a589ec16fc3b693a57dfe1af9186cd' : revisionControl || hotPathControl ? '78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1' : '7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956');
   assert.notEqual(proof.hashes.companion,proof.hashes.previousCompanion);
 }
 if (frozenStudy) {
@@ -263,7 +265,7 @@ for (const [index, run] of proof.runs.entries()) {
     ...(matchedSlices ? {instrumented:run.instrumented,slices} : {}),
     ...(budgetControl ? {variant:run.variant,companionHash:run.companionHash} : {}),
     ...(priorityControl ? {variant:run.variant,processPriority:run.processPriority,actualProcessPriority:run.actualProcessPriority,priorityReadings:run.priorityReadings} : {}),
-    ...(drainControl || revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl ? {diagnosticProfile:run.diagnosticProfile,companionHash:run.companionHash} : {}),
+    ...(drainControl || revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl || peerControl ? {diagnosticProfile:run.diagnosticProfile,companionHash:run.companionHash} : {}),
     applied:active.after.applied-active.before.applied, latencyP95:latencies[Math.ceil(latencies.length*.95)-1], latencyMax:latencies.at(-1),
     ...(movingGameplay ? {movingGameplay,gameplayProfile,windows:windows.map((w,i)=>({phase:['idle','active','recovered'][i],
       p95:w.ticks.p95,p99:w.ticks.p99,max:w.ticks.max,ticksOver50:w.ticks.tickMillis.filter(n=>n>50).length,
@@ -289,7 +291,7 @@ if (budgetControl || drainControl || priorityControl) {
     drainP95DeltaMillis:arms[next].drain.p95Millis-arms[old].drain.p95Millis,
     latencyP95DeltaMillis:arms[next].latencyP95-arms[old].latencyP95}))};
 }
-const guardPerformance=guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl ? guardAcceptance(results,proof.runs) : undefined;
+const guardPerformance=guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl || peerControl ? guardAcceptance(results,proof.runs) : undefined;
 writeFileSync(output,JSON.stringify({checkedAt:new Date().toISOString(),minecraft:version,hashes:proof.hashes,
   ...(guardControl ? {guardAcceptance:guardPerformance} : {}),
   ...(hotPathControl ? {hotPathAcceptance:guardPerformance} : {}),
@@ -297,11 +299,12 @@ writeFileSync(output,JSON.stringify({checkedAt:new Date().toISOString(),minecraf
   ...(encodingControl ? {encodingAcceptance:guardPerformance} : {}),
   ...(batchControl ? {batchAcceptance:guardPerformance,batchVisits:study.batchVisits} : {}),
   ...(kindControl ? {kindAcceptance:guardPerformance,kindControl} : {}),
+  ...(peerControl ? {peerAcceptance:guardPerformance,peerControl} : {}),
   ...(budgetControl ? {budgetComparison:dispatchComparison} : {}),...(drainControl ? {observerComparison:dispatchComparison} : {}),
   ...(frozenStudy ? {matchedSlices,frozenDigest:proof.frozenDigest,order:proof.order,
     ...(profilerStudy ? {sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,batchControl,effectiveConfigurationDigest,configurationReaderLibraries} : {})} : {}),results},null,2));
 console.log(`EDIT LOAD ANALYSIS PASS: ${results.length*1200} matched JFR ticks, exact raw summaries, no recorded data loss`);
-if(guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl) {
-  console.log(`${kindControl ? 'KIND' : batchControl ? 'BATCH' : encodingControl ? 'ENCODING' : priorityControl ? 'PRIORITY' : hotPathControl ? 'HOTPATH' : 'GUARD'} PERFORMANCE ${guardPerformance.accepted ? 'PASS' : 'REJECTED'}: ${JSON.stringify(guardPerformance.pairs.map(p=>({previous:p.previousRound,candidate:p.candidateRound,gates:p.gates})))}`);
+if(guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl || peerControl) {
+  console.log(`${peerControl ? 'PEER' : kindControl ? 'KIND' : batchControl ? 'BATCH' : encodingControl ? 'ENCODING' : priorityControl ? 'PRIORITY' : hotPathControl ? 'HOTPATH' : 'GUARD'} PERFORMANCE ${guardPerformance.accepted ? 'PASS' : 'REJECTED'}: ${JSON.stringify(guardPerformance.pairs.map(p=>({previous:p.previousRound,candidate:p.candidateRound,gates:p.gates})))}`);
   if(!guardPerformance.accepted) process.exitCode=2;
 }

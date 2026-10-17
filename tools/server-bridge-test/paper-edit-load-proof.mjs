@@ -20,8 +20,8 @@ import { movement } from './gameplay-workload.mjs';
 import { movingEditKinds, movingEditTarget, verifyMovingEditWindow } from './moving-edit-window.mjs';
 
 const [javaHome, directory, playerArgument, sampleArgument, repeatArgument, mode, version = '1.21.11', ...options] = process.argv.slice(2);
-const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,batchControl,kindControl} = study;
-const minimalImplementation = revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl;
+const study = editDiagnosticPolicy(options), {matchedSlices,sparkControl,movingGameplay,budgetControl,drainControl,revisionControl,worldControl,guardControl,hotPathControl,priorityControl,encodingControl,batchControl,kindControl,peerControl} = study;
+const minimalImplementation = revisionControl || worldControl || guardControl || hotPathControl || priorityControl || encodingControl || batchControl || kindControl || peerControl;
 const frozenStudy = matchedSlices || movingGameplay, profilerStudy = sparkControl || movingGameplay;
 if (sparkControl) assert.equal(version,'26.2','Profiler-control configuration pins currently cover only exact 26.2');
 if (movingGameplay) assert.equal(version,'26.2','Moving edit transport is pinned to the exact 26.2 host');
@@ -44,12 +44,13 @@ const hashes = { paper: hash(join(serverDir, 'server.jar')), worldedit: hash(joi
   companion: hash(join(serverDir, 'companion.jar')), fixture: hash(join(serverDir, 'plugins/weso-paper-test-fixture.jar')) };
 if (budgetControl) {
   hashes.previousCompanion=hash(join(serverDir,'previous-companion.jar'));
-  assert.equal(hashes.previousCompanion,batchControl || kindControl ? '2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a' : guardControl || encodingControl ? 'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6' : worldControl ? '42528d3b606e6e2cba9142a482d5ba6e95a589ec16fc3b693a57dfe1af9186cd' : revisionControl || hotPathControl ? '78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1' : '7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956');
+  assert.equal(hashes.previousCompanion,batchControl || kindControl || peerControl ? '2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a' : guardControl || encodingControl ? 'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6' : worldControl ? '42528d3b606e6e2cba9142a482d5ba6e95a589ec16fc3b693a57dfe1af9186cd' : revisionControl || hotPathControl ? '78ff34e46ef58fa61012612d799ac943815adfad33e0f1bf7c44544ea4107ed1' : '7e40f70b3fab486358a929da73db4132d31bcd3d10e5bc90b99392dce3c4d956');
   assert.notEqual(hashes.previousCompanion,hashes.companion,'Budget comparison needs a real candidate');
 }
 if(hotPathControl || priorityControl) assert.equal(hashes.companion,'aab25479af9b47d330e0fbfd7de495303ae23aec06617c103b5ee2404505d4d6');
 if(batchControl) assert.equal(hashes.companion,study.batchVisits===7 ? '2f643ed9950c9b69a3ed524a5c6a67c69ca2ddfa63170938cce3703581dbd686' : 'f6b0e0829cce2f5d0bafba5246d1f3554edd8f3bd9aa2a87b1e3d1f42aa120e2');
 if(kindControl) assert.equal(hashes.companion,'9cbf75252fa6a88cfb5c32d68ccaec8091ae2d8307df558089efabbb0404735b');
+if(peerControl) assert.equal(hashes.companion,'6815f2b33d3da765b18385f3fa2bbcb26f4bf4334eafafdd2801196bd458fcdd');
 const agent = join(root, 'tools/bridge-slice-agent/build/libs/bridge-slice-agent.jar');
 const drainAgent = join(root,'tools/bridge-slice-agent/build/libs/bridge-drain-agent.jar');
 if (drainControl) {
@@ -340,6 +341,6 @@ try {
     ...(movingGameplay ? {movingGameplay,frozenDigest,order:study.order,profiler:`Paper spark disabled + identical JFR; ${minimalImplementation ? 'identical drain-only agent' : drainControl ? 'nested/drain/drain/nested observers' : budgetControl ? 'identical method agent' : 'no method agent'}`} : {}),
     cleanupBarrier:'server-quit-log',
     ...(budgetControl ? {budgetControl} : {}),...(drainControl || minimalImplementation ? {joinPreparation:{batch:32,gapMillis:0}} : {}),
-    ...(drainControl ? {drainControl} : {}),...(revisionControl ? {revisionControl} : {}),...(worldControl ? {worldControl} : {}),...(guardControl ? {guardControl} : {}),...(hotPathControl ? {hotPathControl} : {}),...(priorityControl ? {priorityControl} : {}),...(encodingControl ? {encodingControl} : {}),...(batchControl ? {batchControl,batchVisits:study.batchVisits} : {}),...(kindControl ? {kindControl} : {}),runs }, null, 2));
+    ...(drainControl ? {drainControl} : {}),...(revisionControl ? {revisionControl} : {}),...(worldControl ? {worldControl} : {}),...(guardControl ? {guardControl} : {}),...(hotPathControl ? {hotPathControl} : {}),...(priorityControl ? {priorityControl} : {}),...(encodingControl ? {encodingControl} : {}),...(batchControl ? {batchControl,batchVisits:study.batchVisits} : {}),...(kindControl ? {kindControl} : {}),...(peerControl ? {peerControl} : {}),runs }, null, 2));
   console.log('PAPER EDIT LOAD PROOF PASS; owned servers stopped');
 } catch (error) { writeFileSync(failure, JSON.stringify({ checkedAt:new Date().toISOString(), hashes, error:String(error), runs }, null, 2)); console.error(error); process.exitCode=1; }

@@ -124,6 +124,11 @@ then passes all six guarded rows: 24 clients, 168 gestures, 18 fault cases, 150
 applies/198 captures, twelve normal server stops and independently revalidated
 proof/PNG/artifact hashes. This verifies the original companion and rebuilt
 development clients on the three exact hosts, not the rejected hint/cap variants.
+The [peer-local estimate trial](BRIDGE_PEER_ADMISSION_PROPOSAL_2026-10-17.md)
+subsequently passes deterministic/functional checks and both p95 gates, but loses
+individual progress in both pairs and exceeds +100 ms ack-p95 in one pair. It
+is fully reverted. Original companion/native evidence remains the retained
+baseline; neither cross-slice cost estimate is accepted as a release fix.
 None of these exact-host studies substitutes for native concurrent gameplay,
 absent/installed production cost baselines or unsupported platform matrices.
 

@@ -161,6 +161,17 @@ test('request-kind comparison keeps eight visits and the original companion as c
     assert.throws(()=>editDiagnosticPolicy(['--kind-control',flag]));
 });
 
+test('peer-local comparison changes only the companion with an isolated original baseline',()=>{
+  const study=editDiagnosticPolicy(['--peer-control']);
+  assert.equal(study.rootName,'bridge-peer-admission-proof'); assert.equal(study.peerControl,true);
+  assert.equal(study.kindControl,undefined); assert.equal(study.batchControl,false); assert.equal(study.budgetControl,true);
+  assert.deepEqual(study.order,['previous','candidate','candidate','previous']);
+  for(const round of [1,2,3,4]) assert.deepEqual(editRunPolicy(study,round),
+    {instrumented:true,sparkEnabled:false,diagnosticProfile:'drain',variant:round===2 || round===3 ? 'candidate' : 'previous'});
+  for(const flag of ['--matched-slices','--spark-control','--moving-gameplay','--budget-control','--drain-control','--revision-control','--world-control','--guard-control','--hotpath-control','--priority-control','--encoding-control','--batch-control','--batch-seven-control','--kind-control','--peer-control'])
+    assert.throws(()=>editDiagnosticPolicy(['--peer-control',flag]));
+});
+
 test('Paper input defaults are identical except for the profiler enable bit', () => {
   const enabled = paperProfilerConfig(true), disabled = paperProfilerConfig(false);
   assert.deepEqual(enabled,{_version:31,spark:{enabled:true,'enable-immediately':false}});

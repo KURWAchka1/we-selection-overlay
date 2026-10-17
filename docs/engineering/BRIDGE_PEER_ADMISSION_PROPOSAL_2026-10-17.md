@@ -1,7 +1,8 @@
-# Peer-Local Admission Proposal
+# Peer-Local Admission Trial
 
-Status: **proposal, not implemented or accepted**. Do not modify the companion
-while the original-hash native regression matrix is running.
+Status: **rejected and fully reverted**. Implementation starts
+only after the original-hash native matrix completes all six rows and its
+independent revalidation passes; that checkpoint is committed as `77b028d`.
 
 ## Motivation And Boundaries
 
@@ -56,3 +57,74 @@ native evidence proves the original hash, never an untested future candidate.
 Research basis: [S72](SOURCES.md#s72-observed-cost-admission) estimated admission
 and elapsed-time differences, bounded owner-thread state from the existing server
 design. This proposal imports no V8 code and promises no hard preemption.
+
+## Baseline Reproduction And Candidate
+
+The original eight-visit core fails the new mixed-cost test before modification:
+expected five visits, actual six. Preserve the log/XML at
+`build/bridge-peer-admission-validation/expected-baseline-failure.log` and
+`baseline-failure.xml`. The first candidate passes the whole core suite, including
+source/publication and signed-wrap variants. Additional clock-count, cross-peer,
+malformed-body, paused-peer and publication-exception tests precede any live study.
+The production change is one peer-local long and existing-clock bookkeeping in
+`drain`; no protocol/codec/client source is changed. Native evidence for `2fc...`
+must not be attributed to this untested candidate.
+
+The expanded test suite initially does not compile because its new cross-peer
+test omits the `HashMap` import. Fix that test-only import, retain the failure
+log, then rerun the full core suite successfully before any server measurement.
+
+Candidate companion SHA-256, fixed before measurement:
+`6815f2b33d3da765b18385f3fa2bbcb26f4bf4334eafafdd2801196bd458fcdd`.
+No further production edits inside the study. Separate root
+`build/bridge-peer-admission-proof/26.2/`, identical root observer, fixed
+BelowNormal, exact Paper 26.2-133/WE 7.4.5/Java 25, 32 actors, 400 ticks per phase,
+four fresh JVMs, frozen world and server-quit barrier. No competing builds or
+offline JFR readers while measured windows run. Previous native evidence and all
+rejected roots remain untouched.
+
+Before measurement: 120 pure tests per Java 21/25 JVM pass, including all six new
+peer-cost cases; extended Node harness passes 152 groups. Full regression also
+covers both agents/JFR/YAML readers, admission ordering and six native payload
+codecs. These are prerequisite checks, not live performance acceptance.
+
+```powershell
+./tools/test-paper-bridge-load.ps1 -Java21 <jdk21> -Java25 <jdk25> `
+  -Minecraft 26.2 -EditLoad -PeerAdmissionComparison -Players 32 `
+  -Samples 400 -Repetitions 4 -AcceptEula
+node tools/server-bridge-test/analyze-edit-load-proof.mjs <jdk25> 26.2 --peer-control
+```
+
+## Result: Rejected
+
+Analysis at `2026-10-17T06:08:06.290Z`; frozen digest:
+`488af81e837bd5b386085ae0b25bfc3b7dc2cc28fa97dacbeaac0eeb8ff37bc3`.
+Functional/raw/JFR/cleanup checks pass, 2,353 applies and 4,800 matched ticks.
+Both candidate p95 values pass, but **both individual-progress gates fail**;
+the second ack-p95 delta also exceeds the unchanged +100 ms allowance.
+
+| Round | Variant | Applies | Drain p95 / p99 / max ms | Over target | Ack p95 / max ms |
+| --- | --- | ---: | --- | --- | --- |
+| 1 | Original | 598 | 0.4930 / 0.9893 / 1.2891 | 19/396 | 340.9020 / 495.1947 |
+| 2 | Peer estimate | 577 | 0.4459 / 1.0465 / 1.6747 | 11/397 | 434.8098 / 636.7937 |
+| 3 | Peer estimate | 572 | 0.4368 / 1.3023 / 2.0563 | 11/390 | 433.7991 / 605.3808 |
+| 4 | Original | 606 | 0.4688 / 0.8443 / 1.6286 | 16/396 | 310.6242 / 528.2042 |
+
+First pair: `WesoLoad13` reader 70/74 = 94.5946%; ack-p95 +93.9078 ms.
+Second pair: 11 ordinary actors below 95%, minimum `WesoLoad01` editor 71/77 =
+92.2078%; ack-p95 +123.1749 ms. Do not use aggregate progress or lower p95 to
+override either gate. Raw values remain exact in `edit-load-analysis.json`.
+
+Restore original `2fc45532...` companion. No codec/client/published artifact
+changed. The mixed-cost counterexample remains open, not fixed in retained
+production. Do not retain an adaptive scheduling penalty because it compiles or
+looks faster. No favorable repeat or threshold adjustment is authorized by this
+study; investigate avoidable per-visit work separately before more backoff.
+
+The [exact candidate patch](experiments/bridge-peer-admission-2026-10-17.patch)
+applies to baseline `77b028d`; source copies/JAR/regression/failing-test evidence
+remain in `build/bridge-peer-admission-validation/`, live raw proof/JFR/logs and
+failed analysis in `build/bridge-peer-admission-proof/26.2/`. Independent
+`git apply --check` passes after restoration. Native matrix in the preceding
+commit still describes only the original companion, never this rejected variant.
+Patch SHA-256: `cae0dd6b63b640b43591019a5f5f6f001f7f58244cc366dab7cefe38e34d4f16`.

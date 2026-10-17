@@ -26,7 +26,7 @@ export class FrozenFixtureWorld {
     assert(inside && !isAbsolute(inside) && inside !== '..' && !inside.startsWith(`..${sep}`));
     const editDiagnostics = ['bridge-edit-diagnostics','bridge-edit-profiler-control'].includes(basename(dirname(this.root)))
       && ['1.21.11', '26.1.2', '26.2'].includes(basename(this.root));
-    const modernGameplay = ['bridge-gameplay-control-proof','bridge-moving-edit-proof','bridge-dispatch-budget-proof','bridge-drain-observer-proof','bridge-revision-proof','bridge-world-read-proof','bridge-guard-band-proof','bridge-hotpath-proof','bridge-priority-proof','bridge-encoding-proof','bridge-batch-proof','bridge-batch-seven-proof','bridge-kind-admission-proof'].includes(basename(dirname(this.root))) && basename(this.root) === '26.2';
+    const modernGameplay = ['bridge-gameplay-control-proof','bridge-moving-edit-proof','bridge-dispatch-budget-proof','bridge-drain-observer-proof','bridge-revision-proof','bridge-world-read-proof','bridge-guard-band-proof','bridge-hotpath-proof','bridge-priority-proof','bridge-encoding-proof','bridge-batch-proof','bridge-batch-seven-proof','bridge-kind-admission-proof','bridge-peer-admission-proof'].includes(basename(dirname(this.root))) && basename(this.root) === '26.2';
     assert(editDiagnostics || modernGameplay || ['bridge-baseline-proof', 'bridge-tick-timeline-proof', 'bridge-gameplay-proof', 'bridge-gameplay-control-proof'].includes(basename(this.root)), 'Not a named frozen fixture');
     this.modern = modernGameplay || editDiagnostics && basename(this.root) !== '1.21.11';
     this.worlds = Object.freeze(this.modern ? ['bridge-fixture'] : [...worlds]);

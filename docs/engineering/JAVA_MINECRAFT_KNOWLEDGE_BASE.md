@@ -239,6 +239,11 @@ passes 24 real clients across exact Paper 1.21.11/26.1.2/26.2, 168 gestures and
 18 delayed/late/revoked scenarios. It verifies the restored original companion
 and existing exact-size-encoding development clients, not a rejected scheduler,
 new clipboard/command transport or general cost acceptance.
+The [peer-local estimate](BRIDGE_PEER_ADMISSION_PROPOSAL_2026-10-17.md) then
+passes both p95 gates at the cost of failed individual service and one ack-p95
+delta +123.1749 ms. It is rejected/reverted completely, not retained because it
+avoids extra clocks/codec work. Both failed scheduling candidates remain available
+as reproducible patches, while the original companion remains in production.
 
 ## Network Facts That Affect This Project
 

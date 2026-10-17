@@ -51,6 +51,9 @@ that mixed-cost limitation and production cost gates are not marked fixed.
 The subsequent [native matrix](BRIDGE_NATIVE_REGRESSION_2026-10-17.md) passes
 24 real Fabric/NeoForge clients on three exact Paper hosts against that restored
 artifact. Functional fault/gesture evidence remains distinct from cost acceptance.
+The subsequent [peer-local estimate](BRIDGE_PEER_ADMISSION_PROPOSAL_2026-10-17.md)
+also fails unchanged service/latency gates and is fully reverted. Investigate
+avoidable operation cost instead of accepting lost progress as an optimization.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).
