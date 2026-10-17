@@ -15,7 +15,7 @@ function fixture(t, name = 'bridge-baseline-proof') {
   });
   const directory = join(scratch, name);
   const modern = ['bridge-edit-diagnostics/26.2','bridge-edit-diagnostics/26.1.2',
-    'bridge-edit-profiler-control/26.2','bridge-edit-profiler-control/26.1.2','bridge-gameplay-control-proof/26.2','bridge-moving-edit-proof/26.2','bridge-dispatch-budget-proof/26.2','bridge-drain-observer-proof/26.2','bridge-revision-proof/26.2','bridge-world-read-proof/26.2','bridge-guard-band-proof/26.2','bridge-hotpath-proof/26.2','bridge-priority-proof/26.2','bridge-encoding-proof/26.2','bridge-batch-proof/26.2','bridge-batch-seven-proof/26.2','bridge-kind-admission-proof/26.2','bridge-peer-admission-proof/26.2'].includes(name);
+    'bridge-edit-profiler-control/26.2','bridge-edit-profiler-control/26.1.2','bridge-gameplay-control-proof/26.2','bridge-moving-edit-proof/26.2','bridge-dispatch-budget-proof/26.2','bridge-drain-observer-proof/26.2','bridge-revision-proof/26.2','bridge-world-read-proof/26.2','bridge-guard-band-proof/26.2','bridge-hotpath-proof/26.2','bridge-priority-proof/26.2','bridge-encoding-proof/26.2','bridge-batch-proof/26.2','bridge-batch-seven-proof/26.2','bridge-kind-admission-proof/26.2','bridge-peer-admission-proof/26.2','bridge-authority-proof/26.2'].includes(name);
   for (const name of modern ? ['bridge-fixture'] : ['bridge-fixture', 'bridge-fixture_nether', 'bridge-fixture_the_end']) {
     mkdirSync(join(directory, name, 'region'), { recursive: true });
     writeFileSync(join(directory, name, 'level.dat'), name);
@@ -224,4 +224,11 @@ test('peer-local trial keeps exact frozen dimensions and rejects every other hos
   writeFileSync(join(directory,'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'),'changed');
   assert.equal(frozen.restore(),digest);
   for (const name of ['1.21.11','26.1.2','26.3','latest']) assert.throws(()=>new FrozenFixtureWorld(resolve(directory,'..',name)),/Not a named/);
+});
+
+test('combined-authority comparison cannot restore an old study or another host', t => {
+  const {directory, frozen} = fixture(t, 'bridge-authority-proof/26.2'), digest = frozen.capture();
+  writeFileSync(join(directory, 'bridge-fixture/dimensions/minecraft/overworld/region/r.0.0.mca'), 'changed');
+  assert.equal(frozen.restore(), digest);
+  for (const name of ['1.21.11', '26.1.2', '26.3', 'latest']) assert.throws(() => new FrozenFixtureWorld(resolve(directory, '..', name)), /Not a named/);
 });
