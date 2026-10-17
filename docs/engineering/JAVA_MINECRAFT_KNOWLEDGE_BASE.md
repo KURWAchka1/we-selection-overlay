@@ -67,6 +67,7 @@ Existing CUI-only servers must keep working without installing a companion.
 | [26.2 moving gameplay](BRIDGE_26_2_GAMEPLAY_2026-10-15.md) | Four matched absent/installed JVMs, 32 moving actors, 9,600 ticks, actual WorldEdit/entity workload, independent transport/configuration reconciliation; soft-budget and production cost gates remain open |
 | [26.2 concurrent moving edits](BRIDGE_26_2_MOVING_EDITS_2026-10-16.md) | Two fresh servers, 1,244 XYZ move/resize applies, 2,400 ticks and 64 canonical/CUI/control-area/undo audits; native-load and cost acceptance remain open |
 | [Primary sources](SOURCES.md) | Versioned API/source links, dates, limitations |
+| [Real WorldEdit selection properties](BRIDGE_SELECTION_PROPERTIES_2026-10-17.md) | 432 exact-host cases, ordered versus normalized corners, mixed resize/shift, refusals without partial mutation, raw CUI/replay/counter reconciliation and a preserved fixture error |
 | [Command preview](../../COMMAND_PREVIEW.md) | Existing local semantics, random samples, loaded-chunk policy |
 | [Selection editing](../../SELECTION_EDITING_DESIGN.md) | Existing input, drafting, commit and cancellation behavior |
 

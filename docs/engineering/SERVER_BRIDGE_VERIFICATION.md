@@ -130,11 +130,12 @@ individual progress in both pairs and exceeds +100 ms ack-p95 in one pair. It
 is fully reverted. Original companion/native evidence remains the retained
 baseline; neither cross-slice cost estimate is accepted as a release fix.
 The separate [real-WorldEdit property matrix](BRIDGE_SELECTION_PROPERTIES_2026-10-17.md)
-adds 144 passed legacy wire cases with independent ordered-point/CUI/replay and
+adds 432 passed wire cases on all three exact hosts with independent ordered-point/CUI/replay and
 permission-denial checks. Its first fixture assumption failure is retained and
 corrected against the official Extending constructor. Only completed exact-host
-rows count; 26.x rows remain pending at this checkpoint. No production change or
-new cost acceptance is inferred.
+rows count. All three raw proofs/artifact hashes, 864 canonical snapshots and
+12 counter snapshots independently reconcile. No production change or new cost
+acceptance is inferred.
 None of these exact-host studies substitutes for native concurrent gameplay,
 absent/installed production cost baselines or unsupported platform matrices.
 

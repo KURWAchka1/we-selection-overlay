@@ -1,6 +1,6 @@
 # Real WorldEdit Selection Properties
 
-Status: **1.21.11 passed; 26.x live rows pending**. This is a correctness
+Status: **all three exact hosts passed and independently revalidated**. This is a correctness
 study, not another scheduler tuning or performance comparison. Production client,
 shared transaction and companion sources are unchanged. The fixture is test-only.
 
@@ -76,8 +76,8 @@ not used as writable test data.
 | Exact host | Cases | Applied status | Denied | Replays | Result |
 | --- | ---: | ---: | ---: | ---: | --- |
 | Paper 1.21.11-132 / WorldEdit 7.4.2 / Java 21 | 144 | 96 | 48 | 96 | PASS |
-| Paper 26.1.2-74 / WorldEdit 7.4.3 / Java 25 | - | - | - | - | Pending |
-| Paper 26.2-133 / WorldEdit 7.4.5 / Java 25 | - | - | - | - | Pending |
+| Paper 26.1.2-74 / WorldEdit 7.4.3 / Java 25 | 144 | 96 | 48 | 96 | PASS |
+| Paper 26.2-133 / WorldEdit 7.4.5 / Java 25 | 144 | 96 | 48 | 96 | PASS |
 
 The 1.21.11 proof completed at **2026-10-17T06:26:08.035Z**, using
 `dd342201ffa186650e425c77333b2d1b9e340414`. Its SHA-256 is
@@ -97,6 +97,64 @@ hash of every generated chunk or a production performance measurement.
 The test-only fixture SHA-256 is
 `8e6e6f344f55ef890e0dfbd9c49f24b17a56d358e684d75f1502c148d6237995`;
 the companion remains the unchanged hash recorded above.
+
+All three rows have the same exact counter deltas and cleanup/audit outcomes.
+Totals: **432 cases, 288 APPLIED statuses (48 no-ops), 144 refusals and 288
+byte-identical replay acknowledgments**. Each exact host uses a separate fresh
+world, one headless connection and one orderly server JVM. These are three
+correctness runs, not 432 concurrent players or measurements of production cost.
+
+| Minecraft | Completed (UTC) | Proof SHA-256 |
+| --- | --- | --- |
+| 1.21.11 | 2026-10-17T06:26:08.035Z | `4382224233e0fb8cc546b9da854f47a647d518c074d44438c293c666f6cc89b4` |
+| 26.1.2 | 2026-10-17T06:28:40.858Z | `fc5b4bff64902fec0c8295946e9666d4fc40412cf31ec16f16379151b2f090fc` |
+| 26.2 | 2026-10-17T06:31:14.387Z | `a2276bf87a55d69d07e7570b1a1f61f8dc1519b253178060e216c3071b337552` |
+
+The first two rows record `dd34220`; the third records `e4babda`, which adds only
+documentation while the run continued. The seven harness hashes and both test/
+companion artifacts are identical in all rows. Raw logs have SHA-256:
+
+- 1.21.11: `04121ec62084149c77e11d169c9a1cd1ca02d94a6efb508515dbceb23b6b09b9`
+- 26.1.2: `4bfc34321558bc511de9301d427fcbc4ef9e4f439ac52f823a3dbbee8ea71039`
+- 26.2: `6a6528870bb4ec0f232f8f5e255a051acf90837f0dc9c871aef28b57a8f22c6f`
+
+At **2026-10-17T06:31:43.053Z**, the separate local
+`build/bridge-selection-properties/revalidate.mjs` re-decoded every raw capture/
+ack/replay, reconciled all **864 canonical snapshots** directly against the
+console logs, checked **12 complete counter snapshots**, all recorded artifact/
+harness hashes, owning-server quit barriers, audit completion and orderly
+shutdown fields. It passed all three proofs. Raw fixtures and failed attempts
+remain local; only source, research and this bounded report are committed.
+
+## Post-Matrix Regression
+
+The complete `tools/test-server-bridge.ps1 -Java21 <jdk21> -Java25 <jdk25> -Offline`
+finished successfully after the three host JVMs had stopped. Fresh evidence is
+under `build/bridge-validation`; the previous directory is preserved at
+`build/bridge-validation-before-selection-properties-20261017`. The combined
+console transcript is `build/bridge-selection-properties/full-regression-console.log`.
+
+- **114 pure/host-ABI Java tests on each of Java 21 and Java 25** pass. This includes
+  42 tests in the shared protocol/client modules, not just the 72 in server modules.
+- **172 Node harness groups** pass, including all 20 new property/oracle and raw
+  evidence rejection groups.
+- Both test-only diagnostic agents, **13 JFR-reader groups and three YAML/config
+  groups per JVM** pass. These are reader/agent self-tests, not a fresh load study.
+- All twelve deterministic admission-order/offset conditions per JVM retain
+  **60/60 ordinary replies**, including the 31-attacker cases.
+- All **six Fabric/NeoForge native payload-codec adapters** pass their owning
+  Java 21/25 runtime checks. No graphical Minecraft client is launched by this step.
+- The companion stays Java 21 bytecode without client/test/provided classes.
+  Its hash remains `2fc45532e48eb1208dab02cf1134835888f58525c7efb94db75f624ea877a03a`.
+  Published 1.8.0 Fabric/NeoForge JAR hashes remain respectively
+  `912a4c0c455928ec05a24fe2001f009dd68322d8aa437c2c9e82d014e5db46d0` and
+  `ea6a8e2e3d58cc1ffcb1473ddddc9036d850ae5f773ef108dab1e570eb379b1c`.
+
+No production transaction, scheduler or client fix was required by this matrix.
+The first attempt's oracle correction is not advertised as a gameplay fix. The
+existing mixed-cost admission limitation, strict cost acceptance, native
+concurrent gameplay, ungraceful/backend-switch cases and unimplemented remote
+features remain open; these functional results do not substitute for them.
 
 ## Preserved First Attempt
 

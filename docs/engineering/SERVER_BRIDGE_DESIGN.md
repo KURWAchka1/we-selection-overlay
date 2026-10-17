@@ -54,6 +54,9 @@ artifact. Functional fault/gesture evidence remains distinct from cost acceptanc
 The subsequent [peer-local estimate](BRIDGE_PEER_ADMISSION_PROPOSAL_2026-10-17.md)
 also fails unchanged service/latency gates and is fully reverted. Investigate
 avoidable operation cost instead of accepting lost progress as an optimization.
+The separate [selection property matrix](BRIDGE_SELECTION_PROPERTIES_2026-10-17.md)
+verifies 432 real wire cases on the three exact hosts with unchanged production
+artifacts. It closes those mixed-boundary/order/authority cases, not cost gates.
 See [remote-editing scope and evidence](BRIDGE_REMOTE_SELECTION_2026-10-13.md),
 [executed foundation evidence](SERVER_BRIDGE_IMPLEMENTATION.md)
 and the narrower [experimental schema](SERVER_BRIDGE_PROTOCOL.md).

@@ -461,6 +461,17 @@ bridges do not disable normal CUI or local sources. Native gameplay and wire
 round trips must still pass the [verification gates](../docs/engineering/SERVER_BRIDGE_VERIFICATION.md)
 before distributing this as a supported companion.
 
+## Selection Property Regression
+
+`tools/test-paper-selection-properties.ps1 -Java21 <jdk21> -Java25 <jdk25> -AcceptEula`
+uses the verified local server dependencies and creates fresh loopback-only
+fixtures, without game windows. It refuses previous attempts instead of
+overwriting evidence. The [completed property report](../docs/engineering/BRIDGE_SELECTION_PROPERTIES_2026-10-17.md)
+records 432 real wire cases on exact Paper 1.21.11/26.1.2/26.2 hosts: corner
+ordering/Extending normalization, disjoint resize/shift, mixed permissions,
+no partial denial, canonical CUI and single-apply replay. Published JARs and
+production behavior are unchanged. This is not a concurrency or cost benchmark.
+
 ## Cost And Security Boundary
 
 Frames are at most 256 bytes in this stage. Default request admission is 4/s
