@@ -30,7 +30,7 @@ test('real method and sleep events correlate with synthetic native counters by r
   assert.equal(row.longestMethods[0].kind,'JfrDispatchProbe::work');
 });
 test('native attribution fails closed for absent, duplicate, foreign and invalid counter evidence',t=>{
-  for(const kind of ['missing','duplicate','wrong-id','negative','failed','markers','loss']) {
+  for(const kind of ['missing','duplicate','wrong-id','extra','negative','failed','markers','loss']) {
     const result=read(t,kind);assert.notEqual(result.status,0,`${kind} accepted`);assert.equal(result.stdout,'');
   }
 });

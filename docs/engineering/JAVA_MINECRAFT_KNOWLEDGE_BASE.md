@@ -256,6 +256,16 @@ subsystems. Treat them as locations, not full-duration causes. Java 25's Linux-o
 CPU-time sampler is not a Windows solution; retain quantized zero readings as
 unknown charged work, not free execution. No extra live observer is installed.
 
+The later [dispatch/sampler investigation](BRIDGE_DISPATCH_DIAGNOSTICS_2026-10-17.md)
+uses an opt-in, current-owned-thread Windows counter in the fixture only. A
+fresh-JVM intervention proves that JFR sampling can cause Suspended switches;
+the real bridge on/off/off/on series still reproduces a 12.3254 ms off-arm
+interval with Preempted recorded. The 2026-10-23 hardened review preserves all
+1,582 roots. A bitmap identifies reasons within a surrounding read window, not
+the exact off-CPU duration, suspended-by identity or a CPU-time decomposition.
+Do not convert raw cycles to elapsed time, trim interrupted intervals, replace
+public Paper messaging or waive the strict cost gate. Read [S76](SOURCES.md#s76-windows-dispatch-and-sampler-interventions).
+
 ## Network Facts That Affect This Project
 
 | Verified fact | Engineering decision |

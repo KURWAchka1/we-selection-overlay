@@ -1,21 +1,22 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { createWriteStream, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createWriteStream, openSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { setPriority, constants } from 'node:os';
-import { resolve, relative, join } from 'node:path';
+import { resolve, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'node:net';
 import { channel, frame, hello, request, decode } from './wire-codec.mjs';
 import { verifyEdits } from './paper-edit-proof.mjs';
 import { observeOwnedServer } from './owned-server.mjs';
+import { ownedWireRunDirectory, requireUnusedWireEvidence } from './wire-run-directory.mjs';
 
 const [javaHome, serverDirectory, dependencyDirectory] = process.argv.slice(2);
 assert(javaHome && serverDirectory && dependencyDirectory, 'Expected JDK home, isolated server directory, dependency directory');
 const root = resolve(import.meta.dirname, '../..');
-const serverDir = resolve(serverDirectory);
-assert.equal(relative(root, serverDir), join('build', 'bridge-paper-proof'), 'Never operate a user server');
+const serverDir = ownedWireRunDirectory(root, serverDirectory);
+requireUnusedWireEvidence(serverDir);
 assert.match(readFileSync(join(serverDir, 'eula.txt'), 'utf8'), /^eula=true\s*$/);
 const properties = readFileSync(join(serverDir, 'server.properties'), 'utf8');
 assert.match(properties, /^server-ip=127\.0\.0\.1$/m);
@@ -27,12 +28,12 @@ assert.equal(require('minecraft-protocol/package.json').version, '1.68.0');
 const portProbe = createServer();
 await new Promise((accept, reject) => { portProbe.once('error', reject); portProbe.listen(25579, '127.0.0.1', accept); });
 await new Promise((accept, reject) => portProbe.close(error => error ? reject(error) : accept()));
-rmSync(join(serverDir, 'wire-proof.json'), { force: true });
 const clients = [];
 const restartChannel = 'worldedit_selection_overlay:restart';
 const checks = [];
 const record = name => { checks.push(name); console.log(`PASS: ${name}`); };
-const output = createWriteStream(join(serverDir, 'wire-server.log'));
+const logPath = join(serverDir, 'wire-server.log');
+const output = createWriteStream(logPath, { fd: openSync(logPath, 'wx'), autoClose: true });
 const lines = [];
 const partial = { out: '', err: '' };
 let exited = false, cancelled = false, successReport;
@@ -341,6 +342,6 @@ try {
 }
 assert(exited, `Owned Paper PID ${java.pid} did not stop`);
 if (successReport && !process.exitCode) {
-  writeFileSync(join(serverDir, 'wire-proof.json'), JSON.stringify(successReport, null, 2));
+  writeFileSync(join(serverDir, 'wire-proof.json'), JSON.stringify(successReport, null, 2), { flag: 'wx' });
   console.log('PAPER BRIDGE WIRE PROOF PASS; owned server stopped');
 }

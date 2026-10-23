@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { dispatchTraceTargets, dispatchStallEvents, paperSafeDispatchTraceTargets } from './dispatch-diagnostics.mjs';
+import { summarizeDispatchEvidence } from './dispatch-evidence.mjs';
 
 const root=resolve(import.meta.dirname,'../..'), javaHome=process.argv[2]; assert(javaHome,'Explicit JDK25 home required');
 const samplingControl=process.argv[3]==='--sampling-control';
@@ -14,6 +15,13 @@ const analysis=JSON.parse(readFileSync(join(directory,'edit-load-analysis.json')
 const proof=JSON.parse(readFileSync(join(directory,'edit-load-proof.json')));
 assert.equal(analysis.dispatchControl,true); assert.equal(proof.dispatchControl,true);
 assert.deepEqual(proof.traceTargets,samplingControl ? paperSafeDispatchTraceTargets : dispatchTraceTargets);assert.deepEqual(proof.stallEvents,dispatchStallEvents);
+if(samplingControl) {
+  const settings=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',
+    join(import.meta.dirname,'Assert-SamplerSettings.ps1'),'-On',join(directory,'edit-dispatch.jfc'),'-Off',join(directory,'edit-dispatch-no-sampling.jfc')],
+  {encoding:'utf8',windowsHide:true,timeout:30000});
+  assert.equal(settings.status,0,settings.stderr || settings.error?.message);
+  assert.deepEqual(JSON.parse(settings.stdout),{equalExceptTwoSamplerBits:true});
+}
 const hash=file=>createHash('sha256').update(readFileSync(file)).digest('hex');
 const results=[];
 for(const result of analysis.results) {
@@ -39,10 +47,17 @@ for(const result of analysis.results) {
     assert.deepEqual([...totals.methods].sort(),[...proof.traceTargets].sort(),'Some requested method filters did not record');
     const log=readFileSync(join(directory,`edit-${result.round}.log`),'utf8');
     assert.equal(Number(log.match(/WESO_DISPATCH_CLOSED completed=(\d+)/)?.[1]),result.slices.totals.calls);
+    if(samplingControl) {
+      assert(!log.includes('[warning][jfr,methodtrace]'),'Skipped method instrumentation');
+      const enabled=proof.runs[result.round-1].samplingEnabled;
+      assert.equal(totals.javaSamples>0,enabled,'Actual Java sampler differs from policy');
+      assert.equal(totals.nativeSamples>0,enabled,'Actual native sampler differs from policy');
+    }
   }
   assert.equal(hash(recording),recordingHash);
   writeFileSync(join(directory,`dispatch-${result.round}.ndjson`),invocation.stdout,{flag:'wx'});
-  results.push({round:result.round,profile,recordingHash,drain:group,totals,intervals});
+  results.push({round:result.round,profile,recordingHash,drain:group,totals,intervals,
+    ...(profile==='dispatch' ? {cohorts:summarizeDispatchEvidence(intervals)} : {})});
 }
 writeFileSync(output,JSON.stringify({checkedAt:new Date().toISOString(),proofHash:hash(join(directory,'edit-load-proof.json')),
   analysisHash:hash(join(directory,'edit-load-analysis.json')),readerHash:hash(join(import.meta.dirname,'JfrDispatchDetails.java')),results},null,2)+'\n',{flag:'wx'});

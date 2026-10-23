@@ -1,6 +1,8 @@
 # Dispatch Cause Investigation
 
-Status: **first live series complete; method-attribution gate incomplete**.
+Status: **both live series complete; sampler mechanism and native switch evidence
+verified; exact off-CPU durations and production cost acceptance remain open**.
+Live recordings: 2026-10-17. Independent hardened-reader review: 2026-10-23.
 Original companion remains `2fc45532...`; no permission, scheduling, quota,
 wire or client change. Existing studies and published artifacts stay immutable.
 
@@ -140,3 +142,157 @@ not a production optimization or permission to waive the existing cost gate.
   -Minecraft 26.2 -EditLoad -DispatchSamplingControl -Players 32 -Samples 400 `
   -Repetitions 4 -AcceptEula
 ```
+
+## Completed Bridge Intervention
+
+All four fresh servers stop normally and close their owning-thread counter.
+Applied commits: **595 / 594 / 589 / 598 = 2,376**. All **4,800** raw/JFR tick
+markers, wire/authority/canonical/progress checks and original summaries
+reconcile. All three requested method filters actually record in every arm;
+there are no method-instrumentation warnings or recorded data-loss events.
+
+An XML comparison verifies that settings differ only in the two sampler enable
+bits. Java/native sample counts in the active phases are **32/958, 0/0, 0/0,
+26/955**. Thus the off intervention is observed, not inferred from a filename.
+
+| Fresh JVM | Sampler | Roots | p95 ms | p99 ms | Maximum ms | Roots >0.5 ms | With Preempted bit, >0.5 ms | Suspended bit, all roots |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | On | 393 | 0.4622 | 1.3682 | 2.7144 | 15 | 12 | 2 |
+| 2 | Off | 398 | 0.5381 | 1.0648 | 1.6067 | 24 | 18 | 0 |
+| 3 | Off | 397 | 0.6828 | 2.6139 | 12.3254 | 28 | 26 | 0 |
+| 4 | On | 394 | 0.5657 | 1.3845 | 9.1177 | 27 | 24 | 1 |
+
+Across **1,582** roots, **80/94** intervals above 0.5 ms, **27/33** above 1 ms
+and **7/7** above 2 ms have a Preempted bit in their enclosing native window.
+The last group has no overlapping recorded stall or class load. This does not
+measure the duration of a context switch. The observed window also includes
+boundary diagnostics; do not subtract charged cycles from wall time or relabel
+every nanosecond as scheduler delay.
+
+The sampler is a demonstrated source of Suspended switches, but **not a sufficient
+explanation for the longest intervals**. Disabling it neither eliminates those
+intervals nor improves every p95. Do not choose a universal sampler-off setting
+or declare the strict 0.5 ms cost gate passed from these data.
+
+### Two Retained Outliers
+
+- **Off, round 3, root 253:** 12.3254 ms, two switches, `180000000`
+  (DispatchInt + Preempted), 404,068 raw charged-cycle delta, 28.2 us of native
+  read durations. One Paper send spans 12.2854 ms; its validator spans 1.4 us.
+  There is no overlapping recorded GC/VM/stall/class load or owner sample.
+  This reproduces the send-path wall-time symptom **without a JFR sampler**.
+- **On, round 4, root 88:** 9.1177 ms, two switches, the same preemption-only
+  bitmap, 1,572,313 raw cycles and 85.7 us of native reads. Sixteen Paper sends
+  total only 56.4 us; the long interval falls between sends. There is no recorded
+  stall/class-load overlap or owner sample. A long root is not necessarily a
+  slow send operation, even when earlier sparse samples pointed to sending.
+
+Thirteen >0.5 ms roots have class-load overlap, including six of the seven
+zero-switch long roots. Small monitor/file overlaps also exist and remain in
+the report. Categories overlap and are not an exclusive CPU-time decomposition.
+The remaining 0.5122 ms zero-switch, no-class-load root is not assigned an
+invented cause. No live permission, public send path or thread ownership is
+bypassed to make the benchmark pass.
+
+### Independent Review And Reproduction
+
+`dispatch-cause-analysis.json` retains the original reader hash and all original
+intervals. `dispatch-review-20261023.json` is a new result, not an overwrite:
+the hardened reader reproduces every total/interval exactly and rejects extra
+unmatched native records. All four JFR hashes remain identical. Its cohort
+summary is covered by deterministic strict-boundary/overlap/corruption tests.
+The settings validator additionally rejects ambiguous duplicate events/settings,
+unrelated recorder changes, DTDs, malformed XML and oversized inputs.
+
+```powershell
+node tools/server-bridge-test/analyze-edit-load-proof.mjs <jdk25> 26.2 --dispatch-sampling-control
+node tools/server-bridge-test/analyze-dispatch-cause.mjs <jdk25> --sampling-control
+# Review requires a new, unused result filename; never overwrite a completed proof.
+node tools/server-bridge-test/review-dispatch-proof.mjs <jdk25> dispatch-review-20261023.json
+```
+
+Existing completed analysis/review commands deliberately refuse overwrite.
+The first series' nine-filter completeness failure remains a failure; the later
+successful three-filter experiment does not retroactively change its policy.
+
+## Conclusion And Remaining Gates
+
+Established narrow mechanisms: the JDK sampler can suspend the owner thread;
+Windows preemption occurs in newly reproduced long intervals even with both
+samplers disabled; cold class loading and occasional real stalls are additional
+observations. Exact JDK sources explain sampler suspension with no successful
+sample, and Microsoft documents the native fields/reason values. This is stronger
+than inferring a cause from missing samples, but not an exact off-CPU timeline.
+
+**Do not claim** that the historical uninstrumented 12.2695 ms instance has been
+retroactively attributed, that all 94 overruns share one cause, or that a named
+competing process has been identified. This experiment does not establish those
+facts. Exact switch durations would require a different trace with separate
+privacy/privilege and observer-cost considerations; no machine-wide trace or
+priority boost is introduced here.
+
+The retained companion and published clients are unchanged. The strict dispatcher
+cost gate, mixed-cost admission limitation and absent/installed representative
+production baseline remain release work, not closed by these diagnostic runs.
+
+## Fresh Transport Regression On 2026-10-23
+
+The legacy wire launcher reused one directory and removed its old success report.
+It now creates a unique `build/bridge-paper-proof/<UTC-date-time-random-id>/`
+directory. Existing evidence is rejected before launch; the log is synchronously
+opened with exclusive creation, and the success report also uses exclusive
+creation. Unit checks cover path confinement, byte-preserved prior evidence and
+the real Windows PowerShell wrapper's refusal before build/copy/launch.
+
+The first fresh attempt, `20261023-161737-b8283aca`, stalls during Paperclip's
+Mojang-JAR download. The 180-second startup guard fails; the owned downloader
+requires termination after the stop grace period. **No success proof exists.**
+Its partial download/log remain untouched. This is a setup/network failure,
+not a completed game test or an acceptable shutdown result.
+
+Reuse the existing load launcher's approach for the next attempt: copy only
+`cache`, `libraries` and `versions` from the original isolated fixture **if its
+Paper JAR SHA-256 matches the requested JAR**. No world, plugin configuration,
+player data or prior log is copied. Do not reuse the failed attempt directory.
+
+The separately fresh `20261023-162149-353d58b8` run passes **all 27 wire groups**
+on exact Paper 1.21.11-132/c5eb079, WorldEdit 7.4.2 and Java 21.0.11. It covers
+grant/revocation, foreign/expired context, malformed/legacy frames, respawn and
+reconnect, every face/corner, stale concurrent WorldEdit commands, ordered and
+extending selectors, expand/contract/shift authority, unchanged blocks/history,
+three disable/enable cycles and dependency shutdown. Original CUI and zero
+unsolicited idle source work remain verified. The server stops normally before
+success publication. This is functional transport regression, not native GUI,
+modern-host revalidation or cost acceptance.
+
+Proof: `build/bridge-paper-proof/20261023-162149-353d58b8/wire-proof.json`,
+SHA-256 `1b7bc602bc95dc22d12f5990b1c950b1424320315ff9a208844c939f61fd6d61`.
+Original parent `wire-proof.json` and `wire-server.log` hashes are unchanged
+across both attempts. Companion remains `2fc45532...`, fixture `8e6e6f34...`
+and WorldEdit `0ee152b1...`; the published Fabric/NeoForge JAR hashes also stay
+`912a4c0c...` / `ea6a8e2e...`.
+
+## Regression Evidence On 2026-10-23
+
+The full protocol/client/core/Paper JUnit checks are forced to execute, not read
+from an up-to-date result: **114 passed on Java 21 and 114 on Java 25**, zero
+failures/errors/skips. XML reports are retained separately per JVM under
+`build/bridge-authority-validation/junit-java<major>-20261023/`.
+Original nested/bootstrap/root agent probes pass on both JVMs, plus the native
+dispatch agent probe on Java 25. Historical agent JAR hashes remain byte-identical.
+
+After the wire-launcher changes, rerun the entire Node tooling suite with explicit
+`WESO_TEST_JAVA` and `--test-concurrency=1`: **210 pass on Java 21, 214 on Java 25**,
+zero failures/cancellations/skips. The four Java-25-only method-trace reader groups
+are run on 25, not incorrectly compiled or silently skipped on 21. Combined with
+JUnit, this is **652 automated checks**, separately from the 27 live wire groups
+and agent probes. Logs: `tooling-final-java21-20261023.log` and
+`tooling-final-java25-20261023.log` in `build/bridge-authority-validation`.
+JavaScript syntax, Windows PowerShell parsing and `git diff --check` also pass.
+
+Initial offline attempts fail before tests because JUnit and the Shadow plugin
+have no usable resolution metadata in the offline cache. Retain those logs;
+resolve the same pinned dependencies online, without changing versions, then
+execute the suites. These dependency-resolution failures are not counted as
+test passes. No native game window, desktop input capture, priority boost or
+machine-wide trace is used during this cycle.

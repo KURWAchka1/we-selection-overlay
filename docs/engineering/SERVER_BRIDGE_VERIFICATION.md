@@ -1,7 +1,7 @@
 # Server Bridge Verification Gates
 
 Status: **release gates, with partial foundation evidence**.
-Updated: 2026-10-17. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
+Updated: 2026-10-23. The [implementation record](SERVER_BRIDGE_IMPLEMENTATION.md)
 contains Java 21/25 tests, six native-codec checks and a real Paper wire proof.
 Headless protocol clients are not Fabric/NeoForge gameplay clients. A subsequent
 [six-client native Paper 1.21.11 matrix](NATIVE_PAPER_REGRESSION_2026-10-11.md)
@@ -147,6 +147,22 @@ preserves every original metric in all four active windows. Only three of forty
 selected intervals have an owner sample, insufficient for full-duration causal
 attribution. Six new reader groups pass on both JVMs, including lost-data failure
 and explicit truncation. No new live observer or production change is introduced.
+The later [dispatch/sampler investigation](BRIDGE_DISPATCH_DIAGNOSTICS_2026-10-17.md)
+adds two four-JVM series. The first retains an honestly failed nine-method
+instrumentation gate; the second passes actual three-method/native matching,
+2,376 applies and 4,800 raw/JFR ticks. A hardened independent review preserves
+all 1,582 roots and original hashes. Sampler-induced suspension is reproduced
+separately, while all seven >2 ms intervals in the second series have native
+preemption evidence, including a 12.3254 ms sampler-off send. These explain
+specific mechanisms, not exact off-CPU durations, all old outliers or production
+cost acceptance. No permission/send bypass, priority boost or release change is
+justified. The strict p95 and mixed-cost admission gates remain open.
+The same report records a fresh **27-group Paper 1.21.11 wire regression** on
+2026-10-23 against the unchanged companion. It passes authority/edit/lifecycle
+checks and normal owned shutdown. A prior startup-download timeout is retained
+without a success proof. Unique wire-run directories and exclusive evidence
+creation prevent future overwrites of earlier results. This is not a rerun of
+the six native-client matrix or a modern-host/performance acceptance claim.
 None of these exact-host studies substitutes for native concurrent gameplay,
 absent/installed production cost baselines or unsupported platform matrices.
 

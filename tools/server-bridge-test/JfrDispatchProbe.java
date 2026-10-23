@@ -25,6 +25,9 @@ class JfrDispatchProbe {
             dispatch.end();
             if (!kind.equals("missing") && !kind.equals("plain")) dispatch.commit();
             if (kind.equals("duplicate")) dispatch.commit();
+            if (kind.equals("extra")) {
+                var extra = new Dispatch(); extra.id = 999; extra.cycles = 100; extra.commit();
+            }
             tick.end(); if (!kind.equals("markers")) tick.commit();
             if (kind.equals("loss")) { var loss = new Loss(); loss.amount = 1; loss.commit(); }
             r.stop(); r.dump(Path.of(args[0]));

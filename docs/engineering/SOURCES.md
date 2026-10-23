@@ -1287,6 +1287,39 @@ checks channels while sending and copies the externally returned listening set.
 Those source facts do not attribute a sampled 12 ms interval, justify bypassing
 public messaging, or prove removing the copy will meet the cost gate.
 
+## S76 Windows Dispatch And Sampler Interventions
+
+Checked **2026-10-23**, against exact JDK 25.0.2+10 and the retained recordings
+from 2026-10-17. Microsoft's public [EnableThreadProfiling](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-enablethreadprofiling)
+only enables the current thread. [ReadThreadProfilingData](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-readthreadprofilingdata)
+and [PERFORMANCE_DATA](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-performance_data)
+define cumulative switches/cycles and a reason bitmap since the previous read.
+[DisableThreadProfiling](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-disablethreadprofiling)
+requires owning-thread cleanup. Our Windows x64 preflight succeeds without
+elevation and requests dispatch data only, not hardware counters or system ETW.
+Use the official [WinSDK layout](https://github.com/microsoft/win32metadata/blob/main/generation/WinSDK/RecompiledIdlHeaders/um/winnt.h)
+and [FFM linker ABI](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/foreign/Linker.html),
+not guessed C sizes. The [reason enumeration](https://learn.microsoft.com/en-us/dotnet/api/microsoft.windows.eventtracing.cpu.kernelwaitreason?view=trace-processor-dotnet-1.0)
+maps Suspended to 5, WrSuspended to 12, WrDispatchInt to 31 and WrPreempted to 32.
+[Context switching](https://learn.microsoft.com/en-us/windows/win32/procthread/context-switches)
+can delay runnable work; the bitmap contains no per-switch elapsed duration.
+
+The exact [JFR sampler](https://github.com/openjdk/jdk25u/blob/jdk-25.0.2%2B10/src/hotspot/share/jfr/periodic/sampling/jfrThreadSampler.cpp)
+uses suspended-thread tasks and can produce no sample after an attempted sample.
+Its [Windows implementation](https://github.com/openjdk/jdk25u/blob/jdk-25.0.2%2B10/src/hotspot/os/windows/os_windows.cpp)
+uses SuspendThread/GetThreadContext/ResumeThread. Our fixed-work fresh-JVM
+off/20ms/1ms/1ms/20ms/off probe observes 0/11/139/139/13/0 suspended intervals.
+The real bridge control observes no suspension with sampling off, but still
+records preemption in long intervals. Neither source nor experiment supports
+calling every pause a sampler defect. See [full scope and results](BRIDGE_DISPATCH_DIAGNOSTICS_2026-10-17.md).
+
+The [cycle counter contract](https://learn.microsoft.com/en-us/windows/win32/api/realtimeapiset/nf-realtimeapiset-querythreadcycletime)
+explicitly forbids converting cycles into elapsed time. A busy/sleep cross-check
+validates raw delta behavior, not such a conversion. Java 25's [method-filter API](https://docs.oracle.com/en/java/javase/25/docs/api/jdk.jfr/jdk/jfr/package-summary.html)
+also requires observing actual instrumented targets: Paper-loader resolution
+warnings invalidate our first nine-filter completeness gate. The later matched
+three-filter study is a separately predeclared experiment, not a revised pass.
+
 ## Local Evidence And Refresh Rules
 
 Build tuple evidence: runtime `gradle.properties` / `build.gradle`, root README.

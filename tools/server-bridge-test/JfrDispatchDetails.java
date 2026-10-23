@@ -7,7 +7,7 @@ import jdk.jfr.consumer.*;
 class JfrDispatchDetails {
     record Span(Instant start, Instant end, String kind, long nanos) { }
     static final class Root {
-        long id, thread, wall, cpu, cycles, switches, reasons, beforeRead, afterRead, samples;
+        long id, thread, wall, cpu, cycles, switches, reasons, beforeRead, afterRead, samples, nativeSamples;
         Instant start, end;
         boolean nativeMatched;
         final List<Span> methods = new ArrayList<>(), stalls = new ArrayList<>();
@@ -50,17 +50,21 @@ class JfrDispatchDetails {
             }
         }
         if (roots.isEmpty()) throw new IllegalStateException("No active roots");
-        long traces = 0, dispatch = 0;
+        long traces = 0, dispatch = 0, javaSamples = 0, nativeSamples = 0;
         Set<String> tracedMethods = new TreeSet<>();
         try (var recording = new RecordingFile(path)) {
             while (recording.hasMoreEvents()) {
                 var e = recording.readEvent(); String kind = e.getEventType().getName();
                 if (e.getEndTime().isBefore(start) || e.getStartTime().isAfter(end)) continue;
                 long thread = e.getThread() == null ? -1 : e.getThread().getJavaThreadId();
-                if (kind.equals("jdk.ExecutionSample")) {
+                if (kind.equals("jdk.ExecutionSample") || kind.equals("jdk.NativeMethodSample")) {
+                    boolean java = kind.equals("jdk.ExecutionSample");
+                    if (java) javaSamples++; else nativeSamples++;
                     var sampled = e.getThread("sampledThread");
                     if (sampled != null) for (Root r : roots) if (r.thread == sampled.getJavaThreadId()
-                            && !e.getStartTime().isBefore(r.start) && e.getStartTime().isBefore(r.end)) r.samples++;
+                            && !e.getStartTime().isBefore(r.start) && e.getStartTime().isBefore(r.end)) {
+                        if (java) r.samples++; else r.nativeSamples++;
+                    }
                     continue;
                 }
                 if (kind.equals("weso.diagnostic.Dispatch")) {
@@ -103,15 +107,16 @@ class JfrDispatchDetails {
             }
         }
         boolean nativeExpected = args[3].equals("dispatch");
-        if (roots.stream().anyMatch(r -> r.nativeMatched != nativeExpected) || nativeExpected != (dispatch > 0) || nativeExpected != (traces > 0))
+        if (roots.stream().anyMatch(r -> r.nativeMatched != nativeExpected) || dispatch != (nativeExpected ? roots.size() : 0)
+                || nativeExpected != (traces > 0))
             throw new IllegalStateException("Missing or unexpected dispatch/method evidence");
-        System.out.printf("{\"type\":\"totals\",\"roots\":%d,\"nativeRecords\":%d,\"methodTraces\":%d,\"methods\":[%s]}%n",
-                roots.size(), dispatch, traces, tracedMethods.stream().map(JfrDispatchDetails::q).collect(java.util.stream.Collectors.joining(",")));
+        System.out.printf("{\"type\":\"totals\",\"roots\":%d,\"nativeRecords\":%d,\"methodTraces\":%d,\"javaSamples\":%d,\"nativeSamples\":%d,\"methods\":[%s]}%n",
+                roots.size(), dispatch, traces, javaSamples, nativeSamples, tracedMethods.stream().map(JfrDispatchDetails::q).collect(java.util.stream.Collectors.joining(",")));
         roots.sort(Comparator.comparingLong((Root r) -> r.wall).reversed());
         for (Root r : roots) {
-            System.out.printf("{\"id\":%d,\"thread\":%d,\"start\":%s,\"end\":%s,\"wallNanos\":%d,\"cpuNanos\":%d,\"nativeMatched\":%s,\"cycles\":%d,\"switches\":%d,\"reasonsHex\":\"%s\",\"beforeReadNanos\":%d,\"afterReadNanos\":%d,\"ownerSamples\":%d,\"classLoads\":%d,\"classes\":[%s],\"methodTotals\":%s,\"stallTotals\":%s,\"longestMethods\":%s,\"longestStalls\":%s}%n",
+            System.out.printf("{\"id\":%d,\"thread\":%d,\"start\":%s,\"end\":%s,\"wallNanos\":%d,\"cpuNanos\":%d,\"nativeMatched\":%s,\"cycles\":%d,\"switches\":%d,\"reasonsHex\":\"%s\",\"beforeReadNanos\":%d,\"afterReadNanos\":%d,\"ownerSamples\":%d,\"ownerNativeSamples\":%d,\"classLoads\":%d,\"classes\":[%s],\"methodTotals\":%s,\"stallTotals\":%s,\"longestMethods\":%s,\"longestStalls\":%s}%n",
                     r.id, r.thread, q(r.start.toString()), q(r.end.toString()), r.wall, r.cpu, r.nativeMatched, r.cycles, r.switches,
-                    Long.toHexString(r.reasons), r.beforeRead, r.afterRead, r.samples, r.classLoads,
+                    Long.toHexString(r.reasons), r.beforeRead, r.afterRead, r.samples, r.nativeSamples, r.classLoads,
                     r.classes.stream().map(JfrDispatchDetails::q).collect(java.util.stream.Collectors.joining(",")),
                     totals(r.methodTotals), totals(r.stallTotals), spans(r.methods), spans(r.stalls));
         }
