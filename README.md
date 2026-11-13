@@ -6,7 +6,7 @@ Client-side selection visualization and inspection for WorldEdit. The latest pub
 
 | Minecraft | Java | Fabric | NeoForge |
 | --- | --- | --- | --- |
-| 1.20.4 | 17 | Separate 1.8.1 build | Not supported |
+| 1.20.4 | 17 | Separate 1.8.0 build | Not supported |
 | 1.21.11 | 21 | Supported | Supported |
 | 26.1 / 26.1.1 | 25 | Supported | Compatibility-only checks; no compatible local WorldEdit |
 | 26.1.2 | 25 | Supported | Supported |
@@ -85,7 +85,7 @@ and preparation without opening a game window.
 - [User-facing description](WEaddon_lightposition/MOD_DESCRIPTION.md)
 - [Changelog](WEaddon_lightposition/CHANGELOG.md)
 - [1.8.0 release notes](changelog-1.8.0.md)
-- [1.8.1 release notes](changelog-1.8.1.md)
+- [1.8.0 release notes for Fabric 1.20.4](changelog-1.8.0-fabric-1.20.4.md)
 - [Command preview behavior and limits](COMMAND_PREVIEW.md)
 - [Feature roadmap](FEATURE_ROADMAP.md)
 - [Selection editing interaction, implementation, and verification](SELECTION_EDITING_DESIGN.md)

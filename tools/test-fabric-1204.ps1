@@ -36,7 +36,7 @@ if ($LASTEXITCODE) { throw 'LWJGL 3.3.2 cursor preflight failed.' }
 $output = Join-Path $root "build/fabric-1204-test/$RunId"
 New-Item -ItemType Directory -Path $output | Out-Null
 $init = Join-Path $PSScriptRoot 'fabric-1204-test/init.gradle'
-$artifact = Join-Path $module 'build/libs/worldedit_selection_overlay-1.8.1-fabric-1.20.4.jar'
+$artifact = Join-Path $module 'build/libs/worldedit_selection_overlay-1.8.0-fabric-1.20.4.jar'
 $expectedHash = $null
 foreach ($profile in @('withoutWorldEdit', 'withWorldEdit')) {
     Assert-WesoTestDesktop

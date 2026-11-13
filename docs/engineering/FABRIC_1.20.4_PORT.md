@@ -1,8 +1,9 @@
 # Fabric 1.20.4 Client Port
 
-The 1.8.1 artifact is a standalone client JAR based on the published 1.8.0
-client, not the development bridge runtime. It deliberately does not depend on
-any experimental bridge source set. The modern universal JARs stay unchanged.
+The 1.8.0 Fabric 1.20.4 artifact is a standalone client JAR based on the
+published 1.8.0 client, not the development bridge runtime. It deliberately
+does not depend on any experimental bridge source set. The modern universal
+JARs stay unchanged.
 
 ## Exact Build And Test Tuple
 
@@ -64,7 +65,12 @@ versions, mixin entries, and absence of WorldEdit, test classes, nested JARs
 and server bridge code.
 
 Final test run: `build/fabric-1204-test/203a045d05d4455caefd1b90c06e4ffd/`.
-Both profiles passed on the same 568,729-byte client JAR, SHA-256
+Both profiles passed on the same 568,729-byte client JAR, originally labeled
+1.8.1, SHA-256
 `ba70e04afc95381d678b43c7f1f0eabca3725e0005b9719ab0dfb4b26bd2288a`.
+The 1.8.0 rebuild passed the packaging gate, and a comparison of both JARs
+found no changes to their entries except the version in `fabric.mod.json`.
+The 1.8.0 Fabric 1.20.4 JAR has SHA-256
+`d1b43b99fd01f7679b91230bcb661493c29ea3f5797d315971b27f8d2d1401ad`.
 The published Fabric and NeoForge 1.8.0 artifact hashes still match
 [the release record](../../SOURCE_ACCESS.md#version-180).
