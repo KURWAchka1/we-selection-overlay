@@ -29,7 +29,7 @@ public record PreviewOptions(boolean enabled, float opacity, boolean statistics)
     private static float decimal(Properties p, String key, float fallback, float min, float max) {
         try {
             float value = Float.parseFloat(p.getProperty(key, ""));
-            return Float.isFinite(value) ? Math.clamp(value, min, max) : fallback;
+            return Float.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
         } catch (NumberFormatException ignored) { return fallback; }
     }
 }

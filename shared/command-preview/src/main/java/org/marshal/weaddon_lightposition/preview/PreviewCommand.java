@@ -19,7 +19,7 @@ public record PreviewCommand(Kind kind, String mask, String pattern, double thic
         List<String> args = CommandArgParser.forArgString(draft.strip()).parseArgs()
                 .map(Substring::getSubstring).toList();
         if (args.isEmpty()) throw new IllegalArgumentException("incomplete");
-        Kind kind = switch (args.getFirst().toLowerCase(Locale.ROOT)) {
+        Kind kind = switch (args.get(0).toLowerCase(Locale.ROOT)) {
             case "//set" -> Kind.SET;
             case "//replace", "//re", "//rep" -> Kind.REPLACE;
             case "//walls" -> Kind.WALLS;
@@ -47,7 +47,7 @@ public record PreviewCommand(Kind kind, String mask, String pattern, double thic
             boolean shell = args.contains("-h");
             List<String> positional = args.stream().skip(1).filter(a -> !a.equals("-h")).toList();
             if (positional.size() < 1 || positional.size() > 2) throw new IllegalArgumentException("incomplete");
-            return new PreviewCommand(kind, "", positional.getFirst(), positional.size() == 2 ? nonNegative(positional.get(1)) : 0, shell);
+            return new PreviewCommand(kind, "", positional.get(0), positional.size() == 2 ? nonNegative(positional.get(1)) : 0, shell);
         }
         if (kind == Kind.FLORA) {
             if (args.size() > 2) throw new IllegalArgumentException("incomplete");

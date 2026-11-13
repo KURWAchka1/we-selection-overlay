@@ -6,12 +6,15 @@ Client-side selection visualization and inspection for WorldEdit. The latest pub
 
 | Minecraft | Java | Fabric | NeoForge |
 | --- | --- | --- | --- |
+| 1.20.4 | 17 | Separate 1.8.1 build | Not supported |
 | 1.21.11 | 21 | Supported | Supported |
 | 26.1 / 26.1.1 | 25 | Supported | Compatibility-only checks; no compatible local WorldEdit |
 | 26.1.2 | 25 | Supported | Supported |
 | 26.2 | 25 | Supported | Supported |
 
-There is **one universal JAR per loader**, not one JAR that loads on both Fabric and NeoForge. Each loader's JAR contains the three supported Minecraft runtimes and selects the matching runtime at launch. This does **not** imply support for every 1.21.x or 26.x version.
+For **1.20.4**, use the standalone Fabric JAR and [WorldEdit 7.3.0](https://modrinth.com/plugin/worldedit/version/ZOhVauWn) for local editing and previews. This build has no optional server bridge support.
+
+For **1.21.11 and 26.x**, there is one universal JAR per loader. Each selects the matching runtime at launch. This does not imply support for every 1.21.x or 26.x version.
 
 The mod can launch without WorldEdit; WorldEdit-dependent features need a compatible WorldEdit installation or CUI data from a server. Clipboard and command-result previews require an integrated/local WorldEdit session. Previews and isolation never modify world blocks or undo history. Typing a supported region command temporarily takes priority over clipboard rendering without changing its preference or cache. With clipboard preview enabled, typing `//rotate`, `//flip` or `//mirror` previews the copied object's transform without changing the real buffer. `//cut` and `//paste` have no live command preview.
 
@@ -24,6 +27,7 @@ these restrictions are documented in `tools/MANUAL_TEST.md`.
 
 | Directory | Purpose |
 | --- | --- |
+| `WEaddon_fabric_1.20.4` | Standalone Fabric 1.20.4 runtime and legacy CUI transport |
 | `WEaddon_fabric_1.21.11` | Fabric runtime for Minecraft 1.21.11 |
 | `WEaddon_lightposition` | Fabric runtime for Minecraft 26.1.x |
 | `WEaddon_fabric_26.2` | Fabric runtime for Minecraft 26.2 |
@@ -32,7 +36,7 @@ these restrictions are documented in `tools/MANUAL_TEST.md`.
 | `WEaddon_neoforge_26.2` | NeoForge runtime for Minecraft 26.2 |
 | `WEaddon_fabric_universal_1.21.11-26.2` | Fabric bootstrap, version selection, packaging, tests |
 | `WEaddon_neoforge_universal_1.21.11-26.2` | NeoForge bootstrap, version selection, packaging, tests |
-| `shared/command-preview` | Memory-only command engine shared by all six runtimes |
+| `shared/command-preview` | Shared memory-only command engine |
 | `shared/selection-editing` | Pure cuboid drafting and server-thread WorldEdit selection transactions |
 | `shared/neoforge-cui` | Shared-protocol bridge and private fallback registration |
 | `shared/server-bridge-protocol` | Experimental bounded Java 21 application protocol |
@@ -50,6 +54,14 @@ Install JDK 21 and JDK 25. Then run from this repository root:
 ```
 
 The script builds all six runtimes and both universal packagers, including their unit tests. Release artifacts are written under each packager's `libs/1.8.0/` and are intentionally ignored by Git. Run the in-game test harnesses described in `TESTING.md` before publishing a release.
+
+To build only the Fabric 1.20.4 artifact, use JDK 21 for Gradle:
+
+```powershell
+.\WEaddon_fabric_1.21.11\gradlew.bat -p WEaddon_fabric_1.20.4 build
+```
+
+Use Java 17 to play. The remapped client JAR is in `WEaddon_fabric_1.20.4/build/libs/`.
 
 ## Try the current local mod
 
@@ -73,6 +85,7 @@ and preparation without opening a game window.
 - [User-facing description](WEaddon_lightposition/MOD_DESCRIPTION.md)
 - [Changelog](WEaddon_lightposition/CHANGELOG.md)
 - [1.8.0 release notes](changelog-1.8.0.md)
+- [1.8.1 release notes](changelog-1.8.1.md)
 - [Command preview behavior and limits](COMMAND_PREVIEW.md)
 - [Feature roadmap](FEATURE_ROADMAP.md)
 - [Selection editing interaction, implementation, and verification](SELECTION_EDITING_DESIGN.md)

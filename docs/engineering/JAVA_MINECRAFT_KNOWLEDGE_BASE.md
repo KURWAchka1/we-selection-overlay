@@ -92,6 +92,8 @@ The existing [release matrix](../../README.md#supported-release-targets) include
 26.1.1/26.1.2 checks; NeoForge 26.1/26.1.1 do not have the local WorldEdit support
 claimed for 26.1.2. A version-range declaration is not a substitute for testing.
 Distribution remains **one multi-version client JAR per loader**.
+The [standalone Fabric 1.20.4 port](FABRIC_1.20.4_PORT.md) is a separate Java 17
+client artifact and is not part of the optional bridge matrix.
 Client source is **not frozen at 1.8.0**. Necessary client protocol/provider/UI
 changes must be implemented and tested alongside the companion. Preserve the
 already published artifacts/tag, not the development source: client changes ship

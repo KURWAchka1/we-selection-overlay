@@ -1,0 +1,29 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.marshal.weaddon_lightposition.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [],
+  "client": [
+    "ChatCommandPreviewMixin",
+    "BlockEntityRenderManagerMixin",
+    "BlockModelLightingMixin",
+    "IndigoLightingMixin",
+    "BlockRenderManagerMixin",
+    "ChunkRendererRegionMixin",
+    "ClientWorldBrightnessMixin",
+    "WorldRendererMixin",
+    "SelectionEditMouseMixin",
+    "SelectionEditKeyboardMixin",
+    "SelectionEditMovementMixin",
+    "SelectionEditFovAccessor",
+    "SelectionEditPlayerMixin",
+    "SelectionEditHudMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

@@ -4,8 +4,8 @@ import java.util.Properties;
 
 public record SelectionEditOptions(boolean enabled, int step, int fastStep) {
     public SelectionEditOptions {
-        step = Math.clamp(step, 1, 64);
-        fastStep = Math.clamp(fastStep, 1, 512);
+        step = Math.max(1, Math.min(64, step));
+        fastStep = Math.max(1, Math.min(512, fastStep));
     }
     public static SelectionEditOptions defaults() { return new SelectionEditOptions(false, 1, 8); }
     public static SelectionEditOptions load(Properties p) {

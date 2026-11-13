@@ -1,0 +1,43 @@
+allprojects {
+    afterEvaluate {
+        def profile = providers.gradleProperty('weso1204Profile').get()
+        if (!(profile in ['withWorldEdit', 'withoutWorldEdit'])) throw new GradleException('Invalid 1.20.4 test profile')
+        def fixtures = sourceSets.create('legacySmoke') {
+            java.setSrcDirs([file('../tools/fabric-1204-test/src')])
+            resources.setSrcDirs([file('../tools/fabric-1204-test/resources')])
+            compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        }
+        def helper = tasks.register('legacySmokeJar', Jar) {
+            from(fixtures.output)
+            archiveClassifier = 'test-only'
+            destinationDirectory = layout.buildDirectory.dir('test-fixtures')
+        }
+        def remap = tasks.register('remapLegacySmoke', buildscript.classLoader.loadClass('net.fabricmc.loom.task.RemapJarTask')) {
+            inputFile = helper.flatMap { it.archiveFile }
+            archiveClassifier = 'test-only-intermediary'
+            destinationDirectory = layout.buildDirectory.dir('test-fixtures')
+            addNestedDependencies = false
+        }
+        def production = configurations.create('legacySmokeMods')
+        dependencies.add(production.name, "net.fabricmc.fabric-api:fabric-api:${fabric_version}")
+        if (profile == 'withWorldEdit') dependencies.add(production.name, "maven.modrinth:1u6JkXh5:${worldedit_version}")
+        def output = file(providers.gradleProperty('weso1204Run').get())
+        def guard = file('../tools/test-desktop/agent/build/libs/cursor-isolation-agent.jar')
+        tasks.register('testFabric1204', buildscript.classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')) {
+            dependsOn(remap, tasks.named('remapJar'))
+            mods.setFrom(production, remap.flatMap { it.archiveFile }, tasks.named('remapJar').flatMap { it.archiveFile })
+            runDir = new File(output, profile)
+            javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+            jvmArgs.addAll('-Xmx2G', "-javaagent:${guard.absolutePath}".toString(), "-Dweso1204.profile=${profile}".toString())
+            programArgs.addAll('--width', '1280', '--height', '720', '--username', 'WESOTester')
+            doFirst {
+                if (!System.getenv('WESO_TEST_DESKTOP')?.startsWith('WesoTest-') || !guard.isFile()) {
+                    throw new GradleException('Minecraft test requires a guarded private desktop')
+                }
+                if (javaLauncher.get().metadata.installationPath.asFile.canonicalFile != file(providers.gradleProperty('weso1204Java').get()).canonicalFile) {
+                    throw new GradleException('Minecraft test did not select the requested Java 17 toolchain')
+                }
+            }
+        }
+    }
+}

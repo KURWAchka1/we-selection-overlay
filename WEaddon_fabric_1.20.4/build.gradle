@@ -1,0 +1,92 @@
+plugins {
+    id 'fabric-loom' version '1.15.5'
+}
+
+group = 'org.marshal'
+version = mod_version
+base.archivesName = 'worldedit_selection_overlay'
+
+repositories {
+    exclusiveContent {
+        forRepository { maven { url = 'https://api.modrinth.com/maven' } }
+        filter { includeGroup 'maven.modrinth' }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    mappings "net.fabricmc:yarn:${yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    modCompileOnly("maven.modrinth:1u6JkXh5:${worldedit_version}") { transitive = false }
+    modLocalRuntime("maven.modrinth:1u6JkXh5:${worldedit_version}") { transitive = false }
+}
+
+sourceSets.main.java.srcDirs(
+        '../shared/command-preview/src/main/java',
+        '../shared/selection-editing/src/main/java')
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+processResources {
+    inputs.properties(version: mod_version, loader_version: loader_version, minecraft_version: minecraft_version)
+    filesMatching('fabric.mod.json') {
+        expand(version: mod_version, loader_version: loader_version, minecraft_version: minecraft_version)
+    }
+}
+
+jar {
+    from('../LICENSE') { into 'META-INF' }
+    from('../THIRD_PARTY.md') { into 'META-INF' }
+}
+
+remapJar {
+    archiveClassifier = 'fabric-1.20.4'
+}
+
+tasks.register('verifyLegacyJar') {
+    def artifact = tasks.named('remapJar').flatMap { it.archiveFile }
+    dependsOn(tasks.named('remapJar'))
+    inputs.file(artifact)
+    doLast {
+        new java.util.zip.ZipFile(artifact.get().asFile).withCloseable { zip ->
+            def readJson = { String name ->
+                new groovy.json.JsonSlurper().parse(zip.getInputStream(zip.getEntry(name)))
+            }
+            def metadata = readJson('fabric.mod.json')
+            if (metadata.version != mod_version || metadata.environment != 'client'
+                    || metadata.depends.minecraft != minecraft_version || metadata.depends.java != '>=17') {
+                throw new GradleException('Invalid Fabric 1.20.4 release metadata')
+            }
+            def entries = zip.entries().toList()
+            if (metadata.jars || entries.any { it.name.endsWith('.jar') || it.name.contains('/bridge/')
+                    || it.name.startsWith('com/sk89q/') || it.name.startsWith('org/marshal/wesotest/') }) {
+                throw new GradleException('Legacy client includes an unexpected dependency, bridge or test class')
+            }
+            def classes = entries.findAll { it.name.endsWith('.class') }
+            if (!classes || classes.any { entry ->
+                zip.getInputStream(entry).withCloseable { stream ->
+                    def header = new DataInputStream(stream)
+                    header.readInt() != (int) 0xCAFEBABE || header.readUnsignedShort() != 0 || header.readUnsignedShort() > 61
+                }
+            }) {
+                throw new GradleException('Legacy client contains bytecode incompatible with Java 17')
+            }
+            def mixins = readJson('worldedit_selection_overlay.mixins.json')
+            if (mixins.compatibilityLevel != 'JAVA_17' || !mixins.client.every {
+                zip.getEntry(mixins.package.replace('.', '/') + '/' + it.replace('.', '/') + '.class') != null
+            }) throw new GradleException('Legacy mixin metadata does not match packaged classes')
+            logger.lifecycle("Verified Fabric 1.20.4 client-only Java 17 JAR: ${artifact.get().asFile.name}")
+        }
+    }
+}
+
+tasks.named('check') { dependsOn(tasks.named('verifyLegacyJar')) }

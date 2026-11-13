@@ -257,9 +257,9 @@ Remote Bukkit/Paper/Fabric/NeoForge servers retain CUI visualization, inspection
 
 ## Requirements
 
-* Minecraft **1.21.11**, **26.1.x**, or **26.2**
+* Minecraft **1.20.4** (separate Fabric JAR, Java 17), **1.21.11**, **26.1.x**, or **26.2**
 * Fabric Loader + Fabric API, or NeoForge
-* WorldEdit
+* WorldEdit (version **7.3.0** for local use on Fabric 1.20.4)
 
 ***
 

@@ -738,3 +738,9 @@ checks. The helper is excluded from normal release builds; the Fabric/NeoForge
 release JAR SHA-256 values remained unchanged throughout this tooling update.
 This verifies launcher/bootstrap behavior, not a new full rendering/UI/command
 matrix for every patch version.
+
+## Fabric 1.20.4
+
+Use [the standalone port test](docs/engineering/FABRIC_1.20.4_PORT.md#reproduction)
+for the Java 17 runtime. It does not run the server bridge or use the modern
+universal JARs.

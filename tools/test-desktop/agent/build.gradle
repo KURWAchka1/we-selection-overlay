@@ -5,7 +5,7 @@ plugins {
 repositories { mavenCentral() }
 dependencies { implementation 'org.ow2.asm:asm:9.9' }
 java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }
-tasks.withType(JavaCompile).configureEach { options.release = 21 }
+tasks.withType(JavaCompile).configureEach { options.release = 17 }
 // Assertions run in verifyGuard; this tiny tool does not depend on a JUnit engine.
 tasks.named('test') { enabled = false }
 jar {
